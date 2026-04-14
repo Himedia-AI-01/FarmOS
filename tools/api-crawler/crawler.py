@@ -118,6 +118,12 @@ PARSER.add_argument(
     help="HTTP 요청 타임아웃(초)",
 )
 PARSER.add_argument(
+    "--api-max-retries",
+    type=int,
+    default=10,
+    help="API 요청 재시도 최대 횟수(기본 10회)",
+)
+PARSER.add_argument(
     "--change-date",
     help="변경일자 기준 이후 자료만 조회합니다. 형식: YYYYMMDD",
 )
@@ -342,8 +348,11 @@ def fetch_batch_with_retry(
     crawl_range: CrawlRange,
     timeout_seconds: float,
     change_date: str | None,
-) -> dict[str, Any]:
-    while True:
+    max_retries: int,
+) -> dict[str, Any] | None:
+    attempt = 0
+    while attempt < max_retries:
+        attempt += 1
         try:
             return fetch_batch(
                 session=session,
@@ -353,12 +362,20 @@ def fetch_batch_with_retry(
                 change_date=change_date,
             )
         except (requests.RequestException, RuntimeError) as exc:
+            if attempt >= max_retries:
+                log(
+                    "API 요청 재시도 초과: "
+                    f"range={crawl_range.start_idx}-{crawl_range.end_idx}, "
+                    f"attempts={max_retries}, last_error={exc}"
+                )
+                return None
             log(
                 "API 요청 실패: "
-                f"{exc}. "
+                f"attempt={attempt}/{max_retries}, {exc}. "
                 f"{int(API_RETRY_INTERVAL_SECONDS)}초 후 재시도합니다."
             )
             time.sleep(API_RETRY_INTERVAL_SECONDS)
+    return None
 
 
 def extract_dataset(payload: dict[str, Any]) -> dict[str, Any]:
@@ -554,6 +571,8 @@ def run() -> int:
         raise RuntimeError("--batch-size 는 1000을 넘을 수 없습니다.")
     if args.change_date and not re.fullmatch(r"\d{8}", args.change_date):
         raise RuntimeError("--change-date 는 YYYYMMDD 형식의 8자리 숫자여야 합니다.")
+    if args.api_max_retries <= 0:
+        raise RuntimeError("--api-max-retries 는 1 이상이어야 합니다.")
 
     if args.rebuild_db_from_json:
         if args.disable_db:
@@ -585,7 +604,11 @@ def run() -> int:
                     crawl_range=crawl_range,
                     timeout_seconds=args.timeout_seconds,
                     change_date=args.change_date,
+                    max_retries=args.api_max_retries,
                 )
+                if payload is None:
+                    log("API 응답을 가져오지 못해 작업을 종료합니다.")
+                    return 1
                 dataset = extract_dataset(payload)
                 status_code, status_message = extract_result(dataset)
                 status_description = describe_message_code(status_code, status_message)

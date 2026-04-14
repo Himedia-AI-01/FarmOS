@@ -100,6 +100,12 @@ PARSER.add_argument(
     default=5000,
     help="처리한 raw row 수 기준 중간 로그 주기. 0 이하면 파일 단위 로그만 출력합니다.",
 )
+PARSER.add_argument(
+    "--postgres-max-retries",
+    type=int,
+    default=10,
+    help="PostgreSQL 서버 연결 재시도 최대 횟수(기본 10회)",
+)
 
 
 class Base(DeclarativeBase):
@@ -818,7 +824,9 @@ def normalize_db_url(url: str | None) -> str | None:
 def build_engine(args: argparse.Namespace):
     if args.db_url:
         db_url = normalize_db_url(args.db_url)
-        if db_url and db_url.startswith("postgresql+psycopg://"):
+        if not db_url:
+            raise RuntimeError("--db-url 값이 비어 있습니다.")
+        if db_url.startswith("postgresql+psycopg://"):
             return create_engine(
                 db_url,
                 future=True,
@@ -829,7 +837,8 @@ def build_engine(args: argparse.Namespace):
     if args.db_type == "sqlite":
         ensure_parent_dir(args.sqlite_path)
         return create_engine(f"sqlite:///{args.sqlite_path.as_posix()}", future=True)
-    if env_db_url := normalize_db_url(os.getenv("DATABASE_URL")):
+    env_db_url = normalize_db_url(os.getenv("DATABASE_URL"))
+    if env_db_url:
         if env_db_url.startswith("postgresql+psycopg://"):
             return create_engine(
                 env_db_url,
@@ -869,7 +878,7 @@ def build_engine(args: argparse.Namespace):
     )
 
 
-def wait_for_postgres_server(engine: Any) -> None:
+def wait_for_postgres_server(engine: Any, max_retries: int) -> None:
     if engine.url.get_backend_name() != "postgresql":
         return
 
@@ -877,7 +886,9 @@ def wait_for_postgres_server(engine: Any) -> None:
     port = int(engine.url.port or DEFAULT_POSTGRES_PORT)
     log(f"PostgreSQL 서버 연결 확인 시작: {host}:{port}")
 
-    while True:
+    attempt = 0
+    while attempt < max_retries:
+        attempt += 1
         try:
             with socket.create_connection(
                 (host, port), timeout=POSTGRES_PING_TIMEOUT_SECONDS
@@ -886,9 +897,14 @@ def wait_for_postgres_server(engine: Any) -> None:
             log(f"PostgreSQL 서버 연결 확인 완료: {host}:{port}")
             return
         except OSError as exc:
+            if attempt >= max_retries:
+                raise RuntimeError(
+                    "PostgreSQL 서버 연결 재시도 초과: "
+                    f"{host}:{port}, attempts={max_retries}, last_error={exc}"
+                ) from exc
             log(
                 "PostgreSQL 서버 응답 대기 중: "
-                f"{host}:{port}, error={exc}. "
+                f"{host}:{port}, attempt={attempt}/{max_retries}, error={exc}. "
                 f"{int(POSTGRES_RETRY_INTERVAL_SECONDS)}초 후 재시도합니다."
             )
             time.sleep(POSTGRES_RETRY_INTERVAL_SECONDS)
@@ -1046,6 +1062,8 @@ def main() -> int:
     load_backend_env(args.backend_env_path)
     if args.log_every < 0:
         raise RuntimeError("--log-every 는 0 이상이어야 합니다.")
+    if args.postgres_max_retries <= 0:
+        raise RuntimeError("--postgres-max-retries 는 1 이상이어야 합니다.")
     input_dir: Path = args.input_dir
     if not input_dir.exists() or not input_dir.is_dir():
         raise RuntimeError(f"입력 디렉터리가 없습니다: {input_dir}")
@@ -1060,7 +1078,7 @@ def main() -> int:
         f"전처리 시작: input_dir={input_dir.as_posix()}, files={len(source_files)}, db_type={args.db_type}"
     )
     engine = build_engine(args)
-    wait_for_postgres_server(engine)
+    wait_for_postgres_server(engine, max_retries=args.postgres_max_retries)
     if not args.append:
         log("테이블 재생성(drop/create)을 수행합니다.")
         rebuild_tables(engine)

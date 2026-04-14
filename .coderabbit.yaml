@@ -61,6 +61,3 @@ reviews:
         쇼핑몰 코드 리뷰:
         [백엔드] shopping_mall/backend/app/routers/에 라우터 추가, SQLAlchemy 동기 Session 사용 일관성, Pydantic 입력값 검증
         [프론트엔드] 모든 API 호출에 credentials: "include" 포함, 에러 핸들링, 타입 안전성
-
-  # chill: 관대한 리뷰 / assertive: 엄격한 리뷰 (변경 요청 적극 사용)
-  profile: "assertive"

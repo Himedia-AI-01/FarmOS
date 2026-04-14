@@ -53,10 +53,10 @@ echo.
 
 REM Start services
 echo  [1/4] Starting FarmOS Backend...
-start "FarmOS Backend" /B cmd /c "cd /d ""%~dp0backend"" && uv run main.py > ""%~dp0logs\farmos-be.log"" 2>&1"
+start "FarmOS Backend" /B cmd /c "chcp 65001 >nul && set PYTHONIOENCODING=utf-8 && cd /d ""%~dp0backend"" && uv run main.py > ""%~dp0logs\farmos-be.log"" 2>&1"
 
 echo  [2/4] Starting Shop Backend...
-start "Shop Backend" /B cmd /c "cd /d ""%~dp0shopping_mall\backend"" && uv run main.py > ""%~dp0logs\shop-be.log"" 2>&1"
+start "Shop Backend" /B cmd /c "chcp 65001 >nul && set PYTHONIOENCODING=utf-8 && cd /d ""%~dp0shopping_mall\backend"" && uv run main.py > ""%~dp0logs\shop-be.log"" 2>&1"
 
 REM Allow backend startup time
 timeout /T 3 /NOBREAK >nul

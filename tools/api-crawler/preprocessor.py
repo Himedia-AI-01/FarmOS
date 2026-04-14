@@ -5,11 +5,14 @@ import hashlib
 import json
 import os
 import re
+import socket
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from sqlalchemy import (
     Boolean,
     Date,
@@ -23,7 +26,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
-from dotenv import load_dotenv
 
 SERVICE_ID = "I1910"
 DEFAULT_INPUT_DIR = Path("json_raw")
@@ -35,6 +37,8 @@ DEFAULT_POSTGRES_PORT = 5432
 DEFAULT_POSTGRES_USER = "postgres"
 DEFAULT_POSTGRES_PASSWORD = "root"
 DEFAULT_POSTGRES_DB = "farmos"
+POSTGRES_PING_TIMEOUT_SECONDS = 3.0
+POSTGRES_RETRY_INTERVAL_SECONDS = 5.0
 NULL_LIKE_VALUES = {"", "-", "--", "N/A", "None", None}
 DATE_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
 WHITESPACE_RE = re.compile(r"\s+")
@@ -46,7 +50,9 @@ DILUTION_RE = re.compile(r"(\d+(?:,\d+)?)")
 PARSER = argparse.ArgumentParser(
     description="json_raw의 농약 원본 JSON을 정제하여 SQLite3 또는 PostgreSQL RAG 테이블에 적재합니다."
 )
-PARSER.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT_DIR, help="API raw JSON 디렉터리")
+PARSER.add_argument(
+    "--input-dir", type=Path, default=DEFAULT_INPUT_DIR, help="API raw JSON 디렉터리"
+)
 PARSER.add_argument("--glob", default="*.json", help="입력 파일 검색 패턴")
 PARSER.add_argument(
     "--backend-env-path",
@@ -99,10 +105,18 @@ class Base(DeclarativeBase):
 class Product(Base):
     __tablename__ = "products"
 
-    product_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
-    product_code: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    registration_number: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    ingredient_or_formulation_name: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    product_id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=False
+    )
+    product_code: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
+    registration_number: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
+    ingredient_or_formulation_name: Mapped[str | None] = mapped_column(
+        Text, nullable=True, index=True
+    )
     pesticide_name_eng: Mapped[str | None] = mapped_column(Text, nullable=True)
     brand_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     corporation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -115,8 +129,12 @@ class Product(Base):
     registration_standard: Mapped[str | None] = mapped_column(Text, nullable=True)
     manufacturer_importer_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     representative_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    business_registration_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    business_registration_event_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    business_registration_number: Mapped[str | None] = mapped_column(
+        String(100), nullable=True
+    )
+    business_registration_event_name: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_row_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     source_file_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -124,48 +142,70 @@ class Product(Base):
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
-    applications: Mapped[list["ProductApplication"]] = relationship(back_populates="product")
+    applications: Mapped[list["ProductApplication"]] = relationship(
+        back_populates="product"
+    )
 
 
 class Crop(Base):
     __tablename__ = "crops"
-    __table_args__ = (UniqueConstraint("crop_name_normalized", name="uq_crops_crop_name_normalized"),)
+    __table_args__ = (
+        UniqueConstraint("crop_name_normalized", name="uq_crops_crop_name_normalized"),
+    )
 
     crop_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     crop_name: Mapped[str] = mapped_column(Text, nullable=False)
-    crop_name_normalized: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    crop_name_normalized: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True
+    )
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
-    applications: Mapped[list["ProductApplication"]] = relationship(back_populates="crop")
+    applications: Mapped[list["ProductApplication"]] = relationship(
+        back_populates="crop"
+    )
 
 
 class Target(Base):
     __tablename__ = "targets"
     __table_args__ = (
-        UniqueConstraint("target_name_normalized", "target_kind", name="uq_targets_normalized_kind"),
+        UniqueConstraint(
+            "target_name_normalized", "target_kind", name="uq_targets_normalized_kind"
+        ),
     )
 
     target_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     target_name: Mapped[str] = mapped_column(Text, nullable=False)
-    target_name_normalized: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    target_name_normalized: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True
+    )
     target_kind: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
-    applications: Mapped[list["ProductApplication"]] = relationship(back_populates="target")
+    applications: Mapped[list["ProductApplication"]] = relationship(
+        back_populates="target"
+    )
 
 
 class ProductApplication(Base):
     __tablename__ = "product_applications"
     __table_args__ = (
-        UniqueConstraint("product_id", "crop_id", "target_id", name="uq_product_applications_triplet"),
+        UniqueConstraint(
+            "product_id", "crop_id", "target_id", name="uq_product_applications_triplet"
+        ),
     )
 
     application_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.product_id"), nullable=False, index=True)
-    crop_id: Mapped[int] = mapped_column(ForeignKey("crops.crop_id"), nullable=False, index=True)
-    target_id: Mapped[int] = mapped_column(ForeignKey("targets.target_id"), nullable=False, index=True)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.product_id"), nullable=False, index=True
+    )
+    crop_id: Mapped[int] = mapped_column(
+        ForeignKey("crops.crop_id"), nullable=False, index=True
+    )
+    target_id: Mapped[int] = mapped_column(
+        ForeignKey("targets.target_id"), nullable=False, index=True
+    )
     application_method: Mapped[str | None] = mapped_column(Text, nullable=True)
     application_timing: Mapped[str | None] = mapped_column(Text, nullable=True)
     dilution_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -185,12 +225,16 @@ class ProductApplication(Base):
     product: Mapped[Product] = relationship(back_populates="applications")
     crop: Mapped[Crop] = relationship(back_populates="applications")
     target: Mapped[Target] = relationship(back_populates="applications")
-    rag_document: Mapped["RagDocument | None"] = relationship(back_populates="application")
+    rag_document: Mapped["RagDocument | None"] = relationship(
+        back_populates="application"
+    )
 
 
 class RagDocument(Base):
     __tablename__ = "rag_documents"
-    __table_args__ = (UniqueConstraint("application_id", name="uq_rag_documents_application_id"),)
+    __table_args__ = (
+        UniqueConstraint("application_id", name="uq_rag_documents_application_id"),
+    )
 
     document_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     application_id: Mapped[int] = mapped_column(
@@ -199,16 +243,26 @@ class RagDocument(Base):
         index=True,
     )
     crop_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    crop_name_normalized: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    crop_name_normalized: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True
+    )
     target_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    target_name_normalized: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    target_name_normalized: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=True
+    )
     target_kind: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
-    ingredient_or_formulation_name: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
+    ingredient_or_formulation_name: Mapped[str | None] = mapped_column(
+        Text, nullable=True, index=True
+    )
     pesticide_name_eng: Mapped[str | None] = mapped_column(Text, nullable=True)
     brand_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     corporation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    registration_number: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    product_code: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    registration_number: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
+    product_code: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )
     usage_purpose_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     formulation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     application_method: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -230,7 +284,9 @@ class RagDocument(Base):
     created_at: Mapped[str] = mapped_column(String(40), nullable=False)
     updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
 
-    application: Mapped[ProductApplication] = relationship(back_populates="rag_document")
+    application: Mapped[ProductApplication] = relationship(
+        back_populates="rag_document"
+    )
 
 
 @dataclass
@@ -254,7 +310,9 @@ def utcnow_iso() -> str:
 
 def log(message: str) -> None:
     safe_message = message.replace("\r", " ").replace("\n", " ")
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {safe_message}", flush=True)
+    print(
+        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {safe_message}", flush=True
+    )
 
 
 def clean_text(value: Any) -> str | None:
@@ -342,9 +400,21 @@ def normalize_registration_status(value: Any) -> bool | None:
     if not text:
         return None
     normalized = text.replace(" ", "")
-    if "등록된품목" in normalized or normalized in {"등록", "유효", "true", "True", "1"}:
+    if "등록된품목" in normalized or normalized in {
+        "등록",
+        "유효",
+        "true",
+        "True",
+        "1",
+    }:
         return True
-    if "등록되지않은품목" in normalized or normalized in {"미등록", "말소", "false", "False", "0"}:
+    if "등록되지않은품목" in normalized or normalized in {
+        "미등록",
+        "말소",
+        "false",
+        "False",
+        "0",
+    }:
         return False
     return None
 
@@ -353,7 +423,12 @@ def infer_target_kind(target_name: str) -> str:
     normalized = target_name.replace(" ", "")
     if "잡초" in normalized:
         return "weed"
-    if normalized.endswith("병") or "도열병" in normalized or "역병" in normalized or "탄저병" in normalized:
+    if (
+        normalized.endswith("병")
+        or "도열병" in normalized
+        or "역병" in normalized
+        or "탄저병" in normalized
+    ):
         return "disease"
     return "pest"
 
@@ -378,7 +453,9 @@ def load_rows(source_file: Path) -> list[dict[str, Any]]:
 def parse_range_from_result_path(path: Path) -> tuple[int, int]:
     match = RESULT_FILE_PATTERN.fullmatch(path.name)
     if not match:
-        raise RuntimeError(f"파일명 `{path.name}` 이 `00000-00999.json` 형식이 아닙니다.")
+        raise RuntimeError(
+            f"파일명 `{path.name}` 이 `00000-00999.json` 형식이 아닙니다."
+        )
     return int(match.group("start")), int(match.group("end"))
 
 
@@ -388,11 +465,15 @@ def make_product_id(source_file: Path, row_index: int) -> int:
 
 
 def hash_raw_row(raw_row: dict[str, Any]) -> str:
-    payload = json.dumps(raw_row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(
+        raw_row, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def build_search_text(product: Product, crop_name: str, target_name: str, application: dict[str, Any]) -> str:
+def build_search_text(
+    product: Product, crop_name: str, target_name: str, application: dict[str, Any]
+) -> str:
     values = [
         crop_name,
         target_name,
@@ -456,7 +537,9 @@ def build_render_text(
     return ". ".join(parts)
 
 
-def build_product(raw_row: dict[str, Any], source_file: Path, row_index: int, now: str) -> Product:
+def build_product(
+    raw_row: dict[str, Any], source_file: Path, row_index: int, now: str
+) -> Product:
     return Product(
         product_id=make_product_id(source_file, row_index),
         product_code=clean_text(raw_row.get("AGCHM_PRDLST_NO")),
@@ -485,7 +568,9 @@ def build_product(raw_row: dict[str, Any], source_file: Path, row_index: int, no
     )
 
 
-def build_application_payload(raw_row: dict[str, Any], source_file: Path, row_index: int) -> dict[str, Any]:
+def build_application_payload(
+    raw_row: dict[str, Any], source_file: Path, row_index: int
+) -> dict[str, Any]:
     return {
         "application_method": clean_text(raw_row.get("AGCHM_USE_MTHD")),
         "application_timing": clean_text(raw_row.get("USE_PPRTM")),
@@ -526,7 +611,9 @@ def upsert_product(session: Session, candidate: Product, now: str) -> Product:
     existing.manufacturer_importer_type = candidate.manufacturer_importer_type
     existing.representative_name = candidate.representative_name
     existing.business_registration_number = candidate.business_registration_number
-    existing.business_registration_event_name = candidate.business_registration_event_name
+    existing.business_registration_event_name = (
+        candidate.business_registration_event_name
+    )
     existing.address = candidate.address
     existing.raw_row_hash = candidate.raw_row_hash
     existing.source_file_name = candidate.source_file_name
@@ -605,7 +692,9 @@ def upsert_rag_document(
     application_payload: dict[str, Any],
     now: str,
 ) -> RagDocument:
-    search_text = build_search_text(product, crop.crop_name, target.target_name, application_payload)
+    search_text = build_search_text(
+        product, crop.crop_name, target.target_name, application_payload
+    )
     render_text = build_render_text(
         product,
         crop.crop_name,
@@ -614,7 +703,9 @@ def upsert_rag_document(
         application_payload,
     )
     existing = session.scalar(
-        select(RagDocument).where(RagDocument.application_id == application.application_id)
+        select(RagDocument).where(
+            RagDocument.application_id == application.application_id
+        )
     )
     if existing is None:
         document = RagDocument(
@@ -722,26 +813,81 @@ def normalize_db_url(url: str | None) -> str | None:
 
 def build_engine(args: argparse.Namespace):
     if args.db_url:
-        return create_engine(normalize_db_url(args.db_url), future=True)
+        db_url = normalize_db_url(args.db_url)
+        if db_url and db_url.startswith("postgresql+psycopg://"):
+            return create_engine(
+                db_url,
+                future=True,
+                pool_pre_ping=True,
+                connect_args={"connect_timeout": int(POSTGRES_PING_TIMEOUT_SECONDS)},
+            )
+        return create_engine(db_url, future=True)
     if args.db_type == "sqlite":
         ensure_parent_dir(args.sqlite_path)
         return create_engine(f"sqlite:///{args.sqlite_path.as_posix()}", future=True)
     if env_db_url := normalize_db_url(os.getenv("DATABASE_URL")):
+        if env_db_url.startswith("postgresql+psycopg://"):
+            return create_engine(
+                env_db_url,
+                future=True,
+                pool_pre_ping=True,
+                connect_args={"connect_timeout": int(POSTGRES_PING_TIMEOUT_SECONDS)},
+            )
         return create_engine(env_db_url, future=True)
     url = URL.create(
         drivername="postgresql+psycopg",
-        username=first_non_empty(args.postgres_user, os.getenv("POSTGRES_USER"), DEFAULT_POSTGRES_USER),
+        username=first_non_empty(
+            args.postgres_user, os.getenv("POSTGRES_USER"), DEFAULT_POSTGRES_USER
+        ),
         password=first_non_empty(
             args.postgres_password,
             os.getenv("POSTGRES_PASSWORD"),
             os.getenv("PGPASSWORD"),
             DEFAULT_POSTGRES_PASSWORD,
         ),
-        host=first_non_empty(args.postgres_host, os.getenv("POSTGRES_HOST"), DEFAULT_POSTGRES_HOST),
-        port=int(first_non_empty(args.postgres_port, os.getenv("POSTGRES_PORT"), DEFAULT_POSTGRES_PORT)),
-        database=first_non_empty(args.postgres_db, os.getenv("POSTGRES_DB"), DEFAULT_POSTGRES_DB),
+        host=first_non_empty(
+            args.postgres_host, os.getenv("POSTGRES_HOST"), DEFAULT_POSTGRES_HOST
+        ),
+        port=int(
+            first_non_empty(
+                args.postgres_port, os.getenv("POSTGRES_PORT"), DEFAULT_POSTGRES_PORT
+            )
+        ),
+        database=first_non_empty(
+            args.postgres_db, os.getenv("POSTGRES_DB"), DEFAULT_POSTGRES_DB
+        ),
     )
-    return create_engine(url, future=True)
+    return create_engine(
+        url,
+        future=True,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": int(POSTGRES_PING_TIMEOUT_SECONDS)},
+    )
+
+
+def wait_for_postgres_server(engine: Any) -> None:
+    if engine.url.get_backend_name() != "postgresql":
+        return
+
+    host = engine.url.host or DEFAULT_POSTGRES_HOST
+    port = int(engine.url.port or DEFAULT_POSTGRES_PORT)
+    log(f"PostgreSQL 서버 연결 확인 시작: {host}:{port}")
+
+    while True:
+        try:
+            with socket.create_connection(
+                (host, port), timeout=POSTGRES_PING_TIMEOUT_SECONDS
+            ):
+                pass
+            log(f"PostgreSQL 서버 연결 확인 완료: {host}:{port}")
+            return
+        except OSError as exc:
+            log(
+                "PostgreSQL 서버 응답 대기 중: "
+                f"{host}:{port}, error={exc}. "
+                f"{int(POSTGRES_RETRY_INTERVAL_SECONDS)}초 후 재시도합니다."
+            )
+            time.sleep(POSTGRES_RETRY_INTERVAL_SECONDS)
 
 
 def rebuild_tables(engine: Any) -> None:
@@ -749,12 +895,16 @@ def rebuild_tables(engine: Any) -> None:
     Base.metadata.create_all(engine)
 
 
-def get_or_create_crop(session: Session, cache: dict[str, Crop], crop_name: str, now: str) -> Crop:
+def get_or_create_crop(
+    session: Session, cache: dict[str, Crop], crop_name: str, now: str
+) -> Crop:
     normalized = normalize_keyword(crop_name)
     cached = cache.get(normalized)
     if cached is not None:
         return cached
-    existing = session.scalar(select(Crop).where(Crop.crop_name_normalized == normalized))
+    existing = session.scalar(
+        select(Crop).where(Crop.crop_name_normalized == normalized)
+    )
     if existing is not None:
         cache[normalized] = existing
         return existing
@@ -806,7 +956,9 @@ def get_or_create_target(
 
 def iter_pairs(raw_row: dict[str, Any]) -> list[tuple[str, str, str]]:
     crop_names = split_top_level(raw_row.get("CROPS_NM")) or ["작물정보없음"]
-    target_names = split_top_level(raw_row.get("SICKNS_HLSCT_NM_WEEDS_NM")) or ["대상정보없음"]
+    target_names = split_top_level(raw_row.get("SICKNS_HLSCT_NM_WEEDS_NM")) or [
+        "대상정보없음"
+    ]
     pairs: list[tuple[str, str, str]] = []
     for crop_name in crop_names:
         for target_name in target_names:
@@ -814,7 +966,9 @@ def iter_pairs(raw_row: dict[str, Any]) -> list[tuple[str, str, str]]:
     return pairs
 
 
-def populate_database(session: Session, source_files: list[Path], log_every: int) -> Stats:
+def populate_database(
+    session: Session, source_files: list[Path], log_every: int
+) -> Stats:
     stats = Stats()
     crop_cache: dict[str, Crop] = {}
     target_cache: dict[tuple[str, str], Target] = {}
@@ -832,10 +986,14 @@ def populate_database(session: Session, source_files: list[Path], log_every: int
             product = upsert_product(session, product_candidate, now)
             stats.products_written += 1
 
-            application_payload = build_application_payload(raw_row, source_file, row_index)
+            application_payload = build_application_payload(
+                raw_row, source_file, row_index
+            )
             for crop_name, target_name, target_kind in iter_pairs(raw_row):
                 crop = get_or_create_crop(session, crop_cache, crop_name, now)
-                target = get_or_create_target(session, target_cache, target_name, target_kind, now)
+                target = get_or_create_target(
+                    session, target_cache, target_name, target_kind, now
+                )
 
                 application = upsert_application(
                     session,
@@ -890,10 +1048,15 @@ def main() -> int:
 
     source_files = collect_source_files(input_dir, args.glob)
     if not source_files:
-        raise RuntimeError(f"{input_dir} 아래에서 {args.glob!r} 패턴에 맞는 파일을 찾지 못했습니다.")
+        raise RuntimeError(
+            f"{input_dir} 아래에서 {args.glob!r} 패턴에 맞는 파일을 찾지 못했습니다."
+        )
 
-    log(f"전처리 시작: input_dir={input_dir.as_posix()}, files={len(source_files)}, db_type={args.db_type}")
+    log(
+        f"전처리 시작: input_dir={input_dir.as_posix()}, files={len(source_files)}, db_type={args.db_type}"
+    )
     engine = build_engine(args)
+    wait_for_postgres_server(engine)
     if not args.append:
         log("테이블 재생성(drop/create)을 수행합니다.")
         rebuild_tables(engine)

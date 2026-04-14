@@ -28,6 +28,7 @@ DEFAULT_RAW_DIR = Path("json_raw")
 DEFAULT_DB_PATH = Path("sqlite3/data.sqlite3")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BACKEND_ENV_PATH = PROJECT_ROOT / "backend" / ".env"
+API_RETRY_INTERVAL_SECONDS = 5.0
 SUCCESS_CODE = "INFO-000"
 RESULT_FILE_PATTERN = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)\.json$")
 MESSAGE_CODE_DESCRIPTIONS = {
@@ -168,33 +169,65 @@ class PesticideRow(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     reg_yn_nm: Mapped[str | None] = mapped_column("REG_YN_NM", Text, nullable=True)
     prsdnt_nm: Mapped[str | None] = mapped_column("PRSDNT_NM", Text, nullable=True)
-    agchm_use_mthd: Mapped[str | None] = mapped_column("AGCHM_USE_MTHD", Text, nullable=True)
+    agchm_use_mthd: Mapped[str | None] = mapped_column(
+        "AGCHM_USE_MTHD", Text, nullable=True
+    )
     use_pprtm: Mapped[str | None] = mapped_column("USE_PPRTM", Text, nullable=True)
-    prdlst_reg_no: Mapped[str | None] = mapped_column("PRDLST_REG_NO", Text, nullable=True)
-    prdlst_reg_dt: Mapped[str | None] = mapped_column("PRDLST_REG_DT", Text, nullable=True)
-    test_drgs_nm: Mapped[str | None] = mapped_column("TEST_DRGS_NM", Text, nullable=True)
-    prdlst_reg_vald_dt: Mapped[str | None] = mapped_column("PRDLST_REG_VALD_DT", Text, nullable=True)
-    prdlst_reg_stnd: Mapped[str | None] = mapped_column("PRDLST_REG_STND", Text, nullable=True)
+    prdlst_reg_no: Mapped[str | None] = mapped_column(
+        "PRDLST_REG_NO", Text, nullable=True
+    )
+    prdlst_reg_dt: Mapped[str | None] = mapped_column(
+        "PRDLST_REG_DT", Text, nullable=True
+    )
+    test_drgs_nm: Mapped[str | None] = mapped_column(
+        "TEST_DRGS_NM", Text, nullable=True
+    )
+    prdlst_reg_vald_dt: Mapped[str | None] = mapped_column(
+        "PRDLST_REG_VALD_DT", Text, nullable=True
+    )
+    prdlst_reg_stnd: Mapped[str | None] = mapped_column(
+        "PRDLST_REG_STND", Text, nullable=True
+    )
     use_unit: Mapped[str | None] = mapped_column("USE_UNIT", Text, nullable=True)
-    mnf_incm_dvs_nm: Mapped[str | None] = mapped_column("MNF_INCM_DVS_NM", Text, nullable=True)
-    persn_lvstck_toxcty: Mapped[str | None] = mapped_column("PERSN_LVSTCK_TOXCTY", Text, nullable=True)
+    mnf_incm_dvs_nm: Mapped[str | None] = mapped_column(
+        "MNF_INCM_DVS_NM", Text, nullable=True
+    )
+    persn_lvstck_toxcty: Mapped[str | None] = mapped_column(
+        "PERSN_LVSTCK_TOXCTY", Text, nullable=True
+    )
     use_tmno: Mapped[str | None] = mapped_column("USE_TMNO", Text, nullable=True)
     cpr_nm: Mapped[str | None] = mapped_column("CPR_NM", Text, nullable=True)
-    prdlst_kor_nm: Mapped[str | None] = mapped_column("PRDLST_KOR_NM", Text, nullable=True)
-    prdlst_eng_nm: Mapped[str | None] = mapped_column("PRDLST_ENG_NM", Text, nullable=True)
-    agchm_prdlst_no: Mapped[str | None] = mapped_column("AGCHM_PRDLST_NO", Text, nullable=True)
+    prdlst_kor_nm: Mapped[str | None] = mapped_column(
+        "PRDLST_KOR_NM", Text, nullable=True
+    )
+    prdlst_eng_nm: Mapped[str | None] = mapped_column(
+        "PRDLST_ENG_NM", Text, nullable=True
+    )
+    agchm_prdlst_no: Mapped[str | None] = mapped_column(
+        "AGCHM_PRDLST_NO", Text, nullable=True
+    )
     mdc_shap_nm: Mapped[str | None] = mapped_column("MDC_SHAP_NM", Text, nullable=True)
-    sickns_hlsct_nm_weeds_nm: Mapped[str | None] = mapped_column("SICKNS_HLSCT_NM_WEEDS_NM", Text, nullable=True)
+    sickns_hlsct_nm_weeds_nm: Mapped[str | None] = mapped_column(
+        "SICKNS_HLSCT_NM_WEEDS_NM", Text, nullable=True
+    )
     brnd_nm: Mapped[str | None] = mapped_column("BRND_NM", Text, nullable=True)
-    agchm_dvs_nm: Mapped[str | None] = mapped_column("AGCHM_DVS_NM", Text, nullable=True)
+    agchm_dvs_nm: Mapped[str | None] = mapped_column(
+        "AGCHM_DVS_NM", Text, nullable=True
+    )
     buss_reg_no: Mapped[str | None] = mapped_column("BUSS_REG_NO", Text, nullable=True)
-    buss_reg_evnt_nm: Mapped[str | None] = mapped_column("BUSS_REG_EVNT_NM", Text, nullable=True)
+    buss_reg_evnt_nm: Mapped[str | None] = mapped_column(
+        "BUSS_REG_EVNT_NM", Text, nullable=True
+    )
     addr: Mapped[str | None] = mapped_column("ADDR", Text, nullable=True)
     crops_nm: Mapped[str | None] = mapped_column("CROPS_NM", Text, nullable=True)
     use_qty: Mapped[str | None] = mapped_column("USE_QTY", Text, nullable=True)
-    prpos_dvs_cd_nm: Mapped[str | None] = mapped_column("PRPOS_DVS_CD_NM", Text, nullable=True)
+    prpos_dvs_cd_nm: Mapped[str | None] = mapped_column(
+        "PRPOS_DVS_CD_NM", Text, nullable=True
+    )
     dilu_drng: Mapped[str | None] = mapped_column("DILU_DRNG", Text, nullable=True)
-    eclgy_toxcty: Mapped[str | None] = mapped_column("ECLGY_TOXCTY", Text, nullable=True)
+    eclgy_toxcty: Mapped[str | None] = mapped_column(
+        "ECLGY_TOXCTY", Text, nullable=True
+    )
     extra_fields_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     inserted_at: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -303,6 +336,31 @@ def fetch_batch(
         ) from exc
 
 
+def fetch_batch_with_retry(
+    session: requests.Session,
+    api_key: str,
+    crawl_range: CrawlRange,
+    timeout_seconds: float,
+    change_date: str | None,
+) -> dict[str, Any]:
+    while True:
+        try:
+            return fetch_batch(
+                session=session,
+                api_key=api_key,
+                crawl_range=crawl_range,
+                timeout_seconds=timeout_seconds,
+                change_date=change_date,
+            )
+        except (requests.RequestException, RuntimeError) as exc:
+            log(
+                "API 요청 실패: "
+                f"{exc}. "
+                f"{int(API_RETRY_INTERVAL_SECONDS)}초 후 재시도합니다."
+            )
+            time.sleep(API_RETRY_INTERVAL_SECONDS)
+
+
 def extract_dataset(payload: dict[str, Any]) -> dict[str, Any]:
     dataset = payload.get(SERVICE_ID)
     if not isinstance(dataset, dict):
@@ -353,11 +411,15 @@ def build_pesticide_row_values(
         field_name: stringify_row_value(row.get(field_name))
         for field_name in ROW_FIELD_NAMES
     }
-    extra_fields = {key: value for key, value in row.items() if key not in ROW_FIELD_NAMES}
+    extra_fields = {
+        key: value for key, value in row.items() if key not in ROW_FIELD_NAMES
+    }
     return {
         "id": record_id,
         **known_values,
-        "extra_fields_json": json.dumps(extra_fields, ensure_ascii=False, sort_keys=True)
+        "extra_fields_json": json.dumps(
+            extra_fields, ensure_ascii=False, sort_keys=True
+        )
         if extra_fields
         else None,
         "inserted_at": inserted_at,
@@ -393,7 +455,9 @@ def open_db(db_path: Path):
     return engine
 
 
-def insert_batch_into_db(session: Session, crawl_range: CrawlRange, dataset: dict[str, Any]) -> None:
+def insert_batch_into_db(
+    session: Session, crawl_range: CrawlRange, dataset: dict[str, Any]
+) -> None:
     rows = extract_rows(dataset)
     now = utcnow_iso()
     start_record_id = crawl_range.start_idx + 1
@@ -439,15 +503,21 @@ def reset_db_files(db_path: Path) -> None:
 def parse_range_from_result_path(path: Path) -> CrawlRange:
     match = RESULT_FILE_PATTERN.match(path.name)
     if not match:
-        raise RuntimeError(f"파일명 `{path.name}` 이 `00000-00999.json` 형식이 아닙니다.")
-    return CrawlRange(start_idx=int(match.group("start")), end_idx=int(match.group("end")))
+        raise RuntimeError(
+            f"파일명 `{path.name}` 이 `00000-00999.json` 형식이 아닙니다."
+        )
+    return CrawlRange(
+        start_idx=int(match.group("start")), end_idx=int(match.group("end"))
+    )
 
 
 def load_payload_from_file(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as fp:
         payload = json.load(fp)
     if not isinstance(payload, dict):
-        raise RuntimeError(f"`{path.as_posix()}` 의 JSON 최상위 구조가 객체가 아닙니다.")
+        raise RuntimeError(
+            f"`{path.as_posix()}` 의 JSON 최상위 구조가 객체가 아닙니다."
+        )
     return payload
 
 
@@ -467,7 +537,9 @@ def rebuild_db_from_json_files(raw_dir: Path, db_path: Path) -> int:
                 raise RuntimeError(
                     f"`{json_file.as_posix()}` 의 RESULT.CODE={status_code}, MSG={status_message}"
                 )
-            insert_batch_into_db(db_session, parse_range_from_result_path(json_file), dataset)
+            insert_batch_into_db(
+                db_session, parse_range_from_result_path(json_file), dataset
+            )
             log(f"DB 재적재 완료: {json_file.as_posix()}")
 
     return 0
@@ -485,7 +557,9 @@ def run() -> int:
 
     if args.rebuild_db_from_json:
         if args.disable_db:
-            raise RuntimeError("--rebuild-db-from-json 과 --disable-db 는 함께 사용할 수 없습니다.")
+            raise RuntimeError(
+                "--rebuild-db-from-json 과 --disable-db 는 함께 사용할 수 없습니다."
+            )
         return rebuild_db_from_json_files(args.raw_dir, args.db_path)
 
     api_key = load_api_key(args.env_name, args.env_path)
@@ -500,10 +574,12 @@ def run() -> int:
         with db_context as db_session:
             while True:
                 save_state(args.state_path, crawl_range)
-                log(f"현재 작업 지점 저장: startIdx={crawl_range.start_idx}, endIdx={crawl_range.end_idx}")
+                log(
+                    f"현재 작업 지점 저장: startIdx={crawl_range.start_idx}, endIdx={crawl_range.end_idx}"
+                )
                 log(f"요청 시작: {crawl_range.start_idx} ~ {crawl_range.end_idx}")
 
-                payload = fetch_batch(
+                payload = fetch_batch_with_retry(
                     session=http_session,
                     api_key=api_key,
                     crawl_range=crawl_range,
@@ -521,12 +597,16 @@ def run() -> int:
                     log(f"호출 한도 초과: {status_description}. 작업을 중단합니다.")
                     return 1
                 if status_code != SUCCESS_CODE:
-                    log(f"경고: API RESULT.CODE={status_code}, MSG={status_description}. 작업을 중단합니다.")
+                    log(
+                        f"경고: API RESULT.CODE={status_code}, MSG={status_description}. 작업을 중단합니다."
+                    )
                     return 1
 
                 file_path = write_json(args.raw_dir, crawl_range, payload)
                 rows = extract_rows(dataset)
-                log(f"저장 완료: {file_path.as_posix()} ({len(rows)}건, total_count={dataset.get('total_count')})")
+                log(
+                    f"저장 완료: {file_path.as_posix()} ({len(rows)}건, total_count={dataset.get('total_count')})"
+                )
 
                 if db_session is not None:
                     insert_batch_into_db(db_session, crawl_range, dataset)
@@ -539,10 +619,14 @@ def run() -> int:
                 processed_batches += 1
                 next_range = crawl_range.next_range(args.batch_size)
                 save_state(args.state_path, next_range)
-                log(f"다음 재시작 지점 저장: startIdx={next_range.start_idx}, endIdx={next_range.end_idx}")
+                log(
+                    f"다음 재시작 지점 저장: startIdx={next_range.start_idx}, endIdx={next_range.end_idx}"
+                )
 
                 if 0 < args.max_batches <= processed_batches:
-                    log(f"--max-batches={args.max_batches} 에 도달해 이번 실행을 종료합니다.")
+                    log(
+                        f"--max-batches={args.max_batches} 에 도달해 이번 실행을 종료합니다."
+                    )
                     return 0
 
                 if args.delay_seconds > 0:

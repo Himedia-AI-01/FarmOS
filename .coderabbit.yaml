@@ -50,7 +50,7 @@ reviews:
       instructions: |
         모든 리뷰는 반드시 한국어로 작성하세요. English responses are not allowed.
         React/TypeScript 코드 리뷰 (보안/품질/스타일 순으로 검토):
-        [보안] XSS 취약점 확인, 사내/동일 출처(또는 승인된 1st-party) API 호출에만 credentials: "include" 적용 여부
+        [보안] XSS 취약점 확인, 모든 API 호출에 credentials: "include" 포함 여부
         [품질] 함수형 컴포넌트·hooks 사용, key prop 필수(리스트 렌더링), 불필요한 리렌더링 방지, 에러 핸들링(react-hot-toast)
         [스타일] PascalCase 컴포넌트명, strict mode·타입 안전성, 명확한 변수·함수명
         [아키텍처] Context + Custom Hooks 상태 관리, 새 기능은 src/modules/<기능명>/ 구조 준수, 타입은 src/types/index.ts에 정의
@@ -62,27 +62,5 @@ reviews:
         [백엔드] shopping_mall/backend/app/routers/에 라우터 추가, SQLAlchemy 동기 Session 사용 일관성, Pydantic 입력값 검증
         [프론트엔드] 모든 API 호출에 credentials: "include" 포함, 에러 핸들링, 타입 안전성
 
-# 코드 가이드라인 및 기준
-# 자세한 내용은 CODERABBIT_GUIDELINES.md 참고
-knowledge_base:
-  code_guidelines:
-    enabled: true
-    filePatterns:
-      - "**/*.py"
-      - "**/*.ts"
-      - "**/*.tsx"
-
-# 리뷰 프로필 (크기별 깊이)
-profile:
-  review_complexity:
-    small:      # 최대 100줄
-      depth: basic
-      focus: [security, style]
-
-    medium:     # 100-500줄
-      depth: detailed
-      focus: [security, performance, quality]
-
-    large:      # 500줄 이상
-      depth: comprehensive
-      focus: [security, performance, architecture, tests]
+  # chill: 관대한 리뷰 / assertive: 엄격한 리뷰 (변경 요청 적극 사용)
+  profile: "assertive"

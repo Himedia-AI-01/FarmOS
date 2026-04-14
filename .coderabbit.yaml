@@ -10,6 +10,7 @@ reviews:
   high_level_summary: true               # 상위 요약
   poem: false                            # 시 제외
   collapse_walkthrough: false
+  profile: "assertive"
 
   # 무시할 파일/디렉토리
   path_filters:

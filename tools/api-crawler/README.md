@@ -17,6 +17,7 @@ uv sync
 
 기본 env 파일 경로:
 - `path/to/FarmOS/tools/backend/.env`
+- `path/to/FarmOS/tools/api-crawler/.env` (`.env.example` 참고, preprocessor PostgreSQL 기본값)
 
 필수 키:
 - `FOOD_SAFETY_API_KEY` (crawler)

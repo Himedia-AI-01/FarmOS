@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from sqlalchemy import (
     Boolean,
     Date,
@@ -32,11 +32,15 @@ DEFAULT_INPUT_DIR = Path("json_raw")
 DEFAULT_SQLITE_PATH = Path("sqlite3/rag.sqlite3")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BACKEND_ENV_PATH = PROJECT_ROOT / "backend" / ".env"
-DEFAULT_POSTGRES_HOST = "localhost"
-DEFAULT_POSTGRES_PORT = 5432
-DEFAULT_POSTGRES_USER = "postgres"
-DEFAULT_POSTGRES_PASSWORD = "root"
-DEFAULT_POSTGRES_DB = "farmos"
+DEFAULT_ENV_EXAMPLE_PATH = Path(__file__).resolve().parent / ".env.example"
+DEFAULT_ENV_VALUES = (
+    dotenv_values(DEFAULT_ENV_EXAMPLE_PATH) if DEFAULT_ENV_EXAMPLE_PATH.exists() else {}
+)
+DEFAULT_POSTGRES_HOST = str(DEFAULT_ENV_VALUES.get("POSTGRES_HOST") or "localhost")
+DEFAULT_POSTGRES_PORT = int(DEFAULT_ENV_VALUES.get("POSTGRES_PORT") or 5432)
+DEFAULT_POSTGRES_USER = str(DEFAULT_ENV_VALUES.get("POSTGRES_USER") or "postgres")
+DEFAULT_POSTGRES_PASSWORD = str(DEFAULT_ENV_VALUES.get("POSTGRES_PASSWORD") or "root")
+DEFAULT_POSTGRES_DB = str(DEFAULT_ENV_VALUES.get("POSTGRES_DB") or "farmos")
 POSTGRES_PING_TIMEOUT_SECONDS = 3.0
 POSTGRES_RETRY_INTERVAL_SECONDS = 5.0
 NULL_LIKE_VALUES = {"", "-", "--", "N/A", "None", None}

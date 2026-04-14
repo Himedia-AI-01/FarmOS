@@ -51,7 +51,7 @@ reviews:
       instructions: |
         모든 리뷰는 반드시 한국어로 작성하세요. English responses are not allowed.
         React/TypeScript 코드 리뷰 (보안/품질/스타일 순으로 검토):
-        [보안] XSS 취약점 확인, 모든 API 호출에 credentials: "include" 포함 여부
+        [보안] XSS 취약점 확인, same-origin 또는 승인된 1st-party API 호출에만 credentials: "include" 적용 여부(외부 서비스/사전 인증 엔드포인트는 예외)
         [품질] 함수형 컴포넌트·hooks 사용, key prop 필수(리스트 렌더링), 불필요한 리렌더링 방지, 에러 핸들링(react-hot-toast)
         [스타일] PascalCase 컴포넌트명, strict mode·타입 안전성, 명확한 변수·함수명
         [아키텍처] Context + Custom Hooks 상태 관리, 새 기능은 src/modules/<기능명>/ 구조 준수, 타입은 src/types/index.ts에 정의

@@ -470,6 +470,8 @@ class AgentExecutor:
         return "\n\n".join(docs)
 
     def _tool_escalate_to_agent(self, reason: str, urgency: str = "normal") -> str:
+        safe_reason = reason.strip()[:200] if reason else ""
+        logger.info("에스컬레이션 요청: urgency=%s reason=%s", urgency, safe_reason)
         if urgency == "high":
             return (
                 "우선 처리 요청으로 접수되었습니다. "

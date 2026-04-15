@@ -127,9 +127,12 @@ class OpenAIAgentClient(AgentClient):
         results: list[tuple[ToolCall, str]],
     ) -> None:
         """OpenAI 호환 형식으로 어시스턴트 메시지 + 도구 결과를 추가합니다."""
+        raw_content = ""
+        if response.raw is not None and isinstance(response.raw, dict):
+            raw_content = response.raw.get("content") or ""
         assistant_msg: dict = {
             "role": "assistant",
-            "content": response.raw.get("content") or "",
+            "content": raw_content,
         }
         if response.tool_calls:
             assistant_msg["tool_calls"] = [

@@ -38,7 +38,7 @@ tool_use 기반 챗봇 에이전트 서브패키지.
 
 `AgentExecutor.run()` 호출 시 시스템 프롬프트 뒤에 자동으로 현재 시각과 로그인 상태가 주입됩니다.
 
-```
+```text
 [현재 시각] 2026-04-14 (월) 14:32
 [로그인 상태] 로그인 (user_id=5)
 ```
@@ -47,7 +47,7 @@ tool_use 기반 챗봇 에이전트 서브패키지.
 
 쓰기 작업(교환 신청 등)은 즉시 실행하지 않고 사용자 확인 후 처리합니다.
 
-```
+```text
 사용자: "주문 123번 교환 신청해줘"
   → LLM: create_exchange_request(order_id=123, reason="...")
      └─ DB: ExchangeRequest(status="pending_confirm") 생성

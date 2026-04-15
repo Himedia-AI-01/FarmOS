@@ -83,7 +83,16 @@ class ClaudeAgentClient(AgentClient):
     ) -> None:
         """Claude 형식으로 어시스턴트 메시지 + 도구 결과를 추가합니다."""
         # 어시스턴트 메시지 (content 블록 그대로)
-        messages.append({"role": "assistant", "content": response.raw.content})
+        if response.raw is not None and hasattr(response.raw, "content"):
+            content = response.raw.content
+        else:
+            # raw 없으면 AgentResponse에서 재구성
+            content = []
+            if response.text:
+                content.append({"type": "text", "text": response.text})
+            for tc in response.tool_calls:
+                content.append({"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.arguments})
+        messages.append({"role": "assistant", "content": content})
 
         # 모든 도구 결과를 하나의 user 메시지로 묶음 (Claude 요구사항)
         tool_results = [

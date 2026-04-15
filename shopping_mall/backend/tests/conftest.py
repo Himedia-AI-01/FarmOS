@@ -1,6 +1,9 @@
 """공통 픽스처."""
 from unittest.mock import MagicMock
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
 
 import pytest
 
@@ -178,7 +181,7 @@ def make_order(
     order.user_id = user_id
     order.total_price = total_price
     order.status = status
-    order.created_at = created_at or datetime(2026, 4, 10)
+    order.created_at = created_at or datetime(2026, 4, 10, tzinfo=KST)
     order.shipping_address = "서울시 강남구"
     order.items = items or []
     return order
@@ -196,7 +199,7 @@ def make_shipment(
     s.carrier = carrier
     s.tracking_number = tracking_number
     s.status = status
-    s.expected_arrival = expected_arrival or datetime(2026, 4, 12)
+    s.expected_arrival = expected_arrival or datetime(2026, 4, 12, tzinfo=KST)
     return s
 
 

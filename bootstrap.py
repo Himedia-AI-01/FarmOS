@@ -164,7 +164,7 @@ def pids_from_port(port: int) -> list[int]:
         if marker not in line or "LISTENING" not in line:
             continue
         parts = line.split()
-        if len(parts) >= 5 and parts[-1].isdigit():
+        if len(parts) >= 5 and parts[1].rsplit(":", 1)[-1] == str(port) and parts[-1].isdigit():
             pids.add(int(parts[-1]))
     return sorted(pids)
 
@@ -179,12 +179,12 @@ def stop_services(services: list[tuple[str, subprocess.Popen[bytes], IO[str]]]) 
     for port in PORTS:
         for pid in pids_from_port(port):
             stop_process_tree(pid)
-    subprocess.run(
-        ["taskkill", "/F", "/IM", "node.exe"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
+    # subprocess.run(
+    #     ["taskkill", "/F", "/IM", "node.exe"],
+    #     stdout=subprocess.DEVNULL,
+    #     stderr=subprocess.DEVNULL,
+    #     check=False,
+    # )
 
 
 def run() -> None:

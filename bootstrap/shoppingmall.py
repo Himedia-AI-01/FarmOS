@@ -106,22 +106,23 @@ def print_summary(db_conf: dict[str, str]) -> None:
 def is_shoppingmall_ready(db_conf: dict[str, str]) -> bool:
     """shop_* 필수 테이블 존재 및 기대 row 수 일치 여부를 확인한다."""
     expected = {
-        "shop_categories": 12,
-        "shop_stores": 5,
-        "shop_products": 42,
-        "shop_users": 5,
-        "shop_reviews": 1000,
-        "shop_orders": 10,
-        "shop_order_items": 19,
         "shop_cart_items": 5,
-        "shop_wishlists": 8,
-        "shop_shipments": 5,
-        "shop_harvest_schedules": 8,
-        "shop_revenue_entries": 15,
-        "shop_expense_entries": 10,
-        "shop_weekly_reports": 2,
-        "shop_customer_segments": 5,
+        "shop_categories": 12,
         "shop_chat_logs": 5,
+        "shop_chat_sessions": 0,
+        "shop_customer_segments": 5,
+        "shop_expense_entries": 10,
+        "shop_harvest_schedules": 8,
+        "shop_order_items": 19,
+        "shop_orders": 10,
+        "shop_products": 42,
+        "shop_revenue_entries": 15,
+        "shop_reviews": 1000,
+        "shop_shipments": 5,
+        "shop_stores": 5,
+        "shop_users": 5,
+        "shop_weekly_reports": 2,
+        "shop_wishlists": 8,
     }
     for table, count in expected.items():
         if not table_exists(db_conf, table):

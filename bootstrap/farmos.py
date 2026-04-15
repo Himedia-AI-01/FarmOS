@@ -44,6 +44,8 @@ EXPECTED_ROW_COUNTS = {
 
 def _to_asyncpg_url(raw_db_url: str) -> str:
     """driver 부분을 FarmOS 비동기 엔진용 URL로 맞춘다."""
+    if raw_db_url.startswith("postgres://"):
+        return raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
     url = re.sub(r"^postgresql\+\w+://", "postgresql+asyncpg://", raw_db_url, count=1)
     if url.startswith("postgresql://"):
         return url.replace("postgresql://", "postgresql+asyncpg://", 1)

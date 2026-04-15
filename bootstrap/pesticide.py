@@ -53,11 +53,12 @@ RESULT_FILE_PATTERN = re.compile(r"^(?P<start>\d+)-(?P<end>\d+)\.json$")
 USE_COUNT_RE = re.compile(r"(\d+)")
 DILUTION_RE = re.compile(r"(\d+(?:,\d+)?)")
 LEGACY_TABLE_NAMES = [
-    "products",
     "crops",
-    "targets",
+    "pesticide_products",
     "product_applications",
+    "products",
     "rag_documents",
+    "targets"
 ]
 LOG_PREFIX = "PEST"
 

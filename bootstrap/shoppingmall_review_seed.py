@@ -241,7 +241,6 @@ def seed_to_db(reviews: list[dict]) -> None:
         existing_count = result.scalar()
         info(f"기존 리뷰 수: {existing_count}건 -> 전부 삭제")
         db.execute(text("DELETE FROM shop_reviews"))
-        db.commit()
 
         batch_size = 500
         total = len(reviews)
@@ -270,14 +269,13 @@ def seed_to_db(reviews: list[dict]) -> None:
                 ),
                 values,
             )
-            db.commit()
             inserted += len(batch)
             info(f"진행: {inserted}/{total}건 ({inserted * 100 // total}%)")
 
         result = db.execute(text("SELECT COUNT(*) FROM shop_reviews"))
         final_count = result.scalar()
         info(f"ShoppingMall 리뷰 재시드 완료: {final_count} rows")
-
+        db.commit()
     except Exception:
         db.rollback()
         raise

@@ -12,8 +12,12 @@ import asyncio
 import sys
 from pathlib import Path
 
+from _bootstrap_common import (  # type: ignore[import-not-found]
+    error,
+    info,
+    set_log_prefix,
+)
 from sqlalchemy import select, text
-from _bootstrap_common import error, info, set_log_prefix  # type: ignore[import-not-found]
 
 # 실행 위치와 무관하게 backend 패키지를 import 할 수 있도록 경로를 보정한다.
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,15 +25,13 @@ BACKEND_DIR = ROOT / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.core.database import async_session, close_db, init_db
-from app.core.security import hash_password
-from app.models.user import User
-
 # Base.metadata 등록을 위해 모델 모듈을 명시적으로 import 한다.
 # NOTE: pesticide_products는 제거 대상이므로 여기서 import하지 않는다.
 import app.models.journal  # noqa: F401
 import app.models.review_analysis  # noqa: F401
-
+from app.core.database import async_session, close_db, init_db
+from app.core.security import hash_password
+from app.models.user import User
 
 # ======================
 # 수정이 쉬운 상단 설정값

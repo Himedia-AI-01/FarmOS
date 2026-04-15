@@ -135,6 +135,7 @@ def start_service(
         cwd=str(cwd),
         stdout=log_handle,
         stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
     )
     info(f"시작됨: {name} (PID={proc.pid})")
     return name, proc, log_handle
@@ -237,15 +238,18 @@ def run() -> None:
                 "Shop Frontend", ["npm", "run", "dev"], SHOP_FRONTEND_DIR, "shop-fe.log"
             )
         )
-        print("\n모든 서비스가 실행되었습니다. 종료하려면 X 입력 후 Enter.")
+        print("\n모든 서비스가 실행되었습니다. 종료하려면 x/q/exit 입력 후 Enter.")
         while True:
             try:
                 user_input = input("> ")
             except EOFError:
                 info("표준 입력이 닫혀 서비스를 종료합니다.")
                 break
-            if user_input.strip().lower() == "x":
+            command = user_input.strip().lower()
+            if command in {"x", "q", "exit", "quit"}:
                 break
+            if command == "":
+                print("종료하려면 x/q/exit 를 입력하세요.")
     finally:
         stop_services(services)
         print("모든 서비스를 종료했습니다.")

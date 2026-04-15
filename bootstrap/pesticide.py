@@ -12,8 +12,12 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from _bootstrap_common import (  # type: ignore[import-not-found]
+    error,
+    info,
+    set_log_prefix,
+)
 from dotenv import dotenv_values, load_dotenv
-from _bootstrap_common import error, info, set_log_prefix  # type: ignore[import-not-found]
 from sqlalchemy import (
     Boolean,
     Date,
@@ -58,7 +62,7 @@ LEGACY_TABLE_NAMES = [
     "product_applications",
     "products",
     "rag_documents",
-    "targets"
+    "targets",
 ]
 LOG_PREFIX = "PEST"
 

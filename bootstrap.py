@@ -13,9 +13,11 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import IO, Iterable, List, Tuple
+from typing import IO
 
+from bootstrap._bootstrap_common import resolve_command
 
 ROOT = Path(__file__).resolve().parent
 LOG_DIR = ROOT / "logs"
@@ -39,43 +41,29 @@ def fail(message: str, code: int = 1) -> None:
     raise SystemExit(code)
 
 
-def resolve_command(command: List[str]) -> List[str]:
-    """Windows에서 .cmd/.bat 실행이 안정적으로 동작하도록 보정한다."""
-    if not command:
-        raise BootstrapError("빈 명령어는 실행할 수 없습니다.")
-    executable = command[0]
-    resolved = shutil.which(executable) or executable
-    suffix = Path(resolved).suffix.lower()
-    if os.name == "nt" and suffix in {".cmd", ".bat"}:
-        comspec = os.environ.get("COMSPEC", "cmd.exe")
-        return [comspec, "/c", resolved, *command[1:]]
-    return [resolved, *command[1:]]
-
-
 def run_command(
-    command: List[str],
+    command: list[str],
     cwd: Path | None = None,
     check: bool = True,
     log_file: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     resolved = resolve_command(command)
-    kwargs = {
-        "cwd": str(cwd) if cwd else None,
-        "text": True,
-    }
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        handle = log_file.open("w", encoding="utf-8")
-        kwargs["stdout"] = handle
-        kwargs["stderr"] = subprocess.STDOUT
+        with log_file.open("w", encoding="utf-8") as handle:
+            result = subprocess.run(
+                resolved,
+                cwd=str(cwd) if cwd else None,
+                text=True,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+            )
     else:
-        kwargs["stdout"] = None
-        kwargs["stderr"] = None
-    try:
-        result = subprocess.run(resolved, **kwargs)
-    finally:
-        if log_file:
-            handle.close()
+        result = subprocess.run(
+            resolved,
+            cwd=str(cwd) if cwd else None,
+            text=True,
+        )
     if check and result.returncode != 0:
         raise BootstrapError(
             f"명령 실행 실패({result.returncode}): {' '.join(command)}"
@@ -112,12 +100,24 @@ def ensure_databases() -> None:
     """DB/테이블 점검 및 필요 시 초기화를 `bootstrap/` 하위에 위임한다."""
     info("ShoppingMall DB 점검/초기화")
     run_command(
-        ["python", r"bootstrap\shoppingmall.py", "--mode", "ensure", "--skip-sync"],
+        [
+            "python",
+            str(Path("bootstrap") / "shoppingmall.py"),
+            "--mode",
+            "ensure",
+            "--skip-sync",
+        ],
         cwd=ROOT,
     )
     info("FarmOS DB 점검/초기화")
     run_command(
-        ["python", r"bootstrap\farmos.py", "--mode", "ensure", "--skip-sync"],
+        [
+            "python",
+            str(Path("bootstrap") / "farmos.py"),
+            "--mode",
+            "ensure",
+            "--skip-sync",
+        ],
         cwd=ROOT,
     )
 
@@ -127,7 +127,7 @@ def start_service(
     command: Iterable[str],
     cwd: Path,
     log_name: str,
-) -> Tuple[str, subprocess.Popen[bytes], IO[str]]:
+) -> tuple[str, subprocess.Popen[bytes], IO[str]]:
     log_path = LOG_DIR / log_name
     log_handle = log_path.open("w", encoding="utf-8")
     proc = subprocess.Popen(
@@ -149,7 +149,7 @@ def stop_process_tree(pid: int) -> None:
     )
 
 
-def pids_from_port(port: int) -> List[int]:
+def pids_from_port(port: int) -> list[int]:
     result = subprocess.run(
         ["netstat", "-ano"],
         text=True,
@@ -169,7 +169,7 @@ def pids_from_port(port: int) -> List[int]:
     return sorted(pids)
 
 
-def stop_services(services: List[Tuple[str, subprocess.Popen[bytes], IO[str]]]) -> None:
+def stop_services(services: list[tuple[str, subprocess.Popen[bytes], IO[str]]]) -> None:
     info("서비스 종료 중...")
     for name, proc, log_handle in services:
         if proc.poll() is None:
@@ -205,7 +205,7 @@ def run() -> None:
     ensure_npm_project(FARMOS_FRONTEND_DIR, "FarmOS Frontend", "farmos-fe-install.log")
     ensure_npm_project(SHOP_FRONTEND_DIR, "Shop Frontend", "shop-fe-install.log")
 
-    services: List[Tuple[str, subprocess.Popen[bytes], IO[str]]] = []
+    services: list[tuple[str, subprocess.Popen[bytes], IO[str]]] = []
     try:
         services.append(
             start_service(
@@ -239,7 +239,12 @@ def run() -> None:
         )
         print("\n모든 서비스가 실행되었습니다. 종료하려면 X 입력 후 Enter.")
         while True:
-            if input("> ").strip().lower() == "x":
+            try:
+                user_input = input("> ")
+            except EOFError:
+                info("표준 입력이 닫혀 서비스를 종료합니다.")
+                break
+            if user_input.strip().lower() == "x":
                 break
     finally:
         stop_services(services)
@@ -251,6 +256,6 @@ if __name__ == "__main__":
         run()
     except KeyboardInterrupt:
         print("\n사용자 인터럽트로 종료합니다.")
-        raise SystemExit(130)
+        raise SystemExit(130) from None
     except BootstrapError as exc:
         fail(str(exc))

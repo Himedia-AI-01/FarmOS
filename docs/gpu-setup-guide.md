@@ -71,7 +71,7 @@ uv venv
 uv sync
 
 # 쇼핑몰/백오피스/리뷰 시드 통합 실행 (bootstrap)
-python ../../bootstrap/shoppingmall.py --mode init --skip-sync
+uv run ../../bootstrap/shoppingmall.py --mode init --skip-sync
 
 # 서버 실행
 uv run python main.py

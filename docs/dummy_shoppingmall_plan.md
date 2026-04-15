@@ -147,6 +147,6 @@ cd shopping_mall/frontend
 npm install && npm run dev
 
 # 또는 전체 서비스 한번에 실행
-start-all.bat
+bootstrap.cmd
 ```
 

@@ -4,7 +4,7 @@
 """ShoppingMall DB 시드 로직.
 
 실행 예시:
-  uv run python ..\\..\\bootstrap\\shoppingmall_seed.py
+  uv run python ../../bootstrap/shoppingmall_seed.py
 
 담당 범위:
 1) 스키마 초기화(drop/create)
@@ -18,9 +18,14 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from _bootstrap_common import error, info, set_log_prefix  # type: ignore[import-not-found]
+
+from _bootstrap_common import (  # type: ignore[import-not-found]
+    error,
+    info,
+    set_log_prefix,
+)
 
 # 실행 위치와 무관하게 shopping_mall/backend를 import 루트로 맞춘다.
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,7 +52,6 @@ from app.models import (
     WeeklyReport,
     Wishlist,
 )
-
 
 # =========================
 # 수정이 쉬운 상단 설정값
@@ -311,7 +315,7 @@ def _product_discount(pid: int) -> int:
 
 
 def seed_core_data(db) -> SeedState:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     db.add_all(
         Category(id=cid, name=name, icon=icon, sort_order=sort)

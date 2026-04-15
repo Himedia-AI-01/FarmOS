@@ -1233,4 +1233,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except Exception as exc:
         error(str(exc))
-        raise SystemExit(1)
+        raise

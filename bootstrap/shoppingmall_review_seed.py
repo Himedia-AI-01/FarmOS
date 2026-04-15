@@ -9,14 +9,17 @@
 
 from __future__ import annotations
 
-import os
 import random
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from _bootstrap_common import (  # type: ignore[import-not-found]
+    error,
+    info,
+    set_log_prefix,
+)
 from sqlalchemy import text
-from _bootstrap_common import error, info, set_log_prefix  # type: ignore[import-not-found]
 
 ROOT = Path(__file__).resolve().parents[1]
 SHOP_BACKEND_DIR = ROOT / "shopping_mall" / "backend"
@@ -24,7 +27,6 @@ if str(SHOP_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(SHOP_BACKEND_DIR))
 
 from app.database import SessionLocal
-
 
 LOG_PREFIX = "SHOP-RSEED"
 

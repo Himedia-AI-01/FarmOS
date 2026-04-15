@@ -17,14 +17,13 @@ from _bootstrap_common import (  # type: ignore[import-not-found]
     ensure_tools,
     error,
     info,
-    print_table_summary,
     parse_database_url,
+    print_table_summary,
     psql_query,
     run_command,
     set_log_prefix,
     table_exists,
 )
-
 
 FARMOS_TABLES = [
     "users",
@@ -38,6 +37,9 @@ FARMOS_TABLES = [
     "review_sentiments",
 ]
 LOG_PREFIX = "FOS"
+EXPECTED_ROW_COUNTS = {
+    "users": 2,
+}
 
 
 def _to_asyncpg_url(raw_db_url: str) -> str:
@@ -59,7 +61,7 @@ def uv_sync_backend(skip_sync: bool) -> None:
 def drop_farmos_tables(db_conf: dict[str, str]) -> None:
     info("FarmOS 테이블 삭제(drop)")
     # legacy: 기존 mock 농약 캐시 테이블도 함께 제거
-    targets = list(FARMOS_TABLES) + ["pesticide_products"]
+    targets = [*FARMOS_TABLES, "pesticide_products"]
     psql_query(db_conf, "DROP TABLE IF EXISTS " + ", ".join(targets) + " CASCADE;")
 
 
@@ -107,8 +109,11 @@ def is_farmos_ready(db_conf: dict[str, str]) -> bool:
     for table in FARMOS_TABLES:
         if not table_exists(db_conf, table):
             return False
-    user_count = int(psql_query(db_conf, "SELECT COUNT(*) FROM users;") or "0")
-    return user_count >= 2
+    for table, expected in EXPECTED_ROW_COUNTS.items():
+        actual = int(psql_query(db_conf, f"SELECT COUNT(*) FROM {table};") or "0")
+        if actual != expected:
+            return False
+    return True
 
 
 def print_summary(db_conf: dict[str, str]) -> None:

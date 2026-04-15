@@ -118,4 +118,4 @@ if __name__ == "__main__":
         raise SystemExit(asyncio.run(run()))
     except Exception as exc:
         error(str(exc))
-        raise SystemExit(1)
+        raise

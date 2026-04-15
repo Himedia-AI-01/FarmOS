@@ -7,9 +7,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List
 from urllib.parse import urlparse
-
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = ROOT / "backend"
@@ -46,8 +44,20 @@ def error(message: str) -> None:
     )
 
 
-def load_dotenv(path: Path) -> Dict[str, str]:
-    values: Dict[str, str] = {}
+def _sql_literal(value: str) -> str:
+    """SQL 문자열 리터럴을 안전하게 이스케이프한다."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _sql_identifier(name: str) -> str:
+    """SQL 식별자를 안전하게 이스케이프한다."""
+    if not name:
+        raise BootstrapError("Identifier must not be empty.")
+    return '"' + name.replace('"', '""') + '"'
+
+
+def load_dotenv(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
     if not path.exists():
         return values
 
@@ -64,7 +74,7 @@ def normalize_db_url(db_url: str) -> str:
     return re.sub(r"^postgresql\+\w+://", "postgresql://", db_url, count=1)
 
 
-def parse_database_url(db_url: str) -> Dict[str, str]:
+def parse_database_url(db_url: str) -> dict[str, str]:
     parsed = urlparse(normalize_db_url(db_url))
     if parsed.scheme != "postgresql":
         raise BootstrapError(f"Unsupported DATABASE_URL scheme: {parsed.scheme}")
@@ -103,7 +113,7 @@ def detect_database_url(
     return "postgresql+psycopg2://postgres:root@localhost:5432/farmos"
 
 
-def resolve_command(command: List[str]) -> List[str]:
+def resolve_command(command: list[str]) -> list[str]:
     """Windows의 cmd/bat 실행을 안전하게 보정한다."""
     if not command:
         raise BootstrapError("Empty command is not allowed.")
@@ -118,9 +128,9 @@ def resolve_command(command: List[str]) -> List[str]:
 
 
 def run_command(
-    command: List[str],
+    command: list[str],
     cwd: Path | None = None,
-    env_overrides: Dict[str, str] | None = None,
+    env_overrides: dict[str, str] | None = None,
     check: bool = True,
     capture_output: bool = False,
 ) -> subprocess.CompletedProcess[str]:
@@ -154,7 +164,7 @@ def ensure_tools(*tools: str) -> None:
         )
 
 
-def ensure_postgres_running(db_conf: Dict[str, str]) -> None:
+def ensure_postgres_running(db_conf: dict[str, str]) -> None:
     info(f"Checking PostgreSQL server ({db_conf['host']}:{db_conf['port']})...")
     try:
         with socket.create_connection(
@@ -169,7 +179,7 @@ def ensure_postgres_running(db_conf: Dict[str, str]) -> None:
         raise BootstrapError("Failed to verify PostgreSQL connection with SELECT 1.")
 
 
-def psql_query(db_conf: Dict[str, str], sql: str, database: str | None = None) -> str:
+def psql_query(db_conf: dict[str, str], sql: str, database: str | None = None) -> str:
     target_db = database or db_conf["database"]
     result = run_command(
         [
@@ -192,38 +202,43 @@ def psql_query(db_conf: Dict[str, str], sql: str, database: str | None = None) -
     return (result.stdout or "").strip()
 
 
-def ensure_database_exists(db_conf: Dict[str, str]) -> None:
+def ensure_database_exists(db_conf: dict[str, str]) -> None:
+    db_name = db_conf["database"]
     exists = psql_query(
         db_conf,
-        f"SELECT 1 FROM pg_database WHERE datname = '{db_conf['database']}';",
+        f"SELECT 1 FROM pg_database WHERE datname = {_sql_literal(db_name)};",
         database="postgres",
     )
     if exists == "1":
         return
-    info(f"Database '{db_conf['database']}' not found. Creating...")
+    info(f"Database '{db_name}' not found. Creating...")
     psql_query(
-        db_conf, f'CREATE DATABASE "{db_conf["database"]}";', database="postgres"
+        db_conf, f"CREATE DATABASE {_sql_identifier(db_name)};", database="postgres"
     )
 
 
-def table_exists(db_conf: Dict[str, str], table_name: str) -> bool:
-    out = psql_query(db_conf, f"SELECT to_regclass('public.{table_name}');")
-    return out == table_name
+def table_exists(db_conf: dict[str, str], table_name: str) -> bool:
+    out = psql_query(
+        db_conf,
+        "SELECT 1 FROM pg_tables "
+        "WHERE schemaname='public' "
+        f"AND tablename={_sql_literal(table_name)};",
+    )
+    return out == "1"
 
 
 def describe_table_columns(
-    db_conf: Dict[str, str], table_name: str
-) -> List[Dict[str, str]]:
-    safe_table = table_name.replace("'", "''")
+    db_conf: dict[str, str], table_name: str
+) -> list[dict[str, str]]:
     output = psql_query(
         db_conf,
         "SELECT column_name, data_type, is_nullable, "
         "COALESCE(column_default, '') "
         "FROM information_schema.columns "
-        f"WHERE table_schema='public' AND table_name='{safe_table}' "
+        f"WHERE table_schema='public' AND table_name={_sql_literal(table_name)} "
         "ORDER BY ordinal_position;",
     )
-    columns: List[Dict[str, str]] = []
+    columns: list[dict[str, str]] = []
     for line in output.splitlines():
         parts = line.split("|", 3)
         if len(parts) != 4:
@@ -239,14 +254,14 @@ def describe_table_columns(
     return columns
 
 
-def print_table_summary(db_conf: Dict[str, str], label: str, tables: List[str]) -> None:
+def print_table_summary(db_conf: dict[str, str], label: str, tables: list[str]) -> None:
     print()
     info(f"{label} 테이블 요약")
     for table in tables:
         if not table_exists(db_conf, table):
             print(f"  - {table}: MISSING")
             continue
-        count = psql_query(db_conf, f"SELECT COUNT(*) FROM {table};")
+        count = psql_query(db_conf, f"SELECT COUNT(*) FROM {_sql_identifier(table)};")
         print(f"  - {table}: {count} rows")
         for column in describe_table_columns(db_conf, table):
             nullability = "NULL" if column["nullable"] == "YES" else "NOT NULL"

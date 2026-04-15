@@ -7,8 +7,8 @@ import argparse
 import re
 
 from _bootstrap_common import (  # type: ignore[import-not-found]
-    SHOP_BACKEND_DIR,
     ROOT,
+    SHOP_BACKEND_DIR,
     BootstrapError,
     detect_database_url,
     ensure_database_exists,
@@ -16,14 +16,13 @@ from _bootstrap_common import (  # type: ignore[import-not-found]
     ensure_tools,
     error,
     info,
-    print_table_summary,
     parse_database_url,
+    print_table_summary,
     psql_query,
     run_command,
     set_log_prefix,
     table_exists,
 )
-
 
 SHOP_TABLES = [
     "shop_categories",
@@ -74,8 +73,9 @@ def drop_shop_tables(db_conf: dict[str, str]) -> None:
 
 def run_seed_pipeline(raw_db_url: str) -> None:
     info("통합 쇼핑몰 시드 스크립트 실행")
+    seed_script = ROOT / "bootstrap" / "shoppingmall_seed.py"
     run_command(
-        ["uv", "run", "python", r"..\..\bootstrap\shoppingmall_seed.py"],
+        ["uv", "run", "python", str(seed_script)],
         cwd=SHOP_BACKEND_DIR,
         env_overrides={"DATABASE_URL": _to_sync_db_url(raw_db_url)},
     )

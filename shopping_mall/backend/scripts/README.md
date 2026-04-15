@@ -11,7 +11,7 @@
 ## 실행
 
 ```bash
-# RAG 시딩 + 검증 (Ollama 실행 중이어야 함)
+# RAG 시딩 + 검증 (.env의 EMBED_PROVIDER 설정 사용)
 uv run python scripts/seed_and_verify.py
 ```
 

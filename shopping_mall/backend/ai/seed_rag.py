@@ -13,13 +13,13 @@ import sys
 # shopping_mall/backend를 sys.path에 추가 (python ai/seed_rag.py 직접 실행 시 필요)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.paths import CHROMA_DB_PATH, AI_DATA_DIR, POLICY_DOCS_DIR
+from app.core.config import settings
+from app.paths import CHROMA_DB_PATH, AI_DATA_DIR
+from ai.embeddings import get_embedding_function
 
 DATA_DIR = str(AI_DATA_DIR)
 CHROMA_DIR = CHROMA_DB_PATH
-
-# 정책 문서 경로: 환경변수 POLICY_DOCS_DIR로 오버라이드 가능
-DOCS_DIR = os.environ.get("POLICY_DOCS_DIR", str(POLICY_DOCS_DIR))
+DOCS_DIR = settings.policy_docs_dir
 
 # 파일명(부분 일치) → ChromaDB 컬렉션명 매핑
 DOC_TO_COLLECTION: dict[str, str] = {
@@ -226,21 +226,6 @@ def seed_season_info(client, ef) -> int:
 
 # ── 진입점 ─────────────────────────────────────────────────────────────────
 
-def get_embedding_function():
-    try:
-        from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
-        from app.core.config import settings
-        return OllamaEmbeddingFunction(
-            url=f"{settings.ollama_base_url}/api/embeddings",
-            model_name=settings.ollama_embed_model,
-        )
-    except Exception as e:
-        print(f"[경고] Ollama 임베딩 함수 초기화 실패: {e}")
-        from app.core.config import settings
-        print(f"  → Ollama 서버가 실행 중인지 확인하세요: {settings.ollama_base_url}")
-        sys.exit(1)
-
-
 def find_policy_files() -> list[tuple[str, str]]:
     """DOCS_DIR에서 DOC_TO_COLLECTION 매핑에 해당하는 파일을 찾아 반환.
 
@@ -286,7 +271,13 @@ def main():
 
     print(f"ChromaDB 초기화 중... ({CHROMA_DIR})")
     client = chromadb.PersistentClient(path=CHROMA_DIR)
-    ef = get_embedding_function()
+    try:
+        ef = get_embedding_function()
+        print(f"임베딩 provider: {settings.embed_provider}")
+    except Exception as e:
+        print(f"[오류] 임베딩 함수 초기화 실패: {e}")
+        print(f"  → EMBED_PROVIDER={settings.embed_provider} 설정을 확인하세요.")
+        sys.exit(1)
 
     # ── JSON 기반 컬렉션 ──
     print("\n[JSON 컬렉션 적재]")

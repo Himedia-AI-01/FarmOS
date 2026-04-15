@@ -26,5 +26,5 @@ CHROMA_DB_PATH = str(BACKEND_ROOT / "chroma_data")
 # shopping_mall/backend/ai/data/
 AI_DATA_DIR = AI_DIR / "data"
 
-# FarmOS/.claude/docs/  (정책 문서)
-POLICY_DOCS_DIR = PROJECT_ROOT / ".claude" / "docs"
+# shopping_mall/backend/ai/docs/  (정책 문서 — gitignore 처리, 로컬에 PDF/DOCX 배치)
+POLICY_DOCS_DIR = AI_DIR / "docs"

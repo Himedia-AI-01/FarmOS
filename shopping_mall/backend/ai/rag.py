@@ -4,6 +4,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.paths import CHROMA_DB_PATH
+from ai.embeddings import get_embedding_function
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +23,9 @@ class RAGService:
         """Initialize ChromaDB client. Gracefully handles unavailability."""
         try:
             import chromadb
-            from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
             self.chroma_client = chromadb.PersistentClient(path=persist_directory)
-            self._ef = OllamaEmbeddingFunction(
-                url=f"{settings.ollama_base_url}/api/embeddings",
-                model_name=settings.ollama_embed_model,
-            )
-            logger.info("ChromaDB initialized successfully.")
+            self._ef = get_embedding_function()
+            logger.info("ChromaDB initialized (provider=%s).", settings.embed_provider)
         except Exception as e:
             logger.warning(f"ChromaDB initialization failed: {e}. RAG will use fallback.")
             self.chroma_client = None

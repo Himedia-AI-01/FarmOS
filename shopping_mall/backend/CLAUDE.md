@@ -19,7 +19,7 @@ PROJECT_ROOT    # FarmOS/
 LOG_DIR         # FarmOS/logs/
 CHROMA_DB_PATH  # .../backend/chroma_data/
 AI_DATA_DIR     # .../backend/ai/data/
-POLICY_DOCS_DIR # FarmOS/.claude/docs/
+POLICY_DOCS_DIR # .../backend/ai/docs/  (gitignore — 로컬에 PDF/DOCX 직접 배치)
 ```
 
 ---
@@ -88,6 +88,7 @@ await self._tool_get_order_status(db, user_id, **args)
 | `CLAUDE_FALLBACK_MODEL` | Claude Fallback 모델 (기본: `claude-haiku-4-5`) |
 | `AGENT_MAX_ITERATIONS` | 에이전트 최대 반복 횟수 (기본: `10`) |
 | `ANNIVERSARY_API_KEY` | 공공데이터포털 공휴일 API 키 |
+| `POLICY_DOCS_DIR` | 정책 문서 폴더 (기본: `ai/docs/`, gitignore — 로컬 배치 필요) |
 
 Provider 전환은 `PRIMARY_LLM_*` 세 값만 교체하면 됩니다. 자세한 예시는 `ai/agent/clients/README.md` 참고.
 

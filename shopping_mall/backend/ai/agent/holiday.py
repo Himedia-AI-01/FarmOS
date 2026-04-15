@@ -53,8 +53,8 @@ async def _fetch_holidays(year: int, month: int, api_key: str) -> set[date]:
 
         return holidays
 
-    except Exception as e:
-        logger.warning(f"공휴일 API 조회 실패 ({year}-{month:02d}): {e}")
+    except (httpx.HTTPError, KeyError, ValueError) as e:
+        logger.warning("공휴일 API 조회 실패 (%d-%02d): %s", year, month, e)
         return set()
 
 

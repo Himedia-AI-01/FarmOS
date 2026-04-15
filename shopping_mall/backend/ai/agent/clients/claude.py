@@ -66,13 +66,13 @@ class ClaudeAgentClient(AgentClient):
             )
 
         except anthropic.AuthenticationError as e:
-            logger.error(f"Claude API 인증 실패: {e}")
+            logger.exception(f"Claude API 인증 실패: {e}")
             raise AgentUnavailableError(f"Claude API 인증 실패: {e}") from e
         except anthropic.APIError as e:
-            logger.error(f"Claude API 오류: {e}")
+            logger.exception(f"Claude API 오류: {e}")
             raise AgentUnavailableError(f"Claude API 오류: {e}") from e
         except Exception as e:
-            logger.error(f"Claude 클라이언트 오류: {e}")
+            logger.exception(f"Claude 클라이언트 오류: {e}")
             raise AgentUnavailableError(f"Claude 클라이언트 오류: {e}") from e
 
     def add_tool_results(

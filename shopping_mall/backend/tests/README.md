@@ -4,7 +4,7 @@ pytest 기반 테스트. 현재 에이전트 관련 테스트만 있습니다.
 
 ## 구조
 
-```
+```text
 tests/
 ├── conftest.py          # 공용 픽스처 (FakeAgentClient, FakeRAGService, make_mock_db 등)
 └── agent/

@@ -74,5 +74,9 @@ class AgentClient(ABC):
 
     @abstractmethod
     async def is_available(self) -> bool:
-        """클라이언트 사용 가능 여부를 반환합니다."""
+        """필수 자격증명(API 키)이 설정되어 있는지 확인합니다.
+
+        실제 네트워크 연결은 검증하지 않습니다. 연결 실패는 chat_with_tools()에서
+        AgentUnavailableError로 처리됩니다.
+        """
         ...

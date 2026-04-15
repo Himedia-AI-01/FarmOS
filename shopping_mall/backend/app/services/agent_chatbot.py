@@ -44,7 +44,7 @@ class AgentChatbotService:
             context=context,
         )
 
-        # ChatLog 저장
+        # ChatLog 저장 + 세션 메타데이터 갱신 (단일 트랜잭션)
         from app.models.chat_log import ChatLog
         log = ChatLog(
             user_id=user_id,
@@ -55,9 +55,7 @@ class AgentChatbotService:
             escalated=result.escalated,
         )
         db.add(log)
-        db.commit()
 
-        # 세션 메타데이터 갱신
         if session_id:
             from app.models.chat_session import ChatSession
             session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
@@ -65,8 +63,8 @@ class AgentChatbotService:
                 if not session.title:
                     session.title = question[:50]
                 session.updated_at = datetime.now(timezone.utc)
-                db.add(session)
-                db.commit()
+
+        db.commit()
 
         return {
             "answer": result.answer,

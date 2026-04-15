@@ -95,6 +95,7 @@ class OpenAIAgentClient(AgentClient):
                     try:
                         args = json.loads(args)
                     except json.JSONDecodeError:
+                        logger.warning(f"도구 호출 인수 JSON 디코딩 실패, 원본 문자열 사용: {args[:100]}")
                         args = {}
                 tool_calls.append(
                     ToolCall(

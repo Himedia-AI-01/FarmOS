@@ -12,10 +12,9 @@ def _setup_app_logging() -> None:
 
     stdout 리다이렉트 시 Windows cp949 인코딩 문제를 완전히 회피한다.
     """
-    # app.paths를 쓰지 않고 직접 계산 — 임포트 순환 방지
-    log_dir = Path(__file__).parent.parent.parent.parent / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "chatbot.log"
+    from app.paths import LOG_DIR
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LOG_DIR / "chatbot.log"
 
     fmt = logging.Formatter(
         "%(asctime)s %(levelname)-8s %(name)s: %(message)s",

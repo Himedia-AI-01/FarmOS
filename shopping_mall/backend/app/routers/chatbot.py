@@ -1,5 +1,6 @@
 """Chatbot router."""
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -15,6 +16,8 @@ from app.schemas.chat_session import ChatSessionCreate, ChatSessionResponse, Cha
 from app.services.agent_chatbot import AgentChatbotService
 from app.farmos_auth import get_farmos_user_optional, FarmOSUser
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chatbot", tags=["chatbot"])
 
@@ -396,7 +399,7 @@ def close_session(
                     exchange.status = "cancelled"
                     db.add(exchange)
         except Exception:
-            pass
+            logger.exception("세션 종료 시 pending_action 정리 실패 (session_id=%s)", session_id)
         session.pending_action = None
 
     session.status = "closed"

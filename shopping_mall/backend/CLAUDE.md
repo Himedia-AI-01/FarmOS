@@ -42,7 +42,7 @@ OpenAIAgentClient (PRIMARY_LLM_*)
 | `ai/agent/clients/claude.py` | Fallback LLM — Anthropic SDK |
 | `ai/agent/clients/base.py` | 클라이언트 추상 인터페이스 |
 | `ai/agent/executor.py` | 에이전트 루프, RequestContext, TraceStep |
-| `ai/agent/tools.py` | TOOL_DEFINITIONS 9개 (중립 JSON Schema) |
+| `ai/agent/tools.py` | TOOL_DEFINITIONS 12개 (중립 JSON Schema, HitL 도구 3개 포함) |
 | `ai/agent/holiday.py` | 공휴일 API + 월별 캐시 |
 | `ai/agent/prompts.py` | 에이전트 시스템 프롬프트 |
 | `ai/rag.py` | retrieve() / retrieve_multiple() + distance_threshold 필터 |

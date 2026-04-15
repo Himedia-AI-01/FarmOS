@@ -159,7 +159,8 @@ TOOL_DEFINITIONS: list[dict] = [
         "name": "get_product_detail",
         "description": (
             "특정 상품의 상세 정보(가격, 재고, 설명, 평점 등)를 조회합니다. "
-            "search_products로 상품을 찾은 후 상세 정보가 필요할 때 사용하세요."
+            "search_products로 상품을 찾은 후 상세 정보가 필요할 때 사용하세요. "
+            "product_id 또는 product_name 중 반드시 하나 이상을 제공해야 합니다."
         ),
         "parameters": {
             "type": "object",
@@ -274,7 +275,7 @@ TOOL_TO_INTENT: dict[str, str] = {
     "get_product_detail": "stock",
     "search_storage_guide": "storage",
     "search_season_info": "season",
-    "search_policy": "exchange",
+    "search_policy": "policy",
     "search_faq": "other",
     "search_farm_info": "other",
     "create_exchange_request": "exchange",

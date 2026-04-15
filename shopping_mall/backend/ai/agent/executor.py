@@ -1,4 +1,4 @@
-"""에이전트 실행기 — tool_use 루프 + 9개 도구 구현."""
+"""에이전트 실행기 — tool_use 루프 + 12개 도구 구현."""
 import json
 import logging
 import re
@@ -395,7 +395,7 @@ class AgentExecutor:
     async def _tool_search_products(
         self, db: Session, query: str, check_stock: bool = False, limit: int = 5
     ) -> str:
-        limit = min(limit, 20)  # LLM이 과도한 limit을 넘겨도 최대 20건으로 제한
+        limit = max(1, min(limit, 20))  # LLM이 넘긴 limit을 1~20 범위로 제한
         from app.models.product import Product
 
         try:
@@ -511,23 +511,20 @@ class AgentExecutor:
             if not order:
                 return f"주문 #{order_id}을 찾을 수 없거나 접근 권한이 없습니다."
 
+            # order_item_id가 해당 주문에 속하는지 검증
+            if order_item_id is not None:
+                item = db.query(OrderItem).filter(
+                    OrderItem.id == order_item_id, OrderItem.order_id == order_id
+                ).first()
+                if not item:
+                    return f"주문 #{order_id}에 해당 상품 항목이 존재하지 않습니다."
+
             # 교환 가능 상태 확인 (배송완료 또는 배송중)
             if order.status not in ("delivered", "shipping"):
                 return (
                     f"주문 #{order_id}은 현재 '{order.status}' 상태로 교환 신청이 불가합니다. "
                     "교환은 배송중 또는 배송완료 상태에서만 가능합니다."
                 )
-
-            # 교환 신청 초안 생성 (pending_confirm 상태)
-            exchange = ExchangeRequest(
-                user_id=user_id,
-                order_id=order_id,
-                order_item_id=order_item_id,
-                reason=reason,
-                status="pending_confirm",
-            )
-            db.add(exchange)
-            db.flush()  # ID 확보 (commit 전)
 
             # 주문 상품 요약
             items_summary = ", ".join(
@@ -536,8 +533,32 @@ class AgentExecutor:
                 if item.product
             ) or "상품 정보 없음"
 
-            # 세션에 대기 액션 저장
-            session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+            # 중복 방지: 동일 주문에 대기 중인 교환 신청이 있으면 재사용
+            # (Primary→Fallback 전환 시 도구 재실행으로 인한 중복 생성 방지)
+            existing = db.query(ExchangeRequest).filter(
+                ExchangeRequest.user_id == user_id,
+                ExchangeRequest.order_id == order_id,
+                ExchangeRequest.status == "pending_confirm",
+            ).first()
+
+            if existing:
+                exchange = existing
+            else:
+                # 교환 신청 초안 생성 (pending_confirm 상태)
+                exchange = ExchangeRequest(
+                    user_id=user_id,
+                    order_id=order_id,
+                    order_item_id=order_item_id,
+                    reason=reason,
+                    status="pending_confirm",
+                )
+                db.add(exchange)
+                db.flush()  # ID 확보 (commit 전)
+
+            # 세션에 대기 액션 저장 (소유권 검증 포함)
+            session = db.query(ChatSession).filter(
+                ChatSession.id == session_id, ChatSession.user_id == user_id
+            ).first()
             if session:
                 session.pending_action = json.dumps({
                     "type": "exchange_request",
@@ -575,7 +596,9 @@ class AgentExecutor:
         from app.models.exchange_request import ExchangeRequest
 
         try:
-            session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+            session = db.query(ChatSession).filter(
+                ChatSession.id == session_id, ChatSession.user_id == user_id
+            ).first()
             if not session or not session.pending_action:
                 return "확인할 대기 중인 요청이 없습니다."
 
@@ -626,7 +649,9 @@ class AgentExecutor:
         from app.models.exchange_request import ExchangeRequest
 
         try:
-            session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
+            session = db.query(ChatSession).filter(
+                ChatSession.id == session_id, ChatSession.user_id == user_id
+            ).first()
             if not session or not session.pending_action:
                 return "취소할 대기 중인 요청이 없습니다."
 

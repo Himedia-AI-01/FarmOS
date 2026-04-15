@@ -58,10 +58,10 @@ def make_hitl_session(session_id=1, pending_action=None):
     return s
 
 
-def make_hitl_exchange(id=42, user_id=10, status="pending_confirm"):
+def make_hitl_exchange(exchange_id=42, user_id=10, status="pending_confirm"):
     """ExchangeRequest 목 — HitL 테스트 전용."""
     ex = MagicMock()
-    ex.id = id
+    ex.id = exchange_id
     ex.user_id = user_id
     ex.status = status
     return ex
@@ -173,7 +173,7 @@ class TestNormalCases:
 
     async def test_get_order_status_logged_in(self):
         """로그인 사용자의 주문/배송 조회."""
-        order = make_order(id=100, user_id=10, status="shipping")
+        order = make_order(order_id=100, user_id=10, status="shipping")
         shipment = make_shipment(order_id=100, carrier="CJ대한통운", tracking_number="9999")
         db = make_mock_db(orders=[order], shipments=[shipment])
 
@@ -191,7 +191,7 @@ class TestNormalCases:
 
     async def test_get_order_status_result_contains_tracking(self):
         """도구 결과에 송장번호가 포함되는지 직접 검증."""
-        order = make_order(id=55, user_id=7, status="shipping")
+        order = make_order(order_id=55, user_id=7, status="shipping")
         shipment = make_shipment(tracking_number="TRK-001", carrier="한진택배")
         db = make_mock_db(orders=[order], shipments=[shipment])
 
@@ -210,7 +210,7 @@ class TestNormalCases:
 
     async def test_search_products_returns_formatted_list(self, empty_db):
         """상품 검색 도구가 형식화된 문자열을 반환."""
-        product = make_product(id=3, name="유기농 딸기", price=15000, stock=80)
+        product = make_product(product_id=3, name="유기농 딸기", price=15000, stock=80)
         db = make_mock_db(products=[product])
 
         executor = make_executor(FakeAgentClient([
@@ -373,7 +373,7 @@ class TestFailureCases:
         ATTACKER_USER_ID = 999
 
         # user_id=7의 주문만 존재
-        order = make_order(id=10, user_id=SESSION_USER_ID)
+        order = make_order(order_id=10, user_id=SESSION_USER_ID)
         shipment = make_shipment(order_id=10)
 
         # DB 목: user_id 인자 검증을 위해 side_effect 사용
@@ -471,7 +471,7 @@ class TestIntentMapping:
         ("get_product_detail", "stock"),
         ("search_storage_guide", "storage"),
         ("search_season_info", "season"),
-        ("search_policy", "exchange"),
+        ("search_policy", "policy"),
         ("search_faq", "other"),
         ("search_farm_info", "other"),
         ("escalate_to_agent", "escalation"),
@@ -517,7 +517,7 @@ class TestGetProductDetail:
         """product_id로 상품 상세 조회 성공."""
         from ai.agent.clients.base import ToolCall
 
-        product = make_product(id=10, name="유기농 사과", price=20000, stock=50)
+        product = make_product(product_id=10, name="유기농 사과", price=20000, stock=50)
         db = make_mock_db(products=[product])
         # filter().first() 지원
         from app.models.product import Product
@@ -538,7 +538,7 @@ class TestGetProductDetail:
         from ai.agent.clients.base import ToolCall
         from app.models.product import Product
 
-        product = make_product(id=5, name="제주 감귤", price=8000, stock=200)
+        product = make_product(product_id=5, name="제주 감귤", price=8000, stock=200)
         product_mock = MagicMock()
         product_mock.filter.return_value.first.return_value = product
         db = MagicMock()
@@ -581,7 +581,7 @@ class TestGetProductDetail:
         from ai.agent.clients.base import ToolCall
         from app.models.product import Product
 
-        product = make_product(id=7, name="품절상품", price=5000, stock=0)
+        product = make_product(product_id=7, name="품절상품", price=5000, stock=0)
         product.restock_date = None
         product_mock = MagicMock()
         product_mock.filter.return_value.first.return_value = product
@@ -605,7 +605,7 @@ class TestSearchProductsExtra:
         """check_stock=True 시 재고 있는 상품만 반환."""
         from ai.agent.clients.base import ToolCall
 
-        product = make_product(id=1, name="딸기", stock=10)
+        product = make_product(product_id=1, name="딸기", stock=10)
         db = make_mock_db(products=[product])
 
         executor = make_executor(FakeAgentClient([]))
@@ -619,7 +619,7 @@ class TestSearchProductsExtra:
         from ai.agent.clients.base import ToolCall
         from app.models.product import Product
 
-        products = [make_product(id=i, name=f"상품{i}", stock=5) for i in range(25)]
+        products = [make_product(product_id=i, name=f"상품{i}", stock=5) for i in range(25)]
         product_mock = MagicMock()
         captured_limit = []
 
@@ -686,7 +686,7 @@ class TestHumanInTheLoop:
         """교환 불가 상태(registered)인 주문에 교환 신청 거부."""
         from ai.agent.clients.base import ToolCall
 
-        order = make_order(id=5, user_id=10, status="registered")
+        order = make_order(order_id=5, user_id=10, status="registered")
         db = make_hitl_db(order=order)
         executor = make_executor(FakeAgentClient([]))
         tc = ToolCall(id="t1", name="create_exchange_request", arguments={"order_id": 5, "reason": "파손"})
@@ -698,7 +698,7 @@ class TestHumanInTheLoop:
         """배송완료 주문에 교환 신청 성공 — 확인 요청 메시지 반환."""
         from ai.agent.clients.base import ToolCall
 
-        order = make_order(id=7, user_id=10, status="delivered")
+        order = make_order(order_id=7, user_id=10, status="delivered")
         session = make_hitl_session(session_id=1)
         db = make_hitl_db(order=order, session=session)
 
@@ -719,7 +719,7 @@ class TestHumanInTheLoop:
         """배송중 주문에도 교환 신청 가능."""
         from ai.agent.clients.base import ToolCall
 
-        order = make_order(id=8, user_id=10, status="shipping")
+        order = make_order(order_id=8, user_id=10, status="shipping")
         session = make_hitl_session(session_id=2)
         db = make_hitl_db(order=order, session=session)
 
@@ -763,7 +763,7 @@ class TestHumanInTheLoop:
         """pending_confirm 교환 신청 확인 → status=confirmed, pending_action=None."""
         from ai.agent.clients.base import ToolCall
 
-        exchange = make_hitl_exchange(id=42, user_id=10, status="pending_confirm")
+        exchange = make_hitl_exchange(exchange_id=42, user_id=10, status="pending_confirm")
         pending = json.dumps({"type": "exchange_request", "exchange_request_id": 42})
         session = make_hitl_session(session_id=1, pending_action=pending)
         db = make_hitl_db(session=session, exchange=exchange)
@@ -819,7 +819,7 @@ class TestHumanInTheLoop:
         """pending_confirm 교환 신청 취소 → status=cancelled, pending_action=None."""
         from ai.agent.clients.base import ToolCall
 
-        exchange = make_hitl_exchange(id=42, user_id=10, status="pending_confirm")
+        exchange = make_hitl_exchange(exchange_id=42, user_id=10, status="pending_confirm")
         pending = json.dumps({"type": "exchange_request", "exchange_request_id": 42})
         session = make_hitl_session(session_id=1, pending_action=pending)
         db = make_hitl_db(session=session, exchange=exchange)

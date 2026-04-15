@@ -16,7 +16,7 @@
 
 ## 챗봇 흐름
 
-```
+```text
 POST /api/chatbot/ask
   → app/routers/chatbot.py
   → AgentChatbotService.answer()

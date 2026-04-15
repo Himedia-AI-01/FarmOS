@@ -166,7 +166,7 @@ def make_mock_db(orders=None, shipments=None, products=None, chat_session=None):
 # ── 도메인 오브젝트 팩토리 ───────────────────────────────────────────────────
 
 def make_order(
-    id=1,
+    order_id=1,
     user_id=10,
     total_price=35000,
     status="shipping",
@@ -174,7 +174,7 @@ def make_order(
     items=None,
 ):
     order = MagicMock()
-    order.id = id
+    order.id = order_id
     order.user_id = user_id
     order.total_price = total_price
     order.status = status
@@ -201,7 +201,7 @@ def make_shipment(
 
 
 def make_product(
-    id=1,
+    product_id=1,
     name="딸기",
     price=12000,
     discount_rate=0,
@@ -212,7 +212,7 @@ def make_product(
     description="신선한 딸기",
 ):
     p = MagicMock()
-    p.id = id
+    p.id = product_id
     p.name = name
     p.price = price
     p.discount_rate = discount_rate

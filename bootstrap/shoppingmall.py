@@ -159,18 +159,22 @@ def main() -> int:
 
         ensure_postgres_running(db_conf)
         ensure_database_exists(db_conf)
+        initialized = args.mode == "init"
         if args.mode == "ensure":
             if is_shoppingmall_ready(db_conf):
                 info("ShoppingMall DB 상태 정상 (초기화 생략)")
             else:
                 info("ShoppingMall DB 상태 불완전 (초기화 수행)")
                 initialize(db_conf, raw_db_url, args.skip_sync)
+                initialized = True
         else:
             initialize(db_conf, raw_db_url, args.skip_sync)
-        print_summary(db_conf)
-
-        print()
-        info("ShoppingMall 데이터베이스 초기화 완료")
+        if initialized:
+            print_summary(db_conf)
+            print()
+            info("ShoppingMall 데이터베이스 초기화 완료")
+        else:
+            info("ShoppingMall 데이터베이스 상태 확인 완료")
         return 0
     except BootstrapError as exc:
         error(str(exc))

@@ -712,7 +712,13 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 total_revenue=1250000,
                 total_expense=825000,
                 net_profit=425000,
-                report_content="[주간 리포트] 매출 성장, 비용 효율화 필요.",
+                report_content=(
+                    "[주간 리포트 2026-03-16 ~ 2026-03-22]\n"
+                    "총 매출 1,250,000원으로 전주 대비 12% 증가했습니다.\n"
+                    "한우 등심과 제주 감귤이 인기 상품 1, 2위를 차지했습니다.\n"
+                    "포장비와 인건비가 전체 비용의 50%를 차지하여 효율화가 필요합니다.\n"
+                    "다음 주 봄 시즌 프로모션 준비를 권장합니다."
+                ),
                 generated_at=now - timedelta(days=10),
             ),
             WeeklyReport(
@@ -721,7 +727,13 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 total_revenue=1480000,
                 total_expense=745000,
                 net_profit=735000,
-                report_content="[주간 리포트] 봄 시즌 매출 증가 추세.",
+                report_content=(
+                    "[주간 리포트 2026-03-23 ~ 2026-03-29]\n"
+                    "매출이 전주 대비 18% 증가하여 좋은 성장세를 보이고 있습니다.\n"
+                    "청송 꿀사과와 통영 생굴의 판매가 급증했습니다.\n"
+                    "택배비 비율이 감소하여 비용 효율이 개선되었습니다.\n"
+                    "4월 봄나물 시즌에 맞춘 기획전을 추천합니다."
+                ),
                 generated_at=now - timedelta(days=3),
             ),
         ]
@@ -751,7 +763,7 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 user_id=1,
                 intent="delivery",
                 question="제 주문 배송 어디까지 왔나요?",
-                answer="주문#2 배송 완료",
+                answer="주문#2: CJ대한통운 6300123456789 (상태: delivered) - 배송이 완료되었습니다.",
                 escalated=False,
                 rating=5,
                 created_at=now - timedelta(days=5),
@@ -760,7 +772,7 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 user_id=2,
                 intent="storage",
                 question="사과 보관 방법이 궁금해요",
-                answer="비닐봉지 냉장 보관을 권장합니다.",
+                answer="사과는 비닐봉지에 넣어 냉장 보관하세요. 에틸렌 가스를 많이 배출하므로 다른 과일과 분리 보관이 좋습니다.",
                 escalated=False,
                 rating=4,
                 created_at=now - timedelta(days=4),
@@ -768,8 +780,8 @@ def seed_backoffice_data(db, state: SeedState) -> None:
             ChatLog(
                 user_id=3,
                 intent="exchange",
-                question="상한 상품 교환 가능한가요?",
-                answer="24시간 이내 접수 시 교환/환불 가능합니다.",
+                question="어제 받은 고구마가 상한 것 같아요. 교환 가능한가요?",
+                answer="상품 하자 시 수령 후 24시간 이내에 사진과 함께 고객센터로 연락해 주세요. 확인 후 교환 또는 환불 처리해 드리겠습니다.",
                 escalated=False,
                 rating=3,
                 created_at=now - timedelta(days=3),
@@ -778,7 +790,7 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 user_id=None,
                 intent="other",
                 question="농장 견학 프로그램이 있나요?",
-                answer="상담원 연결이 필요합니다.",
+                answer="해당 문의는 상담원 연결이 필요합니다. 고객센터(1588-0000)로 전화해 주시거나, 잠시만 기다려 주시면 상담원이 연결됩니다.",
                 escalated=True,
                 rating=None,
                 created_at=now - timedelta(days=2),
@@ -786,8 +798,8 @@ def seed_backoffice_data(db, state: SeedState) -> None:
             ChatLog(
                 user_id=4,
                 intent="season",
-                question="제철 과일 뭐가 있나요?",
-                answer="봄철 딸기와 감귤류를 추천합니다.",
+                question="지금 제철인 과일이 뭐가 있나요?",
+                answer="봄철(3-5월)에는 딸기가 가장 인기 있으며, 4월부터는 참외도 출하됩니다. 감귤류(한라봉, 천혜향)도 아직 맛있게 드실 수 있습니다.",
                 escalated=False,
                 rating=5,
                 created_at=now - timedelta(days=1),

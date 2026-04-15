@@ -1,4 +1,5 @@
 """공통 픽스처."""
+import copy
 from unittest.mock import MagicMock
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -78,7 +79,7 @@ class FakeRAGService:
         distance_threshold: float = 0.5,
         where: dict | None = None,
     ) -> list[str]:
-        return self._results.get(collection, [])
+        return self._results.get(collection, [])[:top_k]
 
     def retrieve_multiple(
         self,
@@ -90,7 +91,7 @@ class FakeRAGService:
         docs = []
         seen = set()
         for col in collections:
-            for doc in self._results.get(col, []):
+            for doc in self._results.get(col, [])[:top_k_per]:
                 if doc not in seen:
                     seen.add(doc)
                     docs.append(doc)
@@ -232,7 +233,7 @@ def make_product(
 
 @pytest.fixture
 def tools():
-    return TOOL_DEFINITIONS
+    return copy.deepcopy(TOOL_DEFINITIONS)
 
 
 @pytest.fixture

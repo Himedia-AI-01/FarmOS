@@ -3,11 +3,13 @@
 OpenAI 호환 `/v1/chat/completions` 엔드포인트를 사용하는 모든 provider를 지원합니다.
 
 사용 예:
-    # OpenRouter
+    from app.core.config import settings
+
+    # OpenRouter (기본 설정)
     client = OpenAIAgentClient(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.getenv("PRIMARY_LLM_API_KEY"),
-        model="google/gemma-3-27b-it",
+        base_url=settings.primary_llm_base_url,
+        api_key=settings.primary_llm_api_key,
+        model=settings.primary_llm_model,
     )
 
     # Ollama (OpenAI 호환 엔드포인트)
@@ -20,7 +22,7 @@ OpenAI 호환 `/v1/chat/completions` 엔드포인트를 사용하는 모든 prov
     # OpenAI
     client = OpenAIAgentClient(
         base_url="https://api.openai.com/v1",
-        api_key=os.getenv("OPENAI_API_KEY"),
+        api_key=settings.primary_llm_api_key,
         model="gpt-4o",
     )
 """

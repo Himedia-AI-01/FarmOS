@@ -1,6 +1,6 @@
 """ChromaDB 시딩 후 적재 검증까지 한 번에 수행하는 스크립트.
 
-실행: uv run python ai/seed_and_verify.py
+실행: uv run python scripts/seed_and_verify.py
 """
 import gc
 import sys

@@ -99,8 +99,13 @@ def _to_sync_db_url(raw_db_url: str) -> str:
     return url
 
 
-def print_summary(db_conf: dict[str, str]) -> None:
-    print_table_summary(db_conf, "ShoppingMall", SHOP_TABLES)
+def print_summary(db_conf: dict[str, str], verbose_table_info: bool) -> None:
+    print_table_summary(
+        db_conf,
+        "ShoppingMall",
+        SHOP_TABLES,
+        verbose_table_info=verbose_table_info,
+    )
 
 
 def is_shoppingmall_ready(db_conf: dict[str, str]) -> bool:
@@ -150,6 +155,11 @@ def main() -> int:
         default="init",
         help="init=항상 재초기화, ensure=필요할 때만 초기화",
     )
+    parser.add_argument(
+        "--verbose-table-info",
+        action="store_true",
+        help="테이블 컬럼/row 수 상세 정보를 출력",
+    )
     args = parser.parse_args()
 
     try:
@@ -171,7 +181,7 @@ def main() -> int:
         else:
             initialize(db_conf, raw_db_url, args.skip_sync)
         if initialized:
-            print_summary(db_conf)
+            print_summary(db_conf, args.verbose_table_info)
             print()
             info("ShoppingMall 데이터베이스 초기화 완료")
         else:

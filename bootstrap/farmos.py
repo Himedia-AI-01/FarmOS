@@ -83,8 +83,6 @@ def run_pesticide_loader(raw_db_url: str) -> None:
     loader_script = ROOT / "bootstrap" / "pesticide.py"
     json_dir = ROOT / "tools" / "api-crawler" / "json_raw"
     command = [
-        "--db-type",
-        "postgresql",
         "--db-url",
         raw_db_url,
         "--input-dir",
@@ -118,8 +116,13 @@ def is_farmos_ready(db_conf: dict[str, str]) -> bool:
     return True
 
 
-def print_summary(db_conf: dict[str, str]) -> None:
-    print_table_summary(db_conf, "FarmOS", FARMOS_TABLES)
+def print_summary(db_conf: dict[str, str], verbose_table_info: bool) -> None:
+    print_table_summary(
+        db_conf,
+        "FarmOS",
+        FARMOS_TABLES,
+        verbose_table_info=verbose_table_info,
+    )
 
 
 def initialize(db_conf: dict[str, str], raw_db_url: str, skip_sync: bool) -> None:
@@ -138,6 +141,11 @@ def main() -> int:
         choices=("init", "ensure"),
         default="init",
         help="init=항상 재초기화, ensure=필요할 때만 초기화",
+    )
+    parser.add_argument(
+        "--verbose-table-info",
+        action="store_true",
+        help="테이블 컬럼/row 수 상세 정보를 출력",
     )
     args = parser.parse_args()
 
@@ -161,7 +169,7 @@ def main() -> int:
         else:
             initialize(db_conf, raw_db_url, args.skip_sync)
         if initialized:
-            print_summary(db_conf)
+            print_summary(db_conf, args.verbose_table_info)
             print()
             info("FarmOS 데이터베이스 초기화 완료")
         else:

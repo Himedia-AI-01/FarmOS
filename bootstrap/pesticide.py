@@ -36,7 +36,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, rela
 SERVICE_ID = "I1910"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_DIR = PROJECT_ROOT / "tools" / "api-crawler" / "json_raw"
-DEFAULT_SQLITE_PATH = Path("sqlite3/rag.sqlite3")
 DEFAULT_BACKEND_ENV_PATH = PROJECT_ROOT / "backend" / ".env"
 DEFAULT_ENV_EXAMPLE_PATH = PROJECT_ROOT / "tools" / "api-crawler" / ".env.example"
 DEFAULT_ENV_VALUES = (
@@ -78,18 +77,6 @@ PARSER.add_argument(
     type=Path,
     default=DEFAULT_BACKEND_ENV_PATH,
     help="PostgreSQL 접속 정보 로딩에 사용할 backend/.env 경로",
-)
-PARSER.add_argument(
-    "--db-type",
-    choices=("sqlite", "postgresql"),
-    default="sqlite",
-    help="적재 대상 DB 종류",
-)
-PARSER.add_argument(
-    "--sqlite-path",
-    type=Path,
-    default=DEFAULT_SQLITE_PATH,
-    help="SQLite DB 파일 경로",
 )
 PARSER.add_argument("--postgres-host", default=None, help="PostgreSQL 호스트")
 PARSER.add_argument("--postgres-port", type=int, default=None, help="PostgreSQL 포트")
@@ -870,10 +857,6 @@ def upsert_rag_document(
     return existing
 
 
-def ensure_parent_dir(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-
 def load_backend_env(env_path: Path) -> None:
     if env_path.exists():
         load_dotenv(dotenv_path=env_path, override=False)
@@ -916,9 +899,6 @@ def build_engine(args: argparse.Namespace):
                 connect_args={"connect_timeout": int(POSTGRES_PING_TIMEOUT_SECONDS)},
             )
         return create_engine(db_url, future=True)
-    if args.db_type == "sqlite":
-        ensure_parent_dir(args.sqlite_path)
-        return create_engine(f"sqlite:///{args.sqlite_path.as_posix()}", future=True)
     env_db_url = normalize_db_url(os.getenv("DATABASE_URL"))
     if env_db_url:
         if env_db_url.startswith("postgresql+psycopg2://"):
@@ -961,9 +941,6 @@ def build_engine(args: argparse.Namespace):
 
 
 def wait_for_postgres_server(engine: Any, max_retries: int) -> None:
-    if engine.url.get_backend_name() != "postgresql":
-        return
-
     host = engine.url.host or DEFAULT_POSTGRES_HOST
     port = int(engine.url.port or DEFAULT_POSTGRES_PORT)
     log(f"PostgreSQL 서버 연결 확인 시작: {host}:{port}")
@@ -1181,17 +1158,15 @@ def main() -> int:
         raise RuntimeError("--postgres-max-retries 는 1 이상이어야 합니다.")
     input_dir: Path = args.input_dir
     if not input_dir.exists() or not input_dir.is_dir():
-        raise RuntimeError(f"입력 디렉터리가 없습니다: {input_dir}")
+        error(f"json_raw 디렉터리가 없어 적재를 건너뜁니다: {input_dir}")
+        return 0
 
     source_files = collect_source_files(input_dir, args.glob)
     if not source_files:
-        raise RuntimeError(
-            f"{input_dir} 아래에서 {args.glob!r} 패턴에 맞는 파일을 찾지 못했습니다."
-        )
+        error(f"json_raw 파일이 없어 적재를 건너뜁니다: {input_dir}")
+        return 0
 
-    log(
-        f"전처리 시작: input_dir={input_dir.as_posix()}, files={len(source_files)}, db_type={args.db_type}"
-    )
+    log(f"전처리 시작: input_dir={input_dir.as_posix()}, files={len(source_files)}")
     engine = build_engine(args)
     wait_for_postgres_server(engine, max_retries=args.postgres_max_retries)
     if not args.append:
@@ -1208,9 +1183,7 @@ def main() -> int:
         log("DB commit을 수행합니다.")
         session.commit()
 
-    if args.db_type == "sqlite" and not args.db_url:
-        destination = args.sqlite_path
-    elif args.db_type == "postgresql" and not args.db_url:
+    if not args.db_url:
         destination = normalize_db_url(os.getenv("DATABASE_URL")) or (
             f"{first_non_empty(args.postgres_host, os.getenv('POSTGRES_HOST'), DEFAULT_POSTGRES_HOST)}:"
             f"{int(first_non_empty(args.postgres_port, os.getenv('POSTGRES_PORT'), DEFAULT_POSTGRES_PORT))}/"

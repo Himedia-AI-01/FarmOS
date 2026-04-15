@@ -254,9 +254,19 @@ def describe_table_columns(
     return columns
 
 
-def print_table_summary(db_conf: dict[str, str], label: str, tables: list[str]) -> None:
+def print_table_summary(
+    db_conf: dict[str, str],
+    label: str,
+    tables: list[str],
+    verbose_table_info: bool = False,
+) -> None:
     print()
     info(f"{label} 테이블 요약")
+    if not verbose_table_info:
+        for table in tables:
+            print(f"  - {table}")
+        return
+
     for table in tables:
         if not table_exists(db_conf, table):
             print(f"  - {table}: MISSING")

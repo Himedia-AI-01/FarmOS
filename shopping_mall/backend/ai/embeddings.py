@@ -5,7 +5,7 @@ EMBED_PROVIDER 설정에 따라 ChromaDB 임베딩 함수를 반환합니다.
 지원 provider:
   openrouter          — OpenRouter Embeddings API (PRIMARY_LLM_API_KEY 재사용, 추가 설정 불필요)
   ollama              — 로컬 Ollama 서버 (OLLAMA_BASE_URL + OLLAMA_EMBED_MODEL 사용)
-  sentence_transformers — HuggingFace 모델 로컬 실행 (API 키·서버 불필요, pip install만 필요)
+  sentence_transformers — HuggingFace 모델 로컬 실행 (API 키·서버 불필요, uv add sentence-transformers만 필요)
   openai              — OpenAI Embeddings API 또는 호환 엔드포인트 (EMBED_API_KEY 필요)
 
 ⚠️  시딩(seed_rag.py)과 쿼리(rag.py)는 반드시 동일한 provider + model을 사용해야 합니다.
@@ -31,6 +31,8 @@ def get_embedding_function():
         model = settings.embed_model or "openai/text-embedding-3-small"
         # PRIMARY_LLM_API_KEY를 기본으로 재사용 — 별도 키 불필요
         api_key = settings.embed_api_key or settings.primary_llm_api_key
+        if not api_key:
+            raise ValueError("openrouter requires a non-empty API key (EMBED_API_KEY 또는 PRIMARY_LLM_API_KEY)")
         return OpenAIEmbeddingFunction(
             api_key=api_key,
             model_name=model,
@@ -51,6 +53,8 @@ def get_embedding_function():
 
     elif provider == "openai":
         from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+        if not settings.embed_api_key:
+            raise ValueError("openai requires a non-empty API key (EMBED_API_KEY)")
         model = settings.embed_model or "text-embedding-3-small"
         kwargs: dict = {
             "api_key": settings.embed_api_key,

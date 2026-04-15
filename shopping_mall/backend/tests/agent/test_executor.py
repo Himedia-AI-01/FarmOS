@@ -3,7 +3,8 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
-from ai.agent import AgentUnavailableError, AgentExecutor
+from ai.agent import AgentUnavailableError, AgentExecutor, ToolMetricData
+from ai.agent.executor import _is_empty_result
 from tests.conftest import (
     FakeAgentClient,
     FakeRAGService,
@@ -847,3 +848,105 @@ class TestHumanInTheLoop:
 
         assert session.pending_action is None
         assert "취소" in raw
+
+
+# ══════════════════════════════════════════════════════════════════
+# 도구 메트릭 수집
+# ══════════════════════════════════════════════════════════════════
+
+class TestToolMetrics:
+
+    async def test_single_tool_collects_metric(self, empty_db):
+        """단일 도구 호출 시 metrics에 1건 수집."""
+        client = FakeAgentClient([
+            make_tool_response(("search_products", {"query": "딸기"})),
+            make_text_response("딸기 재고 150개입니다."),
+        ])
+        executor = make_executor(client)
+
+        result = await executor.run(empty_db, "딸기 있어?", None, [], SYSTEM)
+
+        assert len(result.metrics) == 1
+        m = result.metrics[0]
+        assert m.tool_name == "search_products"
+        assert m.intent == "stock"
+        assert m.success is True
+        assert m.latency_ms >= 0
+        assert m.iteration == 1
+
+    async def test_parallel_tools_collect_metrics(self, empty_db):
+        """한 턴에 2개 도구 병렬 호출 시 metrics 2건 수집."""
+        client = FakeAgentClient([
+            make_tool_response(
+                ("search_products", {"query": "사과"}),
+                ("search_faq", {"query": "배송 기간"}),
+            ),
+            make_text_response("사과 재고 확인 및 배송 안내 드립니다."),
+        ])
+        executor = make_executor(client)
+
+        result = await executor.run(empty_db, "사과 있어요? 배송은?", None, [], SYSTEM)
+
+        assert len(result.metrics) == 2
+        names = {m.tool_name for m in result.metrics}
+        assert names == {"search_products", "search_faq"}
+        for m in result.metrics:
+            assert m.latency_ms >= 0
+            assert m.iteration == 1
+
+    async def test_error_tool_metric_success_false(self, empty_db):
+        """도구 실행 오류 시 success=False 메트릭."""
+        client = FakeAgentClient([
+            make_tool_response(("search_products", {"query": "딸기"})),
+            make_text_response("오류가 있었지만 안내 드립니다."),
+        ])
+        # DB를 예외 던지도록 설정
+        bad_db = make_mock_db()
+        bad_db.query.side_effect = RuntimeError("DB 연결 실패")
+
+        executor = make_executor(client)
+
+        result = await executor.run(bad_db, "딸기 있어?", None, [], SYSTEM)
+
+        assert len(result.metrics) == 1
+        assert result.metrics[0].success is False
+
+    async def test_empty_result_detected(self, empty_db):
+        """빈 결과(검색 결과 없음)가 empty_result=True로 수집."""
+        client = FakeAgentClient([
+            make_tool_response(("search_products", {"query": "존재하지않는XYZ"})),
+            make_text_response("해당 상품을 찾지 못했습니다."),
+        ])
+        # 빈 상품 결과
+        db = make_mock_db(products=[])
+
+        executor = make_executor(client)
+
+        result = await executor.run(db, "XYZ 있어?", None, [], SYSTEM)
+
+        assert len(result.metrics) == 1
+        assert result.metrics[0].empty_result is True
+
+    async def test_multi_iteration_metrics(self, empty_db):
+        """2개 반복에 걸친 도구 호출의 iteration 번호 검증."""
+        client = FakeAgentClient([
+            make_tool_response(("search_products", {"query": "딸기"})),
+            make_tool_response(("search_storage_guide", {"product_name": "딸기", "query": "보관법"})),
+            make_text_response("딸기 재고와 보관법 안내입니다."),
+        ])
+        rag = FakeRAGService({"storage_guide": ["냉장 보관하세요."]})
+        executor = make_executor(client, rag=rag)
+
+        result = await executor.run(empty_db, "딸기 재고랑 보관법", None, [], SYSTEM)
+
+        assert len(result.metrics) == 2
+        assert result.metrics[0].iteration == 1
+        assert result.metrics[1].iteration == 2
+
+    def test_is_empty_result_helper(self):
+        """_is_empty_result 헬퍼 함수 검증."""
+        assert _is_empty_result("FAQ에서 관련 내용을 찾을 수 없습니다.") is True
+        assert _is_empty_result("'딸기' 검색 결과가 없습니다.") is True
+        assert _is_empty_result("조회된 주문이 없습니다.") is True
+        assert _is_empty_result("딸기는 150개 재고가 있습니다.") is False
+        assert _is_empty_result("주문번호: #100") is False

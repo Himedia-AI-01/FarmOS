@@ -1,7 +1,9 @@
 """에이전트 실행기 — tool_use 루프 + 12개 도구 구현."""
+import asyncio
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -73,12 +75,40 @@ class TraceStep:
 
 
 @dataclass
+class ToolMetricData:
+    """도구 호출 1건의 성능/품질 메트릭."""
+    tool_name: str
+    intent: str
+    success: bool
+    latency_ms: int
+    empty_result: bool
+    iteration: int
+
+
+# ── 빈 결과 판별 ──────────────────────────────────────────────────────────────
+
+_EMPTY_RESULT_MARKERS = (
+    "찾을 수 없",
+    "없습니다",
+    "결과가 없",
+    "조회된 주문이 없",
+    "정보를 찾을 수 없",
+)
+
+
+def _is_empty_result(result: str) -> bool:
+    """도구 결과가 사실상 '빈 결과'인지 판별."""
+    return any(marker in result for marker in _EMPTY_RESULT_MARKERS)
+
+
+@dataclass
 class AgentResult:
     answer: str
     intent: str
     escalated: bool
     tools_used: list[str] = field(default_factory=list)
     trace: list[TraceStep] = field(default_factory=list)
+    metrics: list[ToolMetricData] = field(default_factory=list)
 
 
 # ── 응답 후처리 ────────────────────────────────────────────────────────────────
@@ -189,6 +219,7 @@ class AgentExecutor:
         messages = list(history) + [{"role": "user", "content": user_message}]
         tools_used: list[str] = []
         trace: list[TraceStep] = []
+        metrics: list[ToolMetricData] = []
         escalated = False
 
         for iteration in range(self.max_iterations):
@@ -206,15 +237,35 @@ class AgentExecutor:
                     escalated=escalated,
                     tools_used=tools_used,
                     trace=trace,
+                    metrics=metrics,
                 )
 
-            # 도구 실행
-            results: list[tuple[ToolCall, str]] = []
+            # 실행 전 메타데이터 수집 (순서 보장)
             for tc in response.tool_calls:
                 tools_used.append(tc.name)
                 if tc.name == "escalate_to_agent":
                     escalated = True
+
+            # 도구 실행 (단일: 직접, 다중: asyncio.gather)
+            if len(response.tool_calls) == 1:
+                tc = response.tool_calls[0]
+                t0 = time.monotonic()
                 result = await self._dispatch_tool(tc, db, user_id, session_id)
+                latency_ms = int((time.monotonic() - t0) * 1000)
+                timed_results = [(tc, result, latency_ms)]
+            else:
+                timed_results = await asyncio.gather(*(
+                    self._timed_dispatch(tc, db, user_id, session_id)
+                    for tc in response.tool_calls
+                ))
+
+            # trace + metrics 기록 (원래 순서)
+            results: list[tuple[ToolCall, str]] = []
+            for tc, result, latency_ms in timed_results:
+                success = not result.startswith("[오류]") and "오류가 발생했습니다" not in result
+                empty = _is_empty_result(result)
+                intent_for_metric = TOOL_TO_INTENT.get(tc.name, "other")
+
                 results.append((tc, result))
                 trace.append(TraceStep(
                     tool=tc.name,
@@ -222,7 +273,18 @@ class AgentExecutor:
                     result=result[:500],
                     iteration=iteration + 1,
                 ))
-                logger.info(f"[trace] iter={iteration+1} tool={tc.name} args={tc.arguments} → {result[:120]}")
+                metrics.append(ToolMetricData(
+                    tool_name=tc.name,
+                    intent=intent_for_metric,
+                    success=success,
+                    latency_ms=latency_ms,
+                    empty_result=empty,
+                    iteration=iteration + 1,
+                ))
+                logger.info(
+                    f"[trace] iter={iteration+1} tool={tc.name} "
+                    f"args={tc.arguments} latency={latency_ms}ms → {result[:120]}"
+                )
 
             client.add_tool_results(messages, response, results)
 
@@ -235,9 +297,19 @@ class AgentExecutor:
             escalated=True,
             tools_used=tools_used,
             trace=trace,
+            metrics=metrics,
         )
 
     # ── 도구 디스패치 ─────────────────────────────────────────────────────
+
+    async def _timed_dispatch(
+        self, tc: ToolCall, db: Session, user_id: int | None, session_id: int | None = None
+    ) -> tuple[ToolCall, str, int]:
+        """도구 실행 + 소요 시간 측정. asyncio.gather용 래퍼."""
+        t0 = time.monotonic()
+        result = await self._dispatch_tool(tc, db, user_id, session_id)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        return (tc, result, latency_ms)
 
     async def _dispatch_tool(
         self, tc: ToolCall, db: Session, user_id: int | None, session_id: int | None = None

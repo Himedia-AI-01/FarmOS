@@ -46,12 +46,46 @@ def parse_pdf(path: str) -> str:
     return "\n\n".join(pages)
 
 
+WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
 def parse_docx(path: str) -> str:
-    """DOCX 파일에서 전체 텍스트 추출 (단락 단위)."""
+    """DOCX 파일에서 전체 텍스트 추출 (단락 + 표 포함, 문서 순서 유지)."""
     from docx import Document
+
     doc = Document(path)
-    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    return "\n\n".join(paragraphs)
+    parts: list[str] = []
+
+    for child in doc.element.body:
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+
+        if tag == "p":
+            # 단락: w:t 요소의 텍스트를 이어붙임
+            texts = [
+                node.text
+                for node in child.iter(f"{WORD_NS}t")
+                if node.text
+            ]
+            line = "".join(texts).strip()
+            if line:
+                parts.append(line)
+
+        elif tag == "tbl":
+            # 표: 행(tr) → 셀(tc)을 " | " 구분으로 변환
+            for tr in child.iter(f"{WORD_NS}tr"):
+                cells: list[str] = []
+                for tc in tr.findall(f"{WORD_NS}tc"):
+                    cell_texts = [
+                        node.text
+                        for node in tc.iter(f"{WORD_NS}t")
+                        if node.text
+                    ]
+                    cells.append("".join(cell_texts).strip())
+                row_text = " | ".join(cells).strip()
+                if row_text:
+                    parts.append(row_text)
+
+    return "\n\n".join(parts)
 
 
 def parse_document(path: str) -> str:
@@ -67,8 +101,22 @@ def parse_document(path: str) -> str:
 
 # ── 청킹 ──────────────────────────────────────────────────────────────────
 
+# ── 컬렉션 → 정책 문서 제목 매핑 ──
+COLLECTION_TO_DOC_TITLE: dict[str, str] = {
+    "payment_policy": "주문및결제정책",
+    "delivery_policy": "배송정책",
+    "return_policy": "반품교환환불정책",
+    "quality_policy": "상품품질신선도보증정책",
+    "service_policy": "고객서비스운영정책",
+    "membership_policy": "개인정보처리및회원정책",
+}
+
 # 섹션 헤딩 패턴: "1.", "1.1", "2.3.4" 로 시작하는 줄
 _HEADING_RE = re.compile(r"^(\d+(?:\.\d+)*)\s+(.+)$", re.MULTILINE)
+
+# 제X장 / 제X조 패턴
+_CHAPTER_RE = re.compile(r"^제(\d+)장\s+(.+)$", re.MULTILINE)
+_ARTICLE_RE = re.compile(r"^제(\d+)조\((.+?)\)", re.MULTILINE)
 
 def chunk_by_sections(text: str, source: str) -> list[dict]:
     """섹션 헤딩 기준으로 텍스트를 청크로 분할.
@@ -112,6 +160,84 @@ def chunk_by_sections(text: str, source: str) -> list[dict]:
     return chunks
 
 
+def chunk_by_articles(
+    text: str, source: str, doc_title: str
+) -> list[dict]:
+    """제X장 > 제X조 체계로 텍스트를 청크로 분할.
+
+    각 청크 앞에 출처 프리픽스를 붙여 LLM이 조·항을 인용할 수 있게 한다.
+
+    Returns:
+        [{"id": str, "text": str, "metadata": dict}, ...]
+    """
+    chapters = list(_CHAPTER_RE.finditer(text))
+    articles = list(_ARTICLE_RE.finditer(text))
+
+    if not articles:
+        return []
+
+    # 장·조 모든 분할점을 위치순으로 정렬
+    splits: list[dict] = []
+    for m in chapters:
+        splits.append({
+            "type": "chapter",
+            "pos": m.start(),
+            "num": m.group(1),
+            "title": m.group(2).strip(),
+        })
+    for m in articles:
+        splits.append({
+            "type": "article",
+            "pos": m.start(),
+            "num": m.group(1),
+            "title": m.group(2).strip(),
+        })
+    splits.sort(key=lambda s: s["pos"])
+
+    # 각 조가 속하는 장 계산 + 콘텐츠 범위 추출
+    current_chapter = ""
+    chunks: list[dict] = []
+
+    for i, sp in enumerate(splits):
+        if sp["type"] == "chapter":
+            current_chapter = f"제{sp['num']}장 {sp['title']}"
+            continue
+
+        # article인 경우
+        start = sp["pos"]
+        # 다음 분할점(장 또는 조) 시작까지
+        end = splits[i + 1]["pos"] if i + 1 < len(splits) else len(text)
+        content = text[start:end].strip()
+        if not content:
+            continue
+
+        # 출처 프리픽스
+        article_label = f"제{sp['num']}조({sp['title']})"
+        if current_chapter:
+            prefix = f"[{doc_title} > {current_chapter} > {article_label}]"
+        else:
+            prefix = f"[{doc_title} > {article_label}]"
+
+        chunk_text = f"{prefix}\n{content}"
+        chunk_id = f"{source}_art{sp['num']}"
+
+        metadata: dict = {
+            "source": source,
+            "doc_title": doc_title,
+            "article": article_label,
+        }
+        if current_chapter:
+            metadata["chapter"] = current_chapter
+
+        chunks.append({
+            "id": chunk_id,
+            "text": chunk_text,
+            "metadata": metadata,
+        })
+
+    return chunks
+
+
 # ── ChromaDB 적재 ──────────────────────────────────────────────────────────
 
 def seed_policy_collection(client, ef, filepath: str, collection_name: str) -> int:
@@ -131,7 +257,15 @@ def seed_policy_collection(client, ef, filepath: str, collection_name: str) -> i
 
     # 파일명에서 소스 식별자 추출 (공백/괄호 제거)
     source = re.sub(r"[\s\(\)]+", "_", os.path.splitext(filename)[0]).strip("_")
-    chunks = chunk_by_sections(text, source)
+
+    # 제X조 패턴이 있으면 조 단위 청킹, 없으면 기존 섹션 청킹 폴백
+    doc_title = COLLECTION_TO_DOC_TITLE.get(collection_name, collection_name)
+    if _ARTICLE_RE.search(text):
+        chunks = chunk_by_articles(text, source, doc_title)
+        if not chunks:
+            chunks = chunk_by_sections(text, source)
+    else:
+        chunks = chunk_by_sections(text, source)
 
     if not chunks:
         print(f"  [경고] 청크 없음: {filename}")

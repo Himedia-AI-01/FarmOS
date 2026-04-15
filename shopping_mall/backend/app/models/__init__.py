@@ -15,6 +15,7 @@ from .customer_segment import CustomerSegment
 from .chat_session import ChatSession
 from .chat_log import ChatLog
 from .exchange_request import ExchangeRequest
+from .tool_metric import ToolMetric
 
 __all__ = [
     "Category",
@@ -35,4 +36,5 @@ __all__ = [
     "ChatSession",
     "ChatLog",
     "ExchangeRequest",
+    "ToolMetric",
 ]

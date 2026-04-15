@@ -11,7 +11,10 @@ from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.models.chat_log import ChatLog
 from app.models.chat_session import ChatSession
-from app.schemas.chatlog import ChatQuestion, ChatAnswer, ChatLogResponse, ChatRating
+from app.schemas.chatlog import (
+    ChatQuestion, ChatAnswer, ChatLogResponse, ChatRating,
+    ToolAnalyticsItem, ToolAnalyticsResponse,
+)
 from app.schemas.chat_session import ChatSessionCreate, ChatSessionResponse, ChatSessionMessages
 from app.services.agent_chatbot import AgentChatbotService
 from app.farmos_auth import get_farmos_user_optional, FarmOSUser
@@ -477,3 +480,53 @@ def get_session_messages(
         )
 
     return messages
+
+
+# ===== Analytics Endpoints =====
+
+_PERIOD_DAYS = {"1d": 1, "7d": 7, "30d": 30}
+
+
+@router.get("/analytics/tools", response_model=ToolAnalyticsResponse)
+def get_tool_analytics(
+    period: str = Query("7d", description="집계 기간: 1d / 7d / 30d"),
+    tool_name: Optional[str] = Query(None, description="특정 도구 필터"),
+    authenticated_user_id: int = Depends(_get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """도구 호출 성능/품질 분석 집계."""
+    from datetime import timedelta
+    from app.models.tool_metric import ToolMetric
+
+    days = _PERIOD_DAYS.get(period)
+    if not days:
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 기간: {period}. 사용 가능: 1d, 7d, 30d")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    query = db.query(
+        ToolMetric.tool_name,
+        func.count().label("call_count"),
+        func.avg(func.cast(ToolMetric.success, Integer)).label("success_rate"),
+        func.avg(ToolMetric.latency_ms).label("avg_latency_ms"),
+        func.avg(func.cast(ToolMetric.empty_result, Integer)).label("empty_result_rate"),
+    ).filter(ToolMetric.created_at >= cutoff)
+
+    if tool_name:
+        query = query.filter(ToolMetric.tool_name == tool_name)
+
+    rows = query.group_by(ToolMetric.tool_name).all()
+
+    tools = []
+    total = 0
+    for row in rows:
+        total += row.call_count
+        tools.append(ToolAnalyticsItem(
+            tool_name=row.tool_name,
+            call_count=row.call_count,
+            success_rate=round(float(row.success_rate or 0), 3),
+            avg_latency_ms=round(float(row.avg_latency_ms or 0), 1),
+            empty_result_rate=round(float(row.empty_result_rate or 0), 3),
+        ))
+
+    return ToolAnalyticsResponse(period=period, tools=tools, total_calls=total)

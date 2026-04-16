@@ -36,7 +36,7 @@ FARMOS_TABLES = [
     "review_analyses",
     "review_sentiments",
 ]
-LOG_PREFIX = "FOS"
+LOG_PREFIX = "FarmOS"
 EXPECTED_ROW_COUNTS = {
     "users": 2,
 }
@@ -56,15 +56,46 @@ def uv_sync_backend(skip_sync: bool) -> None:
     if skip_sync:
         info("uv sync 생략 (--skip-sync)")
         return
-    info("FarmOS backend 의존성 동기화(uv sync)")
+    info("FarmOS backend 의존성 동기화(uv sync) - 시간이 많이 걸릴 수 있습니다")
     run_command(["uv", "sync"], cwd=BACKEND_DIR)
 
 
+def _quote_identifier(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def all_farmos_tables_exist(db_conf: dict[str, str]) -> bool:
+    return all(table_exists(db_conf, table) for table in FARMOS_TABLES)
+
+
 def drop_farmos_tables(db_conf: dict[str, str]) -> None:
-    info("FarmOS 테이블 삭제(drop)")
-    # legacy: 기존 mock 농약 캐시 테이블도 함께 제거
+    info("FarmOS 스키마 재구성: 기존 테이블 삭제(drop)")
+    # legacy mock 테이블 포함
     targets = [*FARMOS_TABLES, "pesticide_products"]
-    psql_query(db_conf, "DROP TABLE IF EXISTS " + ", ".join(targets) + " CASCADE;")
+    quoted_targets = ", ".join(_quote_identifier(table) for table in targets)
+    drop_sql = f"DROP TABLE IF EXISTS {quoted_targets} CASCADE;"
+    psql_query(db_conf, drop_sql)
+
+
+def truncate_farmos_tables(db_conf: dict[str, str]) -> None:
+    # legacy mock 테이블 포함, 실제 존재하는 테이블만 truncate한다.
+    candidate_tables = [*FARMOS_TABLES, "pesticide_products"]
+    existing_tables = [
+        table for table in candidate_tables if table_exists(db_conf, table)
+    ]
+    if not existing_tables:
+        info("truncate 대상 FarmOS 테이블이 없습니다.")
+        return
+
+    info("FarmOS 데이터 비우기(truncate)")
+    targets = ", ".join(_quote_identifier(table) for table in existing_tables)
+    truncate_sql = (
+        "BEGIN; "
+        "SET LOCAL lock_timeout = '5s'; "
+        f"TRUNCATE TABLE {targets} RESTART IDENTITY CASCADE; "
+        "COMMIT;"
+    )
+    psql_query(db_conf, truncate_sql)
 
 
 def run_farmos_seed(async_db_url: str) -> None:
@@ -78,7 +109,7 @@ def run_farmos_seed(async_db_url: str) -> None:
     )
 
 
-def run_pesticide_loader(raw_db_url: str) -> None:
+def run_pesticide_loader(raw_db_url: str, append_mode: bool = True) -> None:
     info("농약 RAG 테이블 적재 스크립트 실행")
     loader_script = ROOT / "bootstrap" / "pesticide.py"
     json_dir = ROOT / "tools" / "api-crawler" / "json_raw"
@@ -88,6 +119,8 @@ def run_pesticide_loader(raw_db_url: str) -> None:
         "--input-dir",
         str(json_dir),
     ]
+    if append_mode:
+        command.append("--append")
     venv_python = (
         BACKEND_DIR / ".venv" / "Scripts" / "python.exe"
         if os.name == "nt"
@@ -111,7 +144,7 @@ def is_farmos_ready(db_conf: dict[str, str]) -> bool:
             return False
     for table, expected in EXPECTED_ROW_COUNTS.items():
         actual = int(psql_query(db_conf, f"SELECT COUNT(*) FROM {table};") or "0")
-        if actual != expected:
+        if actual < expected:
             return False
     return True
 
@@ -125,11 +158,24 @@ def print_summary(db_conf: dict[str, str], verbose_table_info: bool) -> None:
     )
 
 
-def initialize(db_conf: dict[str, str], raw_db_url: str, skip_sync: bool) -> None:
+def initialize(
+    db_conf: dict[str, str],
+    raw_db_url: str,
+    skip_sync: bool,
+    force_rebuild_schema: bool = False,
+) -> None:
     uv_sync_backend(skip_sync)
-    drop_farmos_tables(db_conf)
+    rebuild_schema = force_rebuild_schema or (not all_farmos_tables_exist(db_conf))
+    if rebuild_schema:
+        if force_rebuild_schema:
+            info("사용자 요청으로 FarmOS 스키마 재구성 모드 실행 (--rebuild-schema)")
+        else:
+            info("FarmOS 필수 테이블 일부 누락 감지 (스키마 재구성 모드)")
+        drop_farmos_tables(db_conf)
+    else:
+        truncate_farmos_tables(db_conf)
     run_farmos_seed(_to_asyncpg_url(raw_db_url))
-    run_pesticide_loader(raw_db_url)
+    run_pesticide_loader(raw_db_url, append_mode=not rebuild_schema)
 
 
 def main() -> int:
@@ -141,6 +187,11 @@ def main() -> int:
         choices=("init", "ensure"),
         default="init",
         help="init=항상 재초기화, ensure=필요할 때만 초기화",
+    )
+    parser.add_argument(
+        "--rebuild-schema",
+        action="store_true",
+        help="초기화 시 스키마를 강제 재생성(drop/create)합니다.",
     )
     parser.add_argument(
         "--verbose-table-info",
@@ -160,14 +211,28 @@ def main() -> int:
 
         initialized = args.mode == "init"
         if args.mode == "ensure":
-            if is_farmos_ready(db_conf):
+            if args.rebuild_schema:
+                info("사용자 요청으로 강제 초기화 수행 (--rebuild-schema)")
+                initialize(
+                    db_conf,
+                    raw_db_url,
+                    args.skip_sync,
+                    force_rebuild_schema=True,
+                )
+                initialized = True
+            elif is_farmos_ready(db_conf):
                 info("FarmOS DB 상태 정상 (초기화 생략)")
             else:
                 info("FarmOS DB 상태 불완전 (초기화 수행)")
                 initialize(db_conf, raw_db_url, args.skip_sync)
                 initialized = True
         else:
-            initialize(db_conf, raw_db_url, args.skip_sync)
+            initialize(
+                db_conf,
+                raw_db_url,
+                args.skip_sync,
+                force_rebuild_schema=args.rebuild_schema,
+            )
         if initialized:
             print_summary(db_conf, args.verbose_table_info)
             print()

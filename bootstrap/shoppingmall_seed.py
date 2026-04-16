@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from dataclasses import dataclass
@@ -75,7 +76,7 @@ EXPECTED_ROW_COUNTS = {
     "shop_customer_segments": 5,
     "shop_chat_logs": 5,
 }
-LOG_PREFIX = "SHOP-SEED"
+LOG_PREFIX = "S.Mall-S"
 
 
 # shop_categories 구성 정보
@@ -840,10 +841,22 @@ def print_summary(db) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="ShoppingMall 시드 스크립트")
+    parser.add_argument(
+        "--rebuild-schema",
+        action="store_true",
+        help="shop_* 스키마를 drop/create로 재생성한 뒤 시드합니다.",
+    )
+    args = parser.parse_args()
+
     set_log_prefix(LOG_PREFIX)
-    info("ShoppingMall 스키마 초기화 시작")
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    if args.rebuild_schema:
+        info("ShoppingMall 스키마 재생성(drop/create) 시작")
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+    else:
+        info("ShoppingMall 스키마 유지(create_all) 모드 시작")
+        Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
     try:

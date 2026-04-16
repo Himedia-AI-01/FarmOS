@@ -67,7 +67,7 @@ SUMMARY_TABLES = [
     "review_sentiments",
 ]
 
-LOG_PREFIX = "FOS-SEED"
+LOG_PREFIX = "FarmOS-S"
 
 
 async def seed_users() -> None:

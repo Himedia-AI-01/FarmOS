@@ -28,7 +28,7 @@ if str(SHOP_BACKEND_DIR) not in sys.path:
 
 from app.database import SessionLocal
 
-LOG_PREFIX = "SHOP-RSEED"
+LOG_PREFIX = "S.Mall-RS"
 
 POSITIVE_TEMPLATES = [
     "정말 맛있어요! {product} 품질이 최고입니다.",

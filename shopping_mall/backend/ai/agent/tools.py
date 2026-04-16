@@ -112,8 +112,11 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "name": "get_order_status",
         "description": (
-            "사용자의 주문 및 배송 현황을 실시간으로 조회합니다. "
-            "배송 조회, 송장번호, 도착 예정일 관련 질문에 사용하세요. "
+            "현재 로그인한 사용자의 특정 주문 배송 현황을 실시간으로 조회합니다. "
+            "'내 주문 어디 있어요?', '송장번호 알려줘', '제 배송 언제 도착해요?'처럼 "
+            "자신의 주문을 직접 추적할 때만 사용하세요. "
+            "일반 배송 기간·정책 문의('배송 얼마나 걸려요?' 등)는 "
+            "search_faq 또는 search_policy(policy_type='delivery')를 사용하세요. "
             "반드시 로그인한 사용자(user_id 있음)에게만 사용하세요. "
             "도착 예정일은 주말·공휴일을 자동으로 제외한 실제 영업일 기준으로 계산됩니다."
         ),
@@ -174,6 +177,7 @@ TOOL_DEFINITIONS: list[dict] = [
                     "description": "상품명으로 검색 (product_id가 없을 때 사용)",
                 },
             },
+            "required": [],  # product_id / product_name 중 하나 이상 — description으로 유도
         },
     },
     {

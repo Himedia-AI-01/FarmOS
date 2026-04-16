@@ -8,7 +8,7 @@ from ai.agent import AgentExecutor, AgentResult
 from app.services.agent_chatbot import AgentChatbotService
 from tests.conftest import FakeAgentClient, FakeRAGService, make_mock_db, make_text_response
 
-SYSTEM = "당신은 파미입니다."
+SYSTEM = "당신은 FarmOS 마켓의 AI 고객 지원 에이전트입니다."
 
 
 def make_service(responses=None):
@@ -236,6 +236,37 @@ class TestHistoryConversion:
         # 오류 없이 실행되어야 함
         result = await service.answer(db=db, question="현재", history=history)
         assert result["answer"]
+
+    async def test_bot_role_mapped_to_assistant(self):
+        """프론트엔드가 'bot' role로 전송한 어시스턴트 메시지가 LLM에 'assistant'로 매핑됨.
+
+        이 매핑이 누락되면 히스토리 전체가 소실되어
+        LLM이 미답변 질문이 쌓인 것처럼 인식하는 버그가 재발한다.
+        ('bot' → 'assistant' _ROLE_MAP 삭제 시 이 테스트가 실패해야 함)
+        """
+        from tests.conftest import FakeAgentClient
+        from ai.agent import TOOL_DEFINITIONS
+
+        client = FakeAgentClient([make_text_response("네.")])
+        executor = AgentExecutor(
+            primary=client,
+            fallback=None,
+            rag_service=FakeRAGService(),
+            tools=TOOL_DEFINITIONS,
+        )
+        service = AgentChatbotService(executor=executor, system_prompt=SYSTEM)
+        db = make_mock_db()
+
+        history = [
+            {"role": "user", "content": "이전 질문"},
+            {"role": "bot", "content": "이전 답변"},  # 프론트엔드가 bot으로 전송
+        ]
+        await service.answer(db=db, question="현재 질문", history=history)
+
+        all_messages = client.calls[0]
+        roles = [m["role"] for m in all_messages]
+        assert "bot" not in roles, "'bot' role이 LLM messages에 그대로 노출됨"
+        assert "assistant" in roles, "어시스턴트 메시지가 'assistant'로 매핑되지 않음"
 
 
 # ══════════════════════════════════════════════════════════════════

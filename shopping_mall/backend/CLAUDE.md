@@ -19,8 +19,9 @@ PROJECT_ROOT    # FarmOS/
 LOG_DIR         # FarmOS/logs/
 CHROMA_DB_PATH  # .../backend/chroma_data/
 AI_DATA_DIR     # .../backend/ai/data/
-POLICY_DOCS_DIR # .../backend/ai/docs/  (gitignore — 로컬에 PDF/DOCX 직접 배치)
 ```
+
+정책 문서 폴더는 `paths.py`가 아닌 `settings.policy_docs_dir`로 접근합니다 (`.env`의 `POLICY_DOCS_DIR` 반영).
 
 ---
 
@@ -62,6 +63,33 @@ OpenAIAgentClient (PRIMARY_LLM_*)
 args.pop("user_id", None)
 await self._tool_get_order_status(db, user_id, **args)
 ```
+
+### 히스토리 역할 매핑
+
+프론트엔드가 어시스턴트 메시지를 `role: "bot"` 으로 전송합니다. `_build_history` 에서 반드시 매핑:
+
+```python
+# agent_chatbot.py
+_ROLE_MAP = {"user": "user", "assistant": "assistant", "bot": "assistant"}
+```
+
+누락 시 LLM이 어시스턴트 답변을 받지 못해 이전 질문을 누적해서 재답변합니다.
+
+### 시스템 프롬프트 필수 구성 (`ai/agent/prompts.py`)
+
+1. **도구 선택 규칙** — 로그인 필요 도구와 불필요 도구를 명시적으로 분리
+2. **정책 인용 원칙** — `[doc > 조]` 형식 출처 태그가 있으면 `(근거: ...)` 형식으로 반드시 인용
+3. **내부 용어 노출 금지** — 도구 이름(`search_policy`, `get_order_status` 등), 필드명(`order_item_id`, `user_id`)을 고객 응답에 포함하면 안 됨
+
+### RAG 임계값 (ko-sroberta-multitask 기준)
+
+| 도구 | 컬렉션 | `distance_threshold` |
+|------|--------|---------------------|
+| `search_policy` | 정책 6종 | **0.65** (실측 0.51~0.62) |
+| `search_faq` | `faq` | 0.45 |
+| `search_storage_guide` | `storage_guide` | 0.40~0.45 |
+
+임베딩 모델 변경 시 반드시 재측정 → `/rag-diagnostic` 스킬 참고.
 
 ### TraceStep
 
@@ -129,3 +157,5 @@ curl -X POST "http://localhost:4000/api/chatbot/ask?debug=true" \
 | `app/core/README.md` | Settings 필드 전체 목록 |
 | `app/services/README.md` | 서비스 레이어 구조 |
 | `/chatbot-agent` 스킬 | 챗봇 에이전트 전체 기획 문서 |
+| `/rag-diagnostic` 스킬 | RAG 검색 이상 시 진단 절차 (컬렉션 확인·거리 측정·재시딩) |
+| `/agent-pipeline-test` 스킬 | 서버 없이 에이전트 파이프라인 전체 검증 (도구 선택·인용·내부 용어) |

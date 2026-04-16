@@ -67,7 +67,7 @@ def make_hitl_exchange(exchange_id=42, user_id=10, status="pending_confirm"):
     ex.status = status
     return ex
 
-SYSTEM = "당신은 파미입니다."
+SYSTEM = "당신은 FarmOS 마켓의 AI 고객 지원 에이전트입니다."
 
 
 def make_executor(primary, fallback=None, rag=None, max_iterations=10):

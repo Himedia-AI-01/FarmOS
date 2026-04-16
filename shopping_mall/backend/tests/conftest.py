@@ -85,8 +85,8 @@ class FakeRAGService:
         self,
         question: str,
         collections: list[str],
-        top_k_per: int = 2,
-        distance_threshold: float = 0.5,
+        top_k_per: int = 3,  # executor._tool_search_policy top_k_per=3과 동기화
+        distance_threshold: float = 0.5,  # distance_threshold는 실제 ChromaDB가 적용 — 스텁에서는 무시
     ) -> list[str]:
         docs = []
         seen = set()

@@ -107,8 +107,15 @@ class AgentChatbotService:
             ])
             db.commit()
         except Exception as e:
-            logger.warning(f"도구 메트릭 저장 실패: {e}")
+            logger.warning("도구 메트릭 저장 실패: %s", e)
             db.rollback()
+
+    # 프론트엔드 role → LLM role 매핑 ("bot" → "assistant")
+    _ROLE_MAP: dict[str, str] = {
+        "user": "user",
+        "assistant": "assistant",
+        "bot": "assistant",  # 프론트엔드가 bot으로 전송
+    }
 
     def _build_history(self, history: list | None) -> list[dict]:
         """기존 history 형식 → LLM 메시지 형식 변환."""
@@ -117,10 +124,13 @@ class AgentChatbotService:
 
         messages = []
         for item in history[-HISTORY_WINDOW_SIZE:]:
-            # 기존 형식: {"role": "user"/"assistant", "content"/"text": str}
-            role = item.get("role", "user")
+            raw_role = item.get("role", "user")
+            role = self._ROLE_MAP.get(raw_role)
+            if not role:
+                logger.debug("알 수 없는 history role 무시: %s", raw_role)
+                continue
             content = item.get("content") or item.get("text", "")
-            if role in ("user", "assistant") and content:
+            if content:
                 messages.append({"role": role, "content": content})
 
         return messages

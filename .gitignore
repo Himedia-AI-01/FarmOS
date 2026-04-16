@@ -52,3 +52,6 @@ backend/benchmark_stt.py
 
 # ========== Lock files (uv) ==========
 # uv.lock는 재현성을 위해 커밋 권장 — 제외하지 않음
+
+# ========== 로컬 실행 스크립트 ==========
+start.cmd

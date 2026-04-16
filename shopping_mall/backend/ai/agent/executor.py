@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 10       # 하드코딩 폴백 (settings 미설정 시)
 MAX_ANSWER_LENGTH = 1000  # 최종 응답 최대 글자 수
+_WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
 
 # ── 요청 컨텍스트 ──────────────────────────────────────────────────────────────
@@ -378,7 +379,10 @@ class AgentExecutor:
 
     async def _tool_search_policy(self, query: str, policy_type: str = "all") -> str:
         collections = POLICY_COLLECTIONS.get(policy_type, POLICY_COLLECTIONS["all"])
-        docs = self.rag.retrieve_multiple(query, collections, top_k_per=2, distance_threshold=0.50)
+        # ko-sroberta-multitask 모델 실측: 정책 문서의 관련 청크 거리가 0.51~0.62 대에 형성됨
+        # → 기본 0.50은 모든 결과를 차단하므로 0.65로 상향 조정
+        # top_k_per=3: 단일 컬렉션 조회 시 주요 조항을 충분히 포함
+        docs = self.rag.retrieve_multiple(query, collections, top_k_per=3, distance_threshold=0.65)
         if not docs:
             return "관련 정책 정보를 찾을 수 없습니다."
         return "\n\n".join(docs)
@@ -453,7 +457,7 @@ class AgentExecutor:
             adjusted, skipped = await next_business_day(arrival_date, api_key)
 
             if not skipped:
-                return f"\n도착예정: {adjusted.strftime('%Y-%m-%d')} ({adjusted.strftime('%A')})"
+                return f"\n도착예정: {adjusted.strftime('%Y-%m-%d')} ({_WEEKDAY_KO[adjusted.weekday()]}요일)"
 
             skip_summary = ", ".join(skipped)
             return (

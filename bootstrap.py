@@ -214,8 +214,10 @@ def ensure_databases(options: BootstrapOptions) -> None:
     """DB/테이블 점검 및 필요 시 초기화를 `bootstrap/` 하위에 위임한다."""
     info("ShoppingMall DB 점검/초기화")
     shop_command = [
+        "uv",
+        "run",
         "python",
-        str(Path("bootstrap") / "shoppingmall.py"),
+        str(ROOT / "bootstrap" / "shoppingmall_seed.py"),
         "--mode",
         "ensure",
         "--skip-sync",
@@ -224,11 +226,13 @@ def ensure_databases(options: BootstrapOptions) -> None:
         shop_command.append("--verbose-table-info")
     if options.rebuild_schema:
         shop_command.append("--rebuild-schema")
-    run_command(shop_command, cwd=ROOT)
+    run_command(shop_command, cwd=SHOP_BACKEND_DIR)
     info("FarmOS DB 점검/초기화")
     farmos_command = [
+        "uv",
+        "run",
         "python",
-        str(Path("bootstrap") / "farmos.py"),
+        str(ROOT / "bootstrap" / "farmos_seed.py"),
         "--mode",
         "ensure",
         "--skip-sync",
@@ -237,7 +241,7 @@ def ensure_databases(options: BootstrapOptions) -> None:
         farmos_command.append("--verbose-table-info")
     if options.rebuild_schema:
         farmos_command.append("--rebuild-schema")
-    run_command(farmos_command, cwd=ROOT)
+    run_command(farmos_command, cwd=FARMOS_BACKEND_DIR)
 
 
 def start_service(

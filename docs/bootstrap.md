@@ -123,22 +123,22 @@ python bootstrap.py --initialize --verbose-table-info
   - 옵션(`--initialize` 등)에 따라 DB 스크립트 호출
 
 - `bootstrap/shoppingmall.py`
-  - 쇼핑몰 테이블 점검/초기화 판단
+  - ShoppingMall 백엔드 서버 실행 전용
 
 - `bootstrap/farmos.py`
-  - FarmOS 테이블 점검/초기화 판단
+  - FarmOS 백엔드 서버 실행 전용
 
 - `bootstrap/shoppingmall_seed.py`
-  - 쇼핑몰 핵심 데이터 시드
+  - 쇼핑몰 DB 점검/초기화 판단 + 핵심 데이터 시드
 
 - `bootstrap/shoppingmall_review_seed.py`
   - 쇼핑몰 리뷰 1000건 시드
 
 - `bootstrap/farmos_seed.py`
-  - FarmOS 기본 계정/기본 테이블 시드
+  - FarmOS DB 점검/초기화 판단 + 기본 계정/기본 테이블 시드
 
 - `bootstrap/pesticide.py`
-  - 농약 RAG 데이터 적재
+  - 농약 RAG 데이터 점검/적재(시드 계열)
 
 ## 6. 문제 상황별 대응
 
@@ -197,7 +197,7 @@ python bootstrap.py --initialize --verbose-table-info
 2. `backend/.env`, `shopping_mall/backend/.env`의 `DATABASE_URL` 확인
 3. 필요 시 하위 초기화 스크립트에 `--database-url`을 명시 전달해 검증
 
-## 7. 앞으로 코드에 반영할 계획
+## 7. PR 반영 내용
 
 - `bootstrap.py`에 `--rebuild-schema`를 명시적으로 노출
 - `--rebuild-schema`는 `--initialize`와 함께만 허용

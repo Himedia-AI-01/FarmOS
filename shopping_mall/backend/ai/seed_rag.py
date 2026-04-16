@@ -34,6 +34,22 @@ DOC_TO_COLLECTION: dict[str, str] = {
 
 # ── 문서 파싱 ──────────────────────────────────────────────────────────────
 
+def _normalize_pdf_text(text: str) -> str:
+    """PDF 추출 텍스트 정규화.
+
+    pypdf가 글자 사이에 공백을 삽입하는 경우 (예: '제 1 조 ( 주문  가능  시간 )')
+    조/장 패턴과 줄 내부 연속 공백을 정규화하여 청킹 정규식이 작동하게 한다.
+    """
+    # 줄 단위로 연속 공백 → 단일 공백
+    lines = [re.sub(r"[ \t]{2,}", " ", line.strip()) for line in text.split("\n")]
+    text = "\n".join(line for line in lines if line)
+    # "제 N 조(...)" → "제N조(...)"
+    text = re.sub(r"제\s+(\d+)\s+조\s*\(", r"제\1조(", text)
+    # "제 N 장" → "제N장"
+    text = re.sub(r"제\s+(\d+)\s+장", r"제\1장", text)
+    return text
+
+
 def parse_pdf(path: str) -> str:
     """PDF 파일에서 전체 텍스트 추출."""
     from pypdf import PdfReader
@@ -43,7 +59,8 @@ def parse_pdf(path: str) -> str:
         text = page.extract_text()
         if text:
             pages.append(text.strip())
-    return "\n\n".join(pages)
+    raw = "\n\n".join(pages)
+    return _normalize_pdf_text(raw)
 
 
 WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -72,7 +89,7 @@ def parse_docx(path: str) -> str:
 
         elif tag == "tbl":
             # 표: 행(tr) → 셀(tc)을 " | " 구분으로 변환
-            for tr in child.iter(f"{WORD_NS}tr"):
+            for tr in child.findall(f"{WORD_NS}tr"):
                 cells: list[str] = []
                 for tc in tr.findall(f"{WORD_NS}tc"):
                     cell_texts = [
@@ -118,8 +135,11 @@ _HEADING_RE = re.compile(r"^(\d+(?:\.\d+)*)\s+(.+)$", re.MULTILINE)
 _CHAPTER_RE = re.compile(r"^제(\d+)장\s+(.+)$", re.MULTILINE)
 _ARTICLE_RE = re.compile(r"^제(\d+)조\((.+?)\)", re.MULTILINE)
 
-def chunk_by_sections(text: str, source: str) -> list[dict]:
+def chunk_by_sections(text: str, source: str, doc_title: str = "") -> list[dict]:
     """섹션 헤딩 기준으로 텍스트를 청크로 분할.
+
+    doc_title이 주어지면 각 청크 앞에 [doc_title > X.X 섹션명] 출처 프리픽스를 붙여
+    LLM이 근거 섹션을 인용할 수 있게 한다.
 
     Returns:
         [{"id": str, "text": str, "metadata": dict}, ...]
@@ -129,9 +149,10 @@ def chunk_by_sections(text: str, source: str) -> list[dict]:
 
     if not matches:
         # 헤딩이 없으면 전체를 하나의 청크로
+        prefix = f"[{doc_title}]\n" if doc_title else ""
         return [{
             "id": f"{source}_chunk_0",
-            "text": text.strip(),
+            "text": prefix + text.strip(),
             "metadata": {"source": source, "section": "전체"},
         }]
 
@@ -146,6 +167,10 @@ def chunk_by_sections(text: str, source: str) -> list[dict]:
         if not content:
             continue
 
+        if doc_title:
+            prefix = f"[{doc_title} > {section_num} {section_title}]\n"
+            content = prefix + content
+
         chunk_id = f"{source}_s{section_num.replace('.', '_')}"
         chunks.append({
             "id": chunk_id,
@@ -154,6 +179,7 @@ def chunk_by_sections(text: str, source: str) -> list[dict]:
                 "source": source,
                 "section": f"{section_num} {section_title}",
                 "section_num": section_num,
+                **({"doc_title": doc_title} if doc_title else {}),
             },
         })
 
@@ -161,7 +187,7 @@ def chunk_by_sections(text: str, source: str) -> list[dict]:
 
 
 def chunk_by_articles(
-    text: str, source: str, doc_title: str
+    text: str, source: str, doc_title: str = ""
 ) -> list[dict]:
     """제X장 > 제X조 체계로 텍스트를 청크로 분할.
 
@@ -211,14 +237,16 @@ def chunk_by_articles(
         if not content:
             continue
 
-        # 출처 프리픽스
+        # 출처 프리픽스 (doc_title이 없으면 prefix 없이 content만 사용)
         article_label = f"제{sp['num']}조({sp['title']})"
-        if current_chapter:
-            prefix = f"[{doc_title} > {current_chapter} > {article_label}]"
+        if doc_title:
+            if current_chapter:
+                prefix = f"[{doc_title} > {current_chapter} > {article_label}]"
+            else:
+                prefix = f"[{doc_title} > {article_label}]"
+            chunk_text = f"{prefix}\n{content}"
         else:
-            prefix = f"[{doc_title} > {article_label}]"
-
-        chunk_text = f"{prefix}\n{content}"
+            chunk_text = content
         chunk_id = f"{source}_art{sp['num']}"
 
         metadata: dict = {
@@ -258,14 +286,15 @@ def seed_policy_collection(client, ef, filepath: str, collection_name: str) -> i
     # 파일명에서 소스 식별자 추출 (공백/괄호 제거)
     source = re.sub(r"[\s\(\)]+", "_", os.path.splitext(filename)[0]).strip("_")
 
-    # 제X조 패턴이 있으면 조 단위 청킹, 없으면 기존 섹션 청킹 폴백
+    # 제X조 패턴이 있으면 조 단위 청킹, 없으면 섹션 청킹 폴백
+    # 두 경우 모두 doc_title을 전달하여 출처 프리픽스가 붙게 한다
     doc_title = COLLECTION_TO_DOC_TITLE.get(collection_name, collection_name)
     if _ARTICLE_RE.search(text):
         chunks = chunk_by_articles(text, source, doc_title)
         if not chunks:
-            chunks = chunk_by_sections(text, source)
+            chunks = chunk_by_sections(text, source, doc_title)
     else:
-        chunks = chunk_by_sections(text, source)
+        chunks = chunk_by_sections(text, source, doc_title)
 
     if not chunks:
         print(f"  [경고] 청크 없음: {filename}")

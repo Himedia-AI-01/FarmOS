@@ -1,7 +1,10 @@
 """애플리케이션 설정 — 환경변수를 한 곳에서 관리합니다."""
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
-from app.paths import POLICY_DOCS_DIR
+# shopping_mall/backend/  (config.py 기준 3단계 상위)
+_BACKEND_ROOT = Path(__file__).parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -50,7 +53,7 @@ class Settings(BaseSettings):
     # ── 경로 ────────────────────────────────────────────────────────────────
     # 정책 문서(PDF/DOCX) 폴더. 기본값: shopping_mall/backend/ai/docs/
     # 다른 위치를 쓰려면 .env에 POLICY_DOCS_DIR=/절대/경로 로 지정.
-    policy_docs_dir: str = str(POLICY_DOCS_DIR)
+    policy_docs_dir: str = str(_BACKEND_ROOT / "ai" / "docs")
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

@@ -203,6 +203,8 @@ def parse_args() -> BootstrapOptions:
     args = parser.parse_args()
     if args.rebuild_schema and not args.initialize:
         parser.error("--rebuild-schema는 --initialize와 함께만 사용할 수 있습니다.")
+    if args.verbose_table_info and not args.initialize:
+        parser.error("--verbose-table-info는 --initialize와 함께만 사용할 수 있습니다.")
     return BootstrapOptions(
         initialize=args.initialize,
         rebuild_schema=args.rebuild_schema,

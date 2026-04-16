@@ -75,18 +75,26 @@ USER_SEEDS = [
     },
 ]
 
-SUMMARY_TABLES = [
+CORE_SUMMARY_TABLES = [
     "journal_entries",
+    "review_analyses",
+    "review_sentiments",
+    "users",
+]
+POST_PESTICIDE_TABLES = [
     "rag_pesticide_crops",
     "rag_pesticide_documents",
     "rag_pesticide_product_applications",
     "rag_pesticide_products",
     "rag_pesticide_targets",
-    "review_analyses",
-    "review_sentiments",
-    "users",
 ]
+SUMMARY_TABLES = [*CORE_SUMMARY_TABLES, *POST_PESTICIDE_TABLES]
 EXPECTED_ROW_COUNTS = {"users": 2}
+POST_PESTICIDE_MIN_ROW_COUNTS = {
+    "rag_pesticide_products": 1,
+    "rag_pesticide_product_applications": 1,
+    "rag_pesticide_documents": 1,
+}
 LOG_PREFIX = "FarmOS-S"
 
 
@@ -116,7 +124,7 @@ async def print_summary() -> None:
     """초기화 이후 핵심 테이블 row 수를 출력한다."""
     info("FarmOS 시드 요약")
     async with async_session() as db:
-        for table in SUMMARY_TABLES:
+        for table in CORE_SUMMARY_TABLES:
             result = await db.execute(text(f"SELECT COUNT(*) FROM {table};"))
             count = result.scalar() or 0
             print(f"  - {table}: {count} rows")
@@ -156,7 +164,21 @@ def uv_sync_backend(skip_sync: bool) -> None:
 
 
 def all_farmos_tables_exist(db_conf: dict[str, str]) -> bool:
-    return all(table_exists(db_conf, table) for table in SUMMARY_TABLES)
+    return all(table_exists(db_conf, table) for table in CORE_SUMMARY_TABLES)
+
+
+def all_post_pesticide_tables_exist(db_conf: dict[str, str]) -> bool:
+    return all(table_exists(db_conf, table) for table in POST_PESTICIDE_TABLES)
+
+
+def is_post_pesticide_ready(db_conf: dict[str, str]) -> bool:
+    if not all_post_pesticide_tables_exist(db_conf):
+        return False
+    for table, expected_min in POST_PESTICIDE_MIN_ROW_COUNTS.items():
+        actual = int(psql_query(db_conf, f"SELECT COUNT(*) FROM {table};") or "0")
+        if actual < expected_min:
+            return False
+    return True
 
 
 def drop_farmos_tables(db_conf: dict[str, str]) -> None:
@@ -186,7 +208,7 @@ def truncate_farmos_tables(db_conf: dict[str, str]) -> None:
 
 
 def is_farmos_ready(db_conf: dict[str, str]) -> bool:
-    for table in SUMMARY_TABLES:
+    for table in CORE_SUMMARY_TABLES:
         if not table_exists(db_conf, table):
             return False
     for table, expected in EXPECTED_ROW_COUNTS.items():
@@ -232,8 +254,14 @@ def run_pesticide_loader(raw_db_url: str, append_mode: bool = True) -> None:
 def print_db_summary(db_conf: dict[str, str], verbose_table_info: bool) -> None:
     print_table_summary(
         db_conf,
-        "FarmOS",
-        SUMMARY_TABLES,
+        "FarmOS (코어)",
+        CORE_SUMMARY_TABLES,
+        verbose_table_info=verbose_table_info,
+    )
+    print_table_summary(
+        db_conf,
+        "FarmOS (농약 RAG)",
+        POST_PESTICIDE_TABLES,
         verbose_table_info=verbose_table_info,
     )
 
@@ -272,19 +300,23 @@ def main() -> int:
         ensure_database_exists(db_conf)
 
         initialized = args.mode == "init"
+        did_sync = False
         if args.mode == "ensure":
+            force_pesticide_reload = False
             if args.rebuild_schema:
                 info("사용자 요청으로 강제 초기화 수행 (--rebuild-schema)")
                 uv_sync_backend(args.skip_sync)
+                did_sync = True
                 drop_farmos_tables(db_conf)
                 run_seed_pipeline(raw_db_url)
-                run_pesticide_loader(raw_db_url, append_mode=False)
+                force_pesticide_reload = True
                 initialized = True
             elif is_farmos_ready(db_conf):
                 info("FarmOS DB 상태 정상 (초기화 생략)")
             else:
                 info("FarmOS DB 상태 불완전 (초기화 수행)")
                 uv_sync_backend(args.skip_sync)
+                did_sync = True
                 rebuild_schema = not all_farmos_tables_exist(db_conf)
                 if rebuild_schema:
                     info("FarmOS 필수 테이블 일부 누락 감지 (스키마 재구성 모드)")
@@ -292,7 +324,23 @@ def main() -> int:
                 else:
                     truncate_farmos_tables(db_conf)
                 run_seed_pipeline(raw_db_url)
-                run_pesticide_loader(raw_db_url, append_mode=not rebuild_schema)
+                initialized = True
+
+            # 코어 초기화 여부와 무관하게 농약 테이블 상태를 항상 별도로 점검한다.
+            if (not force_pesticide_reload) and is_post_pesticide_ready(db_conf):
+                info("FarmOS 농약 RAG 테이블 상태 정상 (적재 생략)")
+            else:
+                info("FarmOS 농약 RAG 테이블 상태 불완전 (적재 수행)")
+                if not did_sync:
+                    uv_sync_backend(args.skip_sync)
+                    did_sync = True
+                run_pesticide_loader(
+                    raw_db_url,
+                    append_mode=(
+                        (not force_pesticide_reload)
+                        and all_post_pesticide_tables_exist(db_conf)
+                    ),
+                )
                 initialized = True
         else:
             uv_sync_backend(args.skip_sync)
@@ -304,7 +352,12 @@ def main() -> int:
             else:
                 truncate_farmos_tables(db_conf)
             run_seed_pipeline(raw_db_url)
-            run_pesticide_loader(raw_db_url, append_mode=not rebuild_schema)
+            run_pesticide_loader(
+                raw_db_url,
+                append_mode=(
+                    (not rebuild_schema) and all_post_pesticide_tables_exist(db_conf)
+                ),
+            )
 
         if initialized:
             print_db_summary(db_conf, args.verbose_table_info)

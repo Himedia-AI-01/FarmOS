@@ -1,5 +1,4 @@
 """에이전트 실행기 — tool_use 루프 + 12개 도구 구현."""
-import asyncio
 import json
 import logging
 import re
@@ -66,6 +65,22 @@ POLICY_COLLECTIONS: dict[str, list[str]] = {
 }
 
 
+_TOOL_SOURCE: dict[str, str] = {
+    "search_faq": "rag",
+    "search_storage_guide": "rag",
+    "search_season_info": "rag",
+    "search_policy": "rag",
+    "search_farm_info": "rag",
+    "get_order_status": "db",
+    "search_products": "db",
+    "get_product_detail": "db",
+    "escalate_to_agent": "action",
+    "create_exchange_request": "action",
+    "confirm_pending_action": "action",
+    "cancel_pending_action": "action",
+}
+
+
 @dataclass
 class TraceStep:
     """도구 호출 한 단계의 추론 기록."""
@@ -73,6 +88,7 @@ class TraceStep:
     arguments: dict
     result: str        # 도구 실행 결과 (최대 500자)
     iteration: int     # 루프 몇 번째 반복
+    source: str = "rag"  # "rag" | "db" | "action" | "parametric"
 
 
 @dataclass
@@ -87,19 +103,26 @@ class ToolMetricData:
 
 
 # ── 빈 결과 판별 ──────────────────────────────────────────────────────────────
+# 단순 부분 문자열("없습니다" 등)은 정상 응답에서도 오탐이 발생하므로,
+# 빈 결과를 명확히 나타내는 완전한 구(句) 단위의 정규식만 사용한다.
 
-_EMPTY_RESULT_MARKERS = (
-    "찾을 수 없",
-    "없습니다",
-    "결과가 없",
-    "조회된 주문이 없",
-    "정보를 찾을 수 없",
+_EMPTY_RESULT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"찾을\s*수\s*없습니다"),        # "~을 찾을 수 없습니다"
+    re.compile(r"결과가\s*없습니다"),            # "검색 결과가 없습니다"
+    re.compile(r"조회된\s*주문이\s*없습니다"),   # "조회된 주문이 없습니다"
+    re.compile(r"정보를\s*찾을\s*수\s*없습니다"), # "정보를 찾을 수 없습니다"
+    re.compile(r"검색\s*결과가\s*없습니다"),     # "검색 결과가 없습니다"
 )
 
 
 def _is_empty_result(result: str) -> bool:
-    """도구 결과가 사실상 '빈 결과'인지 판별."""
-    return any(marker in result for marker in _EMPTY_RESULT_MARKERS)
+    """도구 결과가 사실상 '빈 결과'인지 판별.
+
+    공백·줄바꿈을 정규화한 뒤 완전한 구 단위 정규식으로만 매칭하여
+    정상 응답에 포함된 "없습니다"로 인한 오탐을 방지한다.
+    """
+    normalized = re.sub(r"\s+", " ", result).strip()
+    return any(p.search(normalized) for p in _EMPTY_RESULT_PATTERNS)
 
 
 @dataclass
@@ -150,7 +173,7 @@ def _log_trace(trace: "list[TraceStep]", question: str) -> None:
         return
     logger.info(f"[trace] 질문='{question[:60]}' → {len(trace)}단계 도구 호출")
     for step in trace:
-        logger.info(f"  [{step.iteration}] {step.tool}({step.arguments})")
+        logger.info(f"  [{step.iteration}] {step.tool}({step.arguments}) [{step.source}]")
 
 
 class AgentExecutor:
@@ -231,6 +254,22 @@ class AgentExecutor:
                 raw_answer = response.text or "죄송합니다. 답변을 생성하지 못했습니다."
                 answer = _parse_answer(raw_answer)
                 intent = TOOL_TO_INTENT.get(tools_used[0], "other") if tools_used else "other"
+
+                # RAG 도구 결과가 없거나 도구 자체를 쓰지 않은 경우 → LLM 자체 지식 사용
+                # 에스컬레이션은 상담원에게 넘기는 것이므로 parametric 보완과 무관
+                has_empty_rag = any(
+                    _is_empty_result(s.result) and s.source == "rag"
+                    for s in trace
+                )
+                if not escalated and (not trace or has_empty_rag):
+                    trace.append(TraceStep(
+                        tool="_parametric_fallback",
+                        arguments={},
+                        result="RAG 결과 없음 — LLM 사전 지식으로 보완",
+                        iteration=iteration + 1,
+                        source="parametric",
+                    ))
+
                 _log_trace(trace, user_message)
                 return AgentResult(
                     answer=answer,
@@ -247,18 +286,12 @@ class AgentExecutor:
                 if tc.name == "escalate_to_agent":
                     escalated = True
 
-            # 도구 실행 (단일: 직접, 다중: asyncio.gather)
-            if len(response.tool_calls) == 1:
-                tc = response.tool_calls[0]
-                t0 = time.monotonic()
-                result = await self._dispatch_tool(tc, db, user_id, session_id)
-                latency_ms = int((time.monotonic() - t0) * 1000)
-                timed_results = [(tc, result, latency_ms)]
-            else:
-                timed_results = await asyncio.gather(*(
-                    self._timed_dispatch(tc, db, user_id, session_id)
-                    for tc in response.tool_calls
-                ))
+            # 도구 실행 — 동일 Session을 공유하므로 항상 순차 실행
+            timed_results: list[tuple[ToolCall, str, int]] = []
+            for tc in response.tool_calls:
+                timed_results.append(
+                    await self._timed_dispatch(tc, db, user_id, session_id)
+                )
 
             # trace + metrics 기록 (원래 순서)
             results: list[tuple[ToolCall, str]] = []
@@ -273,6 +306,7 @@ class AgentExecutor:
                     arguments=tc.arguments,
                     result=result[:500],
                     iteration=iteration + 1,
+                    source=_TOOL_SOURCE.get(tc.name, "rag"),
                 ))
                 metrics.append(ToolMetricData(
                     tool_name=tc.name,
@@ -306,7 +340,7 @@ class AgentExecutor:
     async def _timed_dispatch(
         self, tc: ToolCall, db: Session, user_id: int | None, session_id: int | None = None
     ) -> tuple[ToolCall, str, int]:
-        """도구 실행 + 소요 시간 측정. asyncio.gather용 래퍼."""
+        """도구 실행 + 소요 시간 측정."""
         t0 = time.monotonic()
         result = await self._dispatch_tool(tc, db, user_id, session_id)
         latency_ms = int((time.monotonic() - t0) * 1000)

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, Integer
 from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
@@ -494,8 +494,9 @@ def get_tool_analytics(
     authenticated_user_id: int = Depends(_get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """도구 호출 성능/품질 분석 집계."""
+    """도구 호출 성능/품질 분석 집계 (요청 사용자 본인 데이터만 반환)."""
     from datetime import timedelta
+    from app.models.chat_log import ChatLog
     from app.models.tool_metric import ToolMetric
 
     days = _PERIOD_DAYS.get(period)
@@ -510,7 +511,10 @@ def get_tool_analytics(
         func.avg(func.cast(ToolMetric.success, Integer)).label("success_rate"),
         func.avg(ToolMetric.latency_ms).label("avg_latency_ms"),
         func.avg(func.cast(ToolMetric.empty_result, Integer)).label("empty_result_rate"),
-    ).filter(ToolMetric.created_at >= cutoff)
+    ).join(ChatLog, ToolMetric.chat_log_id == ChatLog.id).filter(
+        ToolMetric.created_at >= cutoff,
+        ChatLog.user_id == authenticated_user_id,
+    )
 
     if tool_name:
         query = query.filter(ToolMetric.tool_name == tool_name)

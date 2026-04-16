@@ -251,8 +251,8 @@ def chunk_by_articles(
 
         metadata: dict = {
             "source": source,
-            "doc_title": doc_title,
             "article": article_label,
+            **({"doc_title": doc_title} if doc_title else {}),
         }
         if current_chapter:
             metadata["chapter"] = current_chapter

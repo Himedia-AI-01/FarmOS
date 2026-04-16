@@ -141,18 +141,18 @@ export default function ChatMessageView({ sessionId, userId, onBackClick }: Chat
       </div>
 
       {/* Messages */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full">
         {messages.map((msg, idx) => {
           // Generate stable key from timestamp or fallback to role+index combination
           const key = msg.createdAt ? `${msg.role}-${msg.createdAt}` : `${msg.role}-${idx}`;
           return (
           <div key={key} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[82%] ${msg.role === 'bot' ? 'space-y-1' : ''}`}>
+            <div className={`${msg.role === 'user' ? 'max-w-[78%]' : 'max-w-[80%]'} ${msg.role === 'bot' ? 'space-y-1' : ''}`}>
               <div
-                className={`px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                className={`px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap ${
                   msg.role === 'user'
-                    ? 'bg-[#03C75A] text-white rounded-br-sm'
-                    : 'bg-gray-100 text-gray-800 rounded-bl-sm'
+                    ? 'leading-relaxed bg-[#03C75A] text-white rounded-br-sm'
+                    : 'leading-[1.7] bg-gray-50 text-gray-800 rounded-bl-sm border border-[#03C75A]/30'
                 }`}
               >
                 {msg.text}

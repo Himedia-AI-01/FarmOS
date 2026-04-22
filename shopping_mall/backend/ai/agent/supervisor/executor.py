@@ -37,8 +37,9 @@ _EXCHANGE_KEYWORDS_ACTION: frozenset[str] = frozenset({
 _PARALLEL_SUPERVISOR_TOOLS: frozenset[str] = frozenset({"call_cs_agent"})
 
 _SUPERVISOR_TOOL_TO_INTENT: dict[str, str] = {
-    "call_cs_agent":   "other",
-    "call_order_agent": "exchange",
+    "call_cs_agent": "other",
+    # call_order_agent은 action("cancel"|"exchange")이 동적이므로 여기에 포함하지 않음.
+    # 각 callsite에서 _detect_order_action(user_message)로 결정한다.
 }
 
 
@@ -148,7 +149,7 @@ class SupervisorExecutor:
             response_text = await self._call_order_agent(
                 user_message, user_id, session_id, db
             )
-            intent = "exchange"
+            intent = _detect_order_action(user_message)
             _log_trace(trace, user_message)
             return AgentResult(
                 answer=response_text,
@@ -172,7 +173,12 @@ class SupervisorExecutor:
                     # 서브 에이전트 없이 직접 답변 (엣지 케이스)
                     raw_answer = response.text or "죄송합니다. 답변을 생성하지 못했습니다."
                 answer = _parse_answer(raw_answer)
-                intent = _SUPERVISOR_TOOL_TO_INTENT.get(tools_used[0], "other") if tools_used else "other"
+                _first = tools_used[0] if tools_used else None
+                intent = (
+                    _detect_order_action(user_message)
+                    if _first == "call_order_agent"
+                    else _SUPERVISOR_TOOL_TO_INTENT.get(_first, "other") if _first else "other"
+                )
                 _log_trace(trace, user_message)
                 return AgentResult(
                     answer=answer,
@@ -225,7 +231,7 @@ class SupervisorExecutor:
                     _log_trace(trace, user_message)
                     return AgentResult(
                         answer=pending.message,
-                        intent="exchange",
+                        intent=_detect_order_action(user_message),
                         escalated=False,
                         tools_used=tools_used,
                         trace=trace,
@@ -238,7 +244,9 @@ class SupervisorExecutor:
             for item in timed_results:
                 if item is None:
                     continue
-                tc_obj, result_str, latency_ms = item
+                tc_obj, raw_result, latency_ms = item
+                # CS 에이전트는 AgentResult를 반환 — LLM 히스토리용으로 answer 문자열만 추출
+                result_str = raw_result.answer if isinstance(raw_result, AgentResult) else raw_result
                 results.append((tc_obj, result_str))
                 trace.append(TraceStep(
                     tool=tc_obj.name,
@@ -249,7 +257,11 @@ class SupervisorExecutor:
                 ))
                 metrics.append(ToolMetricData(
                     tool_name=tc_obj.name,
-                    intent=_SUPERVISOR_TOOL_TO_INTENT.get(tc_obj.name, "other"),
+                    intent=(
+                        _detect_order_action(user_message)
+                        if tc_obj.name == "call_order_agent"
+                        else _SUPERVISOR_TOOL_TO_INTENT.get(tc_obj.name, "other")
+                    ),
                     success=True,
                     latency_ms=latency_ms,
                     empty_result=False,
@@ -264,16 +276,20 @@ class SupervisorExecutor:
             # 단일 CS 에이전트 호출이면 결과를 그대로 반환 (Supervisor 재합성 LLM 호출 생략)
             # 복합 호출(2개 이상)은 아래 loop로 계속 진행하여 합성
             if len(results) == 1 and results[0][0].name == "call_cs_agent":
-                answer = _parse_answer(results[0][1])
+                # timed_results에 보존된 AgentResult로 escalated/tools_used/metrics 전파
+                _cs_item = next(item for item in timed_results if item is not None)
+                _, _cs_full, _ = _cs_item
+                _cs_result = _cs_full if isinstance(_cs_full, AgentResult) else None
+                answer = _parse_answer(_cs_result.answer if _cs_result else results[0][1])
                 intent = _SUPERVISOR_TOOL_TO_INTENT.get(tools_used[0], "other") if tools_used else "other"
                 _log_trace(trace, user_message)
                 return AgentResult(
                     answer=answer,
                     intent=intent,
-                    escalated=False,
-                    tools_used=tools_used,
+                    escalated=_cs_result.escalated if _cs_result else False,
+                    tools_used=tools_used + (_cs_result.tools_used if _cs_result else []),
                     trace=trace,
-                    metrics=metrics,
+                    metrics=metrics + (_cs_result.metrics if _cs_result else []),
                 )
 
             client.add_tool_results(messages, response, results)
@@ -302,12 +318,13 @@ class SupervisorExecutor:
 
     async def _dispatch_tool(
         self, tc: ToolCall, db: Session, user_id: int | None, session_id: int | None
-    ) -> str | _OrderPendingResult:
+    ) -> AgentResult | str | _OrderPendingResult:
         args = tc.arguments
         try:
             match tc.name:
                 case "call_cs_agent":
-                    result = await self.cs_executor.run(
+                    # 전체 AgentResult를 반환 — passthrough에서 escalated/tools_used/metrics 전파
+                    return await self.cs_executor.run(
                         db=db,
                         user_message=args["query"],
                         user_id=user_id,
@@ -316,7 +333,6 @@ class SupervisorExecutor:
                         input_system=self.cs_input_prompt,
                         output_system=self.cs_output_prompt,
                     )
-                    return result.answer
 
                 case "call_order_agent":
                     if not user_id or not session_id:
@@ -376,7 +392,7 @@ class SupervisorExecutor:
 
             if snapshot.next and not intent_mismatch:
                 # 진행 중인 플로우 재개
-                logger.info(f"[order_graph] 플로우 재개 — session={session_id} query='{query[:60]}'")
+                logger.info(f"[order_graph] 플로우 재개 — session={session_id} action={new_action}")
                 await self.order_graph.ainvoke(Command(resume=query), config)
             else:
                 # 신규 플로우 시작 (또는 의도 불일치로 기존 플로우 교체)

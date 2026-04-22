@@ -8,6 +8,7 @@ import {
   TICKET_ACTION_LABEL,
   TICKET_ACTION_COLOR,
 } from '@/admin/types/ticket';
+import { parseTicketItems } from '@/admin/types/ticket';
 import type { Ticket, TicketStatus, TicketActionType } from '@/admin/types/ticket';
 import { formatDate, formatPrice } from '@/lib/utils';
 
@@ -365,14 +366,7 @@ function TicketDetail({ ticket }: { ticket: Ticket }) {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const nextStatuses = NEXT_STATUSES[ticket.status];
 
-  const parsedItems = (() => {
-    if (!ticket.items) return null;
-    try {
-      return JSON.parse(ticket.items) as { item_id: number; name: string; qty: number }[];
-    } catch {
-      return null;
-    }
-  })();
+  const parsedItems = parseTicketItems(ticket);
 
   const handleStatusChange = (status: TicketStatus) => {
     updateStatus(

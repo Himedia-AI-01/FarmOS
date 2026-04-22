@@ -437,8 +437,7 @@ class AgentExecutor:
                     # LLM이 이를 명시하는 경우는 사용자가 특정 user_id를 요청한 것입니다.
                     if "user_id" in args:
                         logger.warning(
-                            "get_order_status에 user_id 인자 감지 — 타인 정보 조회 시도로 거절: %s",
-                            args.get("user_id"),
+                            "get_order_status에 user_id 인자 감지 — 타인 정보 조회 시도로 거절 (redacted)"
                         )
                         return self._tool_refuse_request("other_user_info")
                     return await self._tool_get_order_status(db, user_id, **args)

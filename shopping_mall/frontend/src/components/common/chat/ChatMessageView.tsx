@@ -307,18 +307,13 @@ export default function ChatMessageView({ sessionId, userId, onBackClick }: Chat
         intent,
       },
       {
-        onSuccess: (data) => {
-          setMessages((prev) => {
-            // useSendMessage hook's onSuccess already updates the query cache,
-            // which triggers the useEffect below to call setMessages. Guard
-            // against adding the same bot message twice.
-            const last = prev[prev.length - 1];
-            if (last?.role === 'bot' && last?.text === data.answer) return prev;
-            return [
-              ...prev,
-              { role: 'bot', text: data.answer, intent: data.intent, escalated: data.escalated },
-            ];
-          });
+        onSuccess: () => {
+          // useSendMessage.onSuccess has already written the bot response to
+          // the query cache via setQueryData. The useEffect watching
+          // sessionMessages propagates it to local state — no direct
+          // setMessages call needed. Removing the optimistic add eliminates
+          // the text-equality dedup that incorrectly suppressed legitimate
+          // consecutive responses with identical text.
         },
         onError: () => {
           setMessages((prev) => [

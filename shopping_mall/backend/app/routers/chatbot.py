@@ -410,11 +410,13 @@ def delete_session(
         raise HTTPException(status_code=403, detail="Cannot delete other users' sessions")
 
     # FK 의존 순서대로 삭제: ToolMetric → ChatLog → ChatSession
-    log_ids = [
-        row.id for row in db.query(ChatLog.id).filter(ChatLog.session_id == session_id).all()
-    ]
-    if log_ids:
-        db.query(ToolMetric).filter(ToolMetric.chat_log_id.in_(log_ids)).delete(synchronize_session=False)
+    # 서브쿼리 방식 — id 목록을 Python으로 가져오지 않아 파라미터 과부하 없음
+    log_id_subquery = (
+        db.query(ChatLog.id)
+        .filter(ChatLog.session_id == session_id)
+        .scalar_subquery()
+    )
+    db.query(ToolMetric).filter(ToolMetric.chat_log_id.in_(log_id_subquery)).delete(synchronize_session=False)
     db.query(ChatLog).filter(ChatLog.session_id == session_id).delete(synchronize_session=False)
     db.delete(session)
     db.commit()

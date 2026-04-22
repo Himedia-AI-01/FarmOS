@@ -1,7 +1,7 @@
 """교환/취소 티켓 모델 — OrderGraph 멀티스텝 HitL 최종 결과물."""
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -15,6 +15,17 @@ class ShopTicket(Base):
     """
 
     __tablename__ = "shop_tickets"
+
+    # 동일 주문에 대해 동일 액션의 "received" 티켓이 중복 생성되지 않도록 보장.
+    # 부분 유니크 인덱스 — status가 'received'인 행에만 적용.
+    __table_args__ = (
+        Index(
+            "uq_shop_tickets_active",
+            "order_id", "action_type",
+            unique=True,
+            postgresql_where=text("status = 'received'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 

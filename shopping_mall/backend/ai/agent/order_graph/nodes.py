@@ -14,6 +14,7 @@ from .state import OrderState
 from .prompts import (
     ORDER_PROMPTS,
     CANCEL_KEYWORDS,
+    HARD_CANCEL_KEYWORDS,
     CONFIRM_KEYWORDS,
     CANCEL_REASON_MAP,
     EXCHANGE_REASON_MAP,
@@ -49,6 +50,12 @@ def _get_db(config: RunnableConfig):
 def _is_cancel_intent(text: str) -> bool:
     text_lower = text.strip().lower()
     return any(kw in text_lower for kw in CANCEL_KEYWORDS)
+
+
+def _is_hard_cancel_intent(text: str) -> bool:
+    """명시적 흐름 중단 의도 — 단순 '아니오'/'아니요'는 해당되지 않음."""
+    text_lower = text.strip().lower()
+    return any(kw in text_lower for kw in HARD_CANCEL_KEYWORDS)
 
 
 def _is_confirm_intent(text: str) -> bool:
@@ -118,6 +125,48 @@ def _parse_refund_method(text: str) -> str:
     if "2" in text or "적립" in text or "포인트" in text:
         return REFUND_METHOD_MAP["2"]
     return REFUND_METHOD_MAP["1"]  # 기본값
+
+
+# "N번 [상품] [M개]" — 품목 인덱스는 "번"으로 명시적으로 구분,
+# 수량은 동일 토큰 내 "M개"에서만 추출 (전역 re.findall로 혼용하지 않음)
+_ITEM_SELECTION_RE = re.compile(
+    r"(\d+)\s*번(?:\s*상품)?(?:[^\d]*?(\d+)\s*개)?"
+)
+
+
+def _parse_item_selections(user_input: str, order_items: list, db) -> list:
+    """교환 품목 선택 입력 파싱.
+
+    반환: selected items 리스트 (비어 있으면 파싱 실패).
+
+    규칙:
+      - "전체" 단독 (N번 없음) → 모든 품목 전량
+      - "N번 [상품] [전체|M개]" → 품목 N, 수량 M 또는 전량
+      - 번호와 수량을 같은 매치 토큰에서 추출해 혼용 방지
+    """
+    from app.models.product import Product
+
+    selected: list = []
+
+    # "전체" 단독 입력 — "N번 상품 전체"는 아래 N번 패턴으로 처리
+    if "전체" in user_input and not re.search(r"\d+\s*번", user_input):
+        for oi in order_items:
+            product = db.query(Product).filter(Product.id == oi.product_id).first()
+            name = product.name if product else f"상품 #{oi.product_id}"
+            selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": oi.quantity})
+        return selected
+
+    # "N번 [상품] [M개]" 패턴 — 수량이 없거나 "전체" → 전량
+    for m in _ITEM_SELECTION_RE.finditer(user_input):
+        idx = int(m.group(1))
+        if 1 <= idx <= len(order_items):
+            oi = order_items[idx - 1]
+            product = db.query(Product).filter(Product.id == oi.product_id).first()
+            name = product.name if product else f"상품 #{oi.product_id}"
+            qty = min(int(m.group(2)), oi.quantity) if m.group(2) else oi.quantity
+            selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": qty})
+
+    return selected
 
 
 # ── 노드 함수 ─────────────────────────────────────────────────────────────────
@@ -253,32 +302,29 @@ async def select_items(state: OrderState, config: RunnableConfig) -> dict:
     if _is_cancel_intent(user_input):
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
 
-    # 사용자 입력 파싱 — 번호 기반 또는 "전체"
-    selected = []
-    if "전체" in user_input:
-        for i, oi in enumerate(order_items):
-            product = db.query(Product).filter(Product.id == oi.product_id).first()
-            name = product.name if product else f"상품 #{oi.product_id}"
-            selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": oi.quantity})
-    else:
-        nums = re.findall(r"\d+", user_input)
-        for num_str in nums:
-            n = int(num_str)
-            if 1 <= n <= len(order_items):
-                oi = order_items[n - 1]
-                product = db.query(Product).filter(Product.id == oi.product_id).first()
-                name = product.name if product else f"상품 #{oi.product_id}"
-                # 수량 파싱: "2개" 같은 패턴 찾기 (없으면 전량)
-                qty_match = re.search(r"(\d+)\s*개", user_input)
-                qty = int(qty_match.group(1)) if qty_match else oi.quantity
-                qty = min(qty, oi.quantity)
-                selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": qty})
-        # 아무것도 선택 못하면 전체 선택
-        if not selected:
-            for oi in order_items:
-                product = db.query(Product).filter(Product.id == oi.product_id).first()
-                name = product.name if product else f"상품 #{oi.product_id}"
-                selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": oi.quantity})
+    # 사용자 입력 파싱 — 엄격한 "N번" 앵커 사용, 수량은 동일 토큰에서만 추출
+    selected = _parse_item_selections(user_input, order_items, db)
+
+    if not selected:
+        # 유효한 품목 번호를 찾지 못한 경우: 자동 전체 선택 대신 한 번 재입력 요청
+        retry_prompt = (
+            "선택하신 품목을 확인하지 못했습니다.\n\n"
+            f"{item_list}\n\n"
+            "번호로 다시 알려주세요 (예: 1번 상품 2개, 1번 상품 전체).\n"
+            "진행을 중단하려면 '그만'이라고 입력하세요."
+        )
+        user_input = interrupt(retry_prompt)
+        if _is_cancel_intent(user_input):
+            return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
+        selected = _parse_item_selections(user_input, order_items, db)
+
+    if not selected:
+        return {
+            **state,
+            "abort": True,
+            "response": "품목 선택을 확인하지 못했습니다. 처음부터 다시 시도해 주세요.",
+            "is_pending": False,
+        }
 
     return {**state, "selected_items": selected}
 
@@ -363,14 +409,18 @@ async def show_summary(state: OrderState, config: RunnableConfig) -> dict:
     # ── interrupt: 최종 승인 대기 ────────────────────────────────────────
     user_input = interrupt(prompt)
 
+    # 명시적 중단("그만", "취소" 등)만 abort로 처리.
+    # 단순 "아니오"/"아니요"는 abort가 아닌 confirmed=False로 처리하여 재확인 유도.
+    is_hard_cancel = _is_hard_cancel_intent(user_input)
     confirmed = _is_confirm_intent(user_input) and not _is_cancel_intent(user_input)
-    return {**state, "confirmed": confirmed}
+    return {**state, "confirmed": confirmed, "abort": is_hard_cancel}
 
 
 async def create_ticket(state: OrderState, config: RunnableConfig) -> dict:
     """티켓 발행 — DB INSERT."""
     from app.models.ticket import ShopTicket
     from app.models.order import Order
+    from sqlalchemy.exc import IntegrityError
 
     db = _get_db(config)
 
@@ -385,6 +435,37 @@ async def create_ticket(state: OrderState, config: RunnableConfig) -> dict:
         )
         return {**state, "response": "주문 정보를 확인할 수 없습니다.", "is_pending": False}
 
+    # 상태 재검증 — interrupt 대기 중 주문 상태가 변경되었을 수 있음 (defense-in-depth)
+    eligible = CANCELLABLE_STATUSES if state["action"] == "cancel" else EXCHANGEABLE_STATUSES
+    if order.status not in eligible:
+        logger.warning(
+            "[order_graph] 상태 재검증 실패: user=%s order=%s status=%s action=%s",
+            state["user_id"], state["order_id"], order.status, state["action"],
+        )
+        action_ko = "취소" if state["action"] == "cancel" else "교환"
+        status_display = _STATUS_DISPLAY.get(order.status, order.status)
+        return {
+            **state,
+            "response": f"현재 주문 상태({status_display})에서는 {action_ko}가 불가합니다.",
+            "is_pending": False,
+        }
+
+    # 멱등성 검사 — LangGraph 재실행(interrupt 재진입) 시 중복 티켓 방지
+    _active_filter = [
+        ShopTicket.user_id == state["user_id"],
+        ShopTicket.order_id == state["order_id"],
+        ShopTicket.action_type == state["action"],
+        ShopTicket.status == "received",
+    ]
+    existing = db.query(ShopTicket).filter(*_active_filter).first()
+    if existing:
+        logger.info(
+            "[order_graph] 기존 티켓 재사용: #%s user=%s action=%s order=%s",
+            existing.id, state["user_id"], state["action"], state["order_id"],
+        )
+        response = ORDER_PROMPTS["ticket_created"].format(ticket_id=existing.id)
+        return {**state, "ticket_id": existing.id, "response": response, "is_pending": False}
+
     items_json = json.dumps(state.get("selected_items", []), ensure_ascii=False) or None
 
     ticket = ShopTicket(
@@ -398,13 +479,23 @@ async def create_ticket(state: OrderState, config: RunnableConfig) -> dict:
         status="received",
     )
     db.add(ticket)
-    db.commit()
-    db.refresh(ticket)
-
-    logger.info(
-        f"[order_graph] 티켓 발행: #{ticket.id} "
-        f"user={state['user_id']} action={state['action']} order={state['order_id']}"
-    )
+    try:
+        db.commit()
+        db.refresh(ticket)
+        logger.info(
+            "[order_graph] 티켓 발행: #%s user=%s action=%s order=%s",
+            ticket.id, state["user_id"], state["action"], state["order_id"],
+        )
+    except IntegrityError:
+        # 동시 요청이 체크 이후 먼저 커밋한 경우 — 롤백 후 기존 티켓 재사용
+        db.rollback()
+        ticket = db.query(ShopTicket).filter(*_active_filter).first()
+        if ticket is None:
+            raise
+        logger.info(
+            "[order_graph] 동시 삽입 충돌 — 기존 티켓 재사용: #%s user=%s order=%s",
+            ticket.id, state["user_id"], state["order_id"],
+        )
 
     response = ORDER_PROMPTS["ticket_created"].format(ticket_id=ticket.id)
     return {**state, "ticket_id": ticket.id, "response": response, "is_pending": False}
@@ -434,10 +525,17 @@ def route_after_get_reason(state: OrderState) -> str:
 
 
 def route_after_show_summary(state: OrderState) -> str:
-    """show_summary 이후 분기."""
-    if state.get("abort") or not state.get("confirmed"):
+    """show_summary 이후 분기.
+
+    - abort(명시적 중단) → handle_flow_cancel
+    - confirmed → create_ticket
+    - 단순 거절("아니오" 등) → show_summary 재확인
+    """
+    if state.get("abort"):
         return "handle_flow_cancel"
-    return "create_ticket"
+    if state.get("confirmed"):
+        return "create_ticket"
+    return "show_summary"
 
 
 def route_abort_check(state: OrderState) -> str:

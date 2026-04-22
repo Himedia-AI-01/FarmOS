@@ -26,7 +26,7 @@ export function useTickets(filters: TicketFilters = {}) {
 /** 특정 사용자의 교환 티켓만 가져오는 편의 훅 (챗봇 대화 상세 연동용) */
 export function useUserExchangeTickets(userId: number | null) {
   return useQuery<Ticket[]>({
-    queryKey: ['admin-tickets-user-exchange', userId],
+    queryKey: ['admin-tickets', { action_type: 'exchange', user_id: userId }],
     queryFn: async () => {
       const { data } = await api.get('/api/admin/tickets', {
         params: { action_type: 'exchange', user_id: userId },

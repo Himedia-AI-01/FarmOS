@@ -477,7 +477,10 @@ export default function ChatbotPage() {
               </h3>
 
               {sessionLogs.some((l) => l.intent === 'exchange') ? (
-                <RelatedTickets tickets={selectedUserTickets} isLoading={loadingSelectedTickets} />
+                <RelatedTickets
+                  tickets={selectedUserTickets.filter((t) => t.session_id === selectedSession.id)}
+                  isLoading={loadingSelectedTickets}
+                />
               ) : (
                 <p className="text-xs text-stone-400 py-2">
                   해당 인텐트에는 연관 티켓이 없습니다.

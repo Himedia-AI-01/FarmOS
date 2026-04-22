@@ -43,48 +43,55 @@ function AlertBanner({ variant, icon, title, message, linkTo, onDismiss }: Alert
 
   const s = styles[variant];
 
+  const wrapperClass = `flex items-center justify-between px-5 py-4 border rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all group ${s.wrapper}`;
+
   const inner = (
-    <div
-      className={`flex items-center justify-between px-5 py-4 border rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-all group ${s.wrapper}`}
-    >
-      <div className="flex items-center gap-4">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}>
-          <span
-            className={`material-symbols-outlined text-[18px] ${s.iconColor}`}
-            style={{ fontVariationSettings: "'FILL' 1" }}
-            aria-hidden="true"
-          >
-            {icon}
-          </span>
-        </div>
-        <div>
-          <span className="font-bold text-sm text-stone-900 block">{title}</span>
-          <span className="text-[13px] text-stone-500 font-medium">{message}</span>
-        </div>
-      </div>
-      {onDismiss && (
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); onDismiss(); }}
-          className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors shrink-0 ml-4"
-          aria-label="알림 닫기"
+    <div className="flex items-center gap-4">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${s.iconBg}`}>
+        <span
+          className={`material-symbols-outlined text-[18px] ${s.iconColor}`}
+          style={{ fontVariationSettings: "'FILL' 1" }}
+          aria-hidden="true"
         >
-          <span className="material-symbols-outlined text-stone-400 text-[18px]" aria-hidden="true">
-            close
-          </span>
-        </button>
-      )}
+          {icon}
+        </span>
+      </div>
+      <div>
+        <span className="font-bold text-sm text-stone-900 block">{title}</span>
+        <span className="text-[13px] text-stone-500 font-medium">{message}</span>
+      </div>
     </div>
   );
 
+  const dismissButton = onDismiss ? (
+    <button
+      type="button"
+      onClick={(e) => { e.preventDefault(); onDismiss(); }}
+      className="p-1.5 hover:bg-stone-50 rounded-lg transition-colors shrink-0 ml-4"
+      aria-label="알림 닫기"
+    >
+      <span className="material-symbols-outlined text-stone-400 text-[18px]" aria-hidden="true">
+        close
+      </span>
+    </button>
+  ) : null;
+
   if (linkTo) {
     return (
-      <NavLink to={linkTo} className="block">
-        {inner}
-      </NavLink>
+      <div className={wrapperClass}>
+        <NavLink to={linkTo} className="flex-1">
+          {inner}
+        </NavLink>
+        {dismissButton}
+      </div>
     );
   }
-  return inner;
+  return (
+    <div className={wrapperClass}>
+      {inner}
+      {dismissButton}
+    </div>
+  );
 }
 
 // ──────────────────────────────────────────

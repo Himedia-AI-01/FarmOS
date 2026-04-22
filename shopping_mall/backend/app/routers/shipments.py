@@ -18,6 +18,7 @@ def create_shipment(body: ShipmentCreate, db: Session = Depends(get_db)):
         carrier=body.carrier,
         tracking_number=body.tracking_number,
         expected_arrival=body.expected_arrival,
+        related_ticket_id=body.related_ticket_id,
     )
     db.add(shipment)
     db.commit()

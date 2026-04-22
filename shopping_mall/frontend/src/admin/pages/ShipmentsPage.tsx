@@ -23,9 +23,11 @@ const STATUS_TABS: { value: string; label: string }[] = [
 
 function ShipmentRegisterForm({
   defaultOrderId,
+  relatedTicketId,
   onSuccess,
 }: {
   defaultOrderId?: number;
+  relatedTicketId?: number;
   onSuccess?: () => void;
 }) {
   const [orderId, setOrderId] = useState(defaultOrderId ? String(defaultOrderId) : '');
@@ -45,6 +47,7 @@ function ShipmentRegisterForm({
         carrier,
         tracking_number: trackingNumber,
         expected_arrival: expectedArrival || undefined,
+        ...(relatedTicketId != null && { related_ticket_id: relatedTicketId }),
       },
       {
         onSuccess: () => {
@@ -349,23 +352,27 @@ function ShipmentDetail({ shipment }: { shipment: AdminShipment }) {
       {/* 교환 배송 등록 (교환 티켓이 완료됐고 아직 이 배송이 교환 배송이 아닐 때) */}
       {shipment.related_ticket?.status === 'completed' && (
         <div className="border border-dashed border-[#03C75A] rounded-xl p-4">
-          <div
-            className="flex items-center justify-between cursor-pointer"
+          <button
+            type="button"
+            className="flex items-center justify-between cursor-pointer w-full text-left"
             onClick={() => setShowExchangeForm((v) => !v)}
+            aria-expanded={showExchangeForm}
+            aria-controls="exchange-shipment-form"
           >
             <div className="flex items-center gap-2">
-              <span className="text-[#03C75A] text-lg">+</span>
+              <span className="text-[#03C75A] text-lg" aria-hidden="true">+</span>
               <p className="text-sm font-medium text-[#03C75A]">교환 상품 배송 등록</p>
             </div>
-            <span className="text-gray-400 text-xs">{showExchangeForm ? '▲ 닫기' : '▼ 열기'}</span>
-          </div>
+            <span className="text-gray-400 text-xs" aria-hidden="true">{showExchangeForm ? '▲ 닫기' : '▼ 열기'}</span>
+          </button>
           {showExchangeForm && (
-            <div className="mt-4 pt-4 border-t border-dashed border-[#03C75A]/30">
+            <div id="exchange-shipment-form" className="mt-4 pt-4 border-t border-dashed border-[#03C75A]/30">
               <p className="text-xs text-gray-500 mb-3">
                 주문 #{shipment.order_id}에 교환 상품을 발송하고 운송장을 등록하세요.
               </p>
               <ShipmentRegisterForm
                 defaultOrderId={shipment.order_id}
+                relatedTicketId={shipment.related_ticket?.id}
                 onSuccess={() => setShowExchangeForm(false)}
               />
             </div>

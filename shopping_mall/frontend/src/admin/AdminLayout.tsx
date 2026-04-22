@@ -262,11 +262,12 @@ export default function AdminLayout() {
 
           {/* Right actions */}
           <div className="flex items-center gap-4">
-            {/* Notifications */}
+            {/* Notifications — 티켓 페이지로 이동 */}
             <button
               type="button"
               className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-emerald-600 transition-colors relative rounded-xl hover:bg-stone-100"
               aria-label={`알림 ${totalAlerts}건`}
+              onClick={() => navigate('/admin/tickets')}
             >
               <span className="material-symbols-outlined text-[22px]" aria-hidden="true">
                 notifications
@@ -279,11 +280,13 @@ export default function AdminLayout() {
               )}
             </button>
 
-            {/* Help */}
+            {/* Help — 미구현, 비활성화 */}
             <button
               type="button"
-              className="w-10 h-10 flex items-center justify-center text-stone-400 hover:text-emerald-600 transition-colors rounded-xl hover:bg-stone-100"
-              aria-label="도움말"
+              className="w-10 h-10 flex items-center justify-center text-stone-300 rounded-xl cursor-not-allowed opacity-50"
+              aria-label="도움말 (준비 중)"
+              aria-disabled="true"
+              disabled
             >
               <span className="material-symbols-outlined text-[22px]" aria-hidden="true">
                 help_outline

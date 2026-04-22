@@ -14,7 +14,7 @@ export interface ChatSession {
   id: number;
   user_id: number;
   title: string | null;
-  status: string;
+  status: 'active' | 'closed';
   log_count: number;
   last_question: string | null;
   last_message_at: string | null;

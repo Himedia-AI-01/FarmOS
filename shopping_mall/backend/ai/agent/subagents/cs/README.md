@@ -47,7 +47,7 @@ CS_TOOLS = [t for t in TOOL_DEFINITIONS if t["name"] in _CS_TOOL_NAMES]
 
 CS 에이전트는 교환/반품을 **직접 접수하지 않습니다**. 아래 형식으로만 응답합니다:
 
-```
+```text
 [공감 한 문장]
 
 교환과 반품·환불 중 원하시는 처리 방법을 알려주세요.

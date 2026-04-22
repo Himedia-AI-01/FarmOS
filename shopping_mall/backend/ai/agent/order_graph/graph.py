@@ -94,13 +94,14 @@ def build_order_graph(checkpointer) -> "CompiledStateGraph":
         },
     )
 
-    # show_summary → create_ticket / handle_flow_cancel
+    # show_summary → create_ticket / handle_flow_cancel / show_summary(재확인)
     builder.add_conditional_edges(
         "show_summary",
         route_after_show_summary,
         {
             "create_ticket":      "create_ticket",
             "handle_flow_cancel": "handle_flow_cancel",
+            "show_summary":       "show_summary",
         },
     )
 

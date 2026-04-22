@@ -1,6 +1,28 @@
 export type TicketStatus = 'received' | 'processing' | 'completed' | 'cancelled';
 export type TicketActionType = 'cancel' | 'exchange';
 
+export interface TicketItem {
+  item_id: number;
+  name: string;
+  qty: number;
+}
+
+/**
+ * Backend returns `items` as a JSON string. Use this helper instead of
+ * inlining JSON.parse — it validates the array shape and returns null on
+ * any parse failure.
+ */
+export function parseTicketItems(ticket: Pick<Ticket, 'items'>): TicketItem[] | null {
+  if (!ticket.items) return null;
+  try {
+    const parsed: unknown = JSON.parse(ticket.items);
+    if (!Array.isArray(parsed)) return null;
+    return parsed as TicketItem[];
+  } catch {
+    return null;
+  }
+}
+
 export interface Ticket {
   id: number;
   user_id: number;

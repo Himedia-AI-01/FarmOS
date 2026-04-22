@@ -85,10 +85,7 @@ async def lifespan(app: FastAPI):
             model=settings.claude_fallback_model,
         ) if settings.anthropic_api_key else None
 
-        # AsyncPostgresSaver uses psycopg3 libpq parser — strip SQLAlchemy driver suffix
-        import re as _re
-        _pg_url = _re.sub(r"^(postgres(?:ql)?)\+\w+://", r"\1://", settings.database_url)
-        async with AsyncPostgresSaver.from_conn_string(_pg_url) as checkpointer:
+        async with AsyncPostgresSaver.from_conn_string(settings.langgraph_postgres_url) as checkpointer:
             await checkpointer.setup()
             order_graph = build_order_graph(checkpointer)
 

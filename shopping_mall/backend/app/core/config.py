@@ -1,4 +1,6 @@
 """애플리케이션 설정 — 환경변수를 한 곳에서 관리합니다."""
+import re
+
 from pydantic_settings import BaseSettings
 
 from app.paths import BACKEND_ROOT
@@ -54,6 +56,21 @@ class Settings(BaseSettings):
     # 정책 문서(PDF/DOCX) 폴더. 기본값: shopping_mall/backend/ai/docs/
     # 다른 위치를 쓰려면 .env에 POLICY_DOCS_DIR=/절대/경로 로 지정.
     policy_docs_dir: str = str(BACKEND_ROOT / "ai" / "docs")
+
+    @property
+    def langgraph_postgres_url(self) -> str:
+        """AsyncPostgresSaver(psycopg3)용 URL — SQLAlchemy 드라이버 접미사 제거.
+
+        예: postgresql+asyncpg://... → postgresql://...
+        PostgreSQL URL이 아닌 경우 ValueError를 발생시킵니다.
+        """
+        url = self.database_url
+        if not re.match(r"^postgres(?:ql)?(?:\+\w+)?://", url):
+            raise ValueError(
+                f"DATABASE_URL이 PostgreSQL URL이 아닙니다: {url!r}. "
+                "AsyncPostgresSaver는 PostgreSQL 전용입니다."
+            )
+        return re.sub(r"^(postgres(?:ql)?)\+\w+://", r"\1://", url)
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

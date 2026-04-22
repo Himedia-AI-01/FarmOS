@@ -23,7 +23,19 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 
 export default function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { data: order, isLoading, isError } = useOrder(Number(orderId));
+  const numericId = Number(orderId);
+  const { data: order, isLoading, isError } = useOrder(numericId);
+
+  if (!Number.isFinite(numericId)) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-gray-500">잘못된 주문 번호입니다.</p>
+        <Link to="/mypage/orders" className="text-[#03C75A] text-sm mt-2 inline-block">
+          ← 주문내역으로 돌아가기
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <div className="text-center py-20 text-gray-400">로딩 중...</div>;

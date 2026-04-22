@@ -9,6 +9,7 @@ class Shipment(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("shop_orders.id"), nullable=False)
+    related_ticket_id: Mapped[int | None] = mapped_column(ForeignKey("shop_tickets.id"), nullable=True)
     carrier: Mapped[str] = mapped_column(String(20), nullable=False)
     tracking_number: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="registered")

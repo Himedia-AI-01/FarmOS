@@ -16,6 +16,7 @@ class ShipmentCreate(BaseModel):
     carrier: str
     tracking_number: str
     expected_arrival: Optional[datetime] = None
+    related_ticket_id: Optional[int] = None
 
 
 class ShipmentResponse(BaseModel):

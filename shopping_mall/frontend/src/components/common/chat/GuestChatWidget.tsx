@@ -125,7 +125,7 @@ export default function GuestChatWidget() {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-6 w-[430px] h-[660px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-50 overflow-hidden">
+        <div className="fixed bottom-24 right-6 w-[430px] max-h-[min(660px,calc(100dvh-7rem))] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-50 overflow-hidden">
           {/* 헤더 */}
           <div className="flex items-center justify-between px-4 py-3 bg-[#03C75A] text-white shrink-0">
             <div className="flex items-center gap-2">

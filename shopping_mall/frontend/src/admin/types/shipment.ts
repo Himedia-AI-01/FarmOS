@@ -29,6 +29,7 @@ export interface ShipmentCreatePayload {
   carrier: string;
   tracking_number: string;
   expected_arrival?: string;
+  related_ticket_id?: number;
 }
 
 export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {

@@ -16,18 +16,22 @@ export function renderChatText(text: string): React.ReactNode {
       {parts.map((part, i) => {
         const m = /^#(\d+)$/.exec(part);
         if (m) {
-          return (
-            <a
-              key={i}
-              href={`/mypage/orders/${m[1]}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#03C75A] underline font-medium hover:opacity-80"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {part}
-            </a>
-          );
+          const prev = i > 0 ? parts[i - 1] : '';
+          const hasOrderContext = /(?:주문|주문번호)\s*$/.test(prev);
+          if (hasOrderContext) {
+            return (
+              <a
+                key={i}
+                href={`/mypage/orders/${m[1]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#03C75A] underline font-medium hover:opacity-80"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {part}
+              </a>
+            );
+          }
         }
         return <React.Fragment key={i}>{part}</React.Fragment>;
       })}

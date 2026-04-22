@@ -95,9 +95,15 @@ ORDER_PROMPTS: dict[str, str] = {
     ),
 }
 
-# 취소 의도 키워드
+# 취소 의도 키워드 (주문 선택·사유 입력 등 중간 단계에서 흐름 중단으로 해석)
 CANCEL_KEYWORDS: frozenset[str] = frozenset(
     {"그만", "취소", "stop", "cancel", "아니오", "아니요", "됐어", "됐습니다", "안 할게", "안할게"}
+)
+
+# 최종 확인 단계 전용 강성 중단 키워드.
+# "아니오"/"아니요"는 단순 거절(재확인 요청)이므로 의도적으로 제외.
+HARD_CANCEL_KEYWORDS: frozenset[str] = frozenset(
+    {"그만", "취소", "stop", "cancel", "됐어", "됐습니다", "안 할게", "안할게"}
 )
 
 # 확인 의도 키워드

@@ -77,6 +77,14 @@ class AdminChatSessionResponse(BaseModel):
 
 _VALID_TICKET_STATUSES = {"received", "processing", "completed", "cancelled"}
 
+# 허용된 상태 전환 — 종료 상태(completed, cancelled)에서는 전환 불가
+_TICKET_ALLOWED_TRANSITIONS: dict[str, list[str]] = {
+    "received":   ["processing", "cancelled"],
+    "processing": ["completed", "cancelled"],
+    "completed":  [],
+    "cancelled":  [],
+}
+
 
 def _enrich_ticket(t: ShopTicket, db: Session) -> TicketResponse:
     """lazy="raise" 관계를 별도 쿼리로 보완한다."""
@@ -167,6 +175,13 @@ def update_ticket_status(
     t = db.query(ShopTicket).filter(ShopTicket.id == ticket_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="티켓을 찾을 수 없습니다.")
+    allowed = _TICKET_ALLOWED_TRANSITIONS.get(t.status, [])
+    if body.status not in allowed:
+        allowed_str = ", ".join(allowed) if allowed else "없음 (종료 상태)"
+        raise HTTPException(
+            status_code=400,
+            detail=f"'{t.status}' → '{body.status}' 전환은 허용되지 않습니다. 허용된 전환: {allowed_str}",
+        )
     t.status = body.status
     db.commit()
     db.refresh(t)
@@ -205,15 +220,18 @@ class AdminShipmentResponse(BaseModel):
 
 def _enrich_shipment(s: Shipment, db: Session) -> AdminShipmentResponse:
     order = db.query(Order).filter(Order.id == s.order_id).first()
-    ticket = (
-        db.query(ShopTicket)
-        .filter(
-            ShopTicket.order_id == s.order_id,
-            ShopTicket.action_type == "exchange",
+    if s.related_ticket_id is not None:
+        ticket = db.query(ShopTicket).filter(ShopTicket.id == s.related_ticket_id).first()
+    else:
+        ticket = (
+            db.query(ShopTicket)
+            .filter(
+                ShopTicket.order_id == s.order_id,
+                ShopTicket.action_type == "exchange",
+            )
+            .order_by(desc(ShopTicket.created_at))
+            .first()
         )
-        .order_by(desc(ShopTicket.created_at))
-        .first()
-    )
     related = (
         RelatedTicketSummary(
             id=ticket.id,
@@ -312,8 +330,17 @@ def admin_list_chat_sessions(
     """모든 챗 세션 목록 (최근 업데이트 순)."""
     from app.models.chat_session import ChatSession
 
+    sessions_q = db.query(ChatSession)
+    if escalated_only:
+        # DB 레벨에서 필터링 — offset/limit 전에 적용해야 페이지네이션이 정확함
+        sessions_q = (
+            sessions_q
+            .join(ChatLog, ChatLog.session_id == ChatSession.id)
+            .filter(ChatLog.escalated.is_(True))
+            .distinct()
+        )
     sessions = (
-        db.query(ChatSession)
+        sessions_q
         .order_by(desc(ChatSession.updated_at))
         .offset(offset)
         .limit(limit)
@@ -333,14 +360,12 @@ def admin_list_chat_sessions(
             .filter(ChatLog.session_id == s.id)
             .count()
         )
-        has_escalation = (
+        # escalated_only=True 이면 JOIN 필터로 이미 보장 → 추가 쿼리 불필요
+        has_escalation = escalated_only or (
             db.query(ChatLog)
             .filter(ChatLog.session_id == s.id, ChatLog.escalated.is_(True))
             .first()
         ) is not None
-
-        if escalated_only and not has_escalation:
-            continue
 
         # 이 세션에서 생성된 미처리 티켓 중 가장 심각한 상태 계산
         # received > processing (received가 더 긴급)

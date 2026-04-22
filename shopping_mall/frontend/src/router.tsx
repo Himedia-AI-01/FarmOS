@@ -9,6 +9,7 @@ import OrderPage from '@/pages/OrderPage';
 import OrderCompletePage from '@/pages/OrderCompletePage';
 import MyPage from '@/pages/MyPage';
 import MyOrdersPage from '@/pages/MyOrdersPage';
+import OrderDetailPage from '@/pages/OrderDetailPage';
 import WishlistPage from '@/pages/WishlistPage';
 import StorePage from '@/pages/StorePage';
 
@@ -21,6 +22,7 @@ import ShipmentsPage from '@/admin/pages/ShipmentsPage';
 import ReportsPage from '@/admin/pages/ReportsPage';
 import AnalyticsPage from '@/admin/pages/AnalyticsPage';
 import ExpensesPage from '@/admin/pages/ExpensesPage';
+import TicketsPage from '@/admin/pages/TicketsPage';
 
 export const router = createBrowserRouter([
   {
@@ -36,6 +38,7 @@ export const router = createBrowserRouter([
       { path: 'order/complete', element: <OrderCompletePage /> },
       { path: 'mypage', element: <MyPage /> },
       { path: 'mypage/orders', element: <MyOrdersPage /> },
+      { path: 'mypage/orders/:orderId', element: <OrderDetailPage /> },
       { path: 'mypage/wishlist', element: <WishlistPage /> },
       { path: 'store/:id', element: <StorePage /> },
     ],
@@ -45,6 +48,7 @@ export const router = createBrowserRouter([
     element: <AdminLayout />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: 'tickets', element: <TicketsPage /> },
       { path: 'chatbot', element: <ChatbotPage /> },
       { path: 'cs-insights', element: <CsInsightsPage /> },
       { path: 'calendar', element: <CalendarPage /> },

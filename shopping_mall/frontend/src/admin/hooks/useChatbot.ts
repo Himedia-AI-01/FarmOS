@@ -1,13 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { ChatLog } from '@/admin/types/chatlog';
+import type { ChatLog, ChatSession } from '@/admin/types/chatlog';
 
-export function useChatLogs(intent?: string) {
+export function useChatLogs(filters: { intent?: string; escalated?: boolean } = {}) {
+  const params: Record<string, string> = {};
+  if (filters.intent) params.intent = filters.intent;
+  if (filters.escalated !== undefined) params.escalated = String(filters.escalated);
+
   return useQuery<ChatLog[]>({
-    queryKey: ['chat-logs', intent],
+    queryKey: ['admin-chat-logs', filters],
     queryFn: async () => {
-      const params = intent ? { intent } : {};
-      const { data } = await api.get('/api/chatbot/logs', { params });
+      const { data } = await api.get('/api/admin/chatbot/logs', { params });
       return data;
     },
   });
@@ -15,24 +18,33 @@ export function useChatLogs(intent?: string) {
 
 export function useEscalatedChatLogs() {
   return useQuery<ChatLog[]>({
-    queryKey: ['chat-logs-escalated'],
+    queryKey: ['admin-chat-logs-escalated'],
     queryFn: async () => {
-      const { data } = await api.get('/api/chatbot/logs/escalated');
+      const { data } = await api.get('/api/admin/chatbot/logs/escalated');
       return data;
     },
   });
 }
 
-export function useRateChatLog() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ logId, rating }: { logId: number; rating: number }) => {
-      const { data } = await api.put(`/api/chatbot/logs/${logId}/rating`, { rating });
-      return data as ChatLog;
+export function useChatSessions(escalatedOnly = false) {
+  return useQuery<ChatSession[]>({
+    queryKey: ['admin-chat-sessions', { escalatedOnly }],
+    queryFn: async () => {
+      const { data } = await api.get('/api/admin/chatbot/sessions', {
+        params: escalatedOnly ? { escalated_only: true } : {},
+      });
+      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['chat-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['chat-logs-escalated'] });
+  });
+}
+
+export function useSessionLogs(sessionId: number | null) {
+  return useQuery<ChatLog[]>({
+    queryKey: ['admin-session-logs', sessionId],
+    queryFn: async () => {
+      const { data } = await api.get(`/api/admin/chatbot/sessions/${sessionId}/logs`);
+      return data;
     },
+    enabled: sessionId != null,
   });
 }

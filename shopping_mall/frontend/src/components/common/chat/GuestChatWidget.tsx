@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { INTENT_LABEL } from '@/admin/constants/chatbot';
+import { renderChatText } from './ChatTextRenderer';
 
 interface Message {
   id: string;
@@ -124,7 +125,7 @@ export default function GuestChatWidget() {
   return (
     <>
       {open && (
-        <div className="fixed bottom-24 right-6 w-[430px] max-h-[660px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-50 overflow-hidden">
+        <div className="fixed bottom-24 right-6 w-[430px] h-[660px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-50 overflow-hidden">
           {/* 헤더 */}
           <div className="flex items-center justify-between px-4 py-3 bg-[#03C75A] text-white shrink-0">
             <div className="flex items-center gap-2">
@@ -154,7 +155,7 @@ export default function GuestChatWidget() {
                         : 'bg-gray-100 text-gray-800 rounded-bl-sm'
                     }`}
                   >
-                    {msg.text}
+                    {msg.role === 'bot' ? renderChatText(msg.text) : msg.text}
                   </div>
                   {msg.role === 'bot' && msg.intent && (
                     <div className="flex items-center gap-1.5 px-1">

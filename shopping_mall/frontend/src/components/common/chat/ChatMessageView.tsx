@@ -2,6 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useSessionMessages, useSendMessage, useCloseSession, useGetSession } from './useChatSession.ts';
 import { INTENT_LABEL } from '@/admin/constants/chatbot';
 import { renderChatText } from './ChatTextRenderer';
+import {
+  parseOrderFlowMessage,
+  type OrderFlowUI,
+} from './parseOrderFlowMessage';
 
 const QUICK_ACTIONS = [
   { label: '📦 배송 조회', intent: 'delivery', text: '배송 현황을 알고 싶어요' },
@@ -15,89 +19,6 @@ const WELCOME = {
   role: 'bot' as const,
   text: '안녕하세요! FarmOS 마켓 고객지원입니다.\n무엇이든 물어보세요 😊',
 };
-
-// ── OrderGraph 플로우 메시지 파서 ──────────────────────────────────────────────
-
-interface OrderSelectItem {
-  num: string;
-  orderId: string;
-  summary: string;
-  date: string;
-}
-
-interface SimpleOption {
-  num: string;
-  label: string;
-  isOther: boolean;
-}
-
-interface ItemOption {
-  num: string;
-  label: string;
-}
-
-type OrderFlowUI =
-  | { type: 'confirm' }
-  | { type: 'order-select'; items: OrderSelectItem[] }
-  | { type: 'simple-options'; items: SimpleOption[] }
-  | { type: 'item-select'; items: ItemOption[] }
-  | null;
-
-function parseOrderFlowMessage(text: string): OrderFlowUI {
-  if (!text) return null;
-
-  // 1. 최종 확인: (네 / 아니오)
-  if (text.includes('(네 / 아니오)')) {
-    return { type: 'confirm' };
-  }
-
-  // 2. 주문 선택: "번호(1, 2 …)를 입력해 주세요" 패턴
-  if (text.includes('번호(1, 2') && text.includes('를 입력해 주세요')) {
-    const items: OrderSelectItem[] = [];
-    const lines = text.split('\n');
-    let current: Partial<OrderSelectItem> | null = null;
-
-    for (const line of lines) {
-      const numMatch = line.match(/^(\d+)\) 주문 번호 (#\d+)/);
-      if (numMatch) {
-        if (current?.num) items.push(current as OrderSelectItem);
-        current = { num: numMatch[1], orderId: numMatch[2], summary: '', date: '' };
-      } else if (current) {
-        const productMatch = line.match(/· 상품: (.+)/);
-        const dateMatch = line.match(/· 주문일: (.+)/);
-        if (productMatch) current.summary = productMatch[1].trim();
-        if (dateMatch) current.date = dateMatch[1].trim();
-      }
-    }
-    if (current?.num) items.push(current as OrderSelectItem);
-    if (items.length > 0) return { type: 'order-select', items };
-  }
-
-  // 3. 교환 품목 선택
-  if (text.includes('교환할 상품과 수량을 알려주세요')) {
-    const items: ItemOption[] = [];
-    for (const line of text.split('\n')) {
-      const m = line.match(/^(\d+)\.\s+(.+)/);
-      if (m) items.push({ num: m[1], label: m[2].trim() });
-    }
-    return { type: 'item-select', items };
-  }
-
-  // 4. 사유 선택 / 환불 방법 선택
-  if (text.includes('번호 또는 사유를 입력해 주세요') || text.includes('번호를 입력해 주세요')) {
-    const items: SimpleOption[] = [];
-    for (const line of text.split('\n')) {
-      const m = line.match(/^(\d+)\.\s+(.+)/);
-      if (m) {
-        const label = m[2].trim();
-        items.push({ num: m[1], label, isOther: label.startsWith('기타') });
-      }
-    }
-    if (items.length > 0) return { type: 'simple-options', items };
-  }
-
-  return null;
-}
 
 // ── 인터랙티브 액션 컴포넌트 ──────────────────────────────────────────────────
 

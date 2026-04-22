@@ -6,6 +6,7 @@ interface TicketFilters {
   status?: TicketStatus | 'all';
   action_type?: TicketActionType | 'all';
   user_id?: number | null;
+  limit?: number;
 }
 
 export function useTickets(filters: TicketFilters = {}) {
@@ -13,6 +14,7 @@ export function useTickets(filters: TicketFilters = {}) {
   if (filters.status && filters.status !== 'all') params.status = filters.status;
   if (filters.action_type && filters.action_type !== 'all') params.action_type = filters.action_type;
   if (filters.user_id != null) params.user_id = String(filters.user_id);
+  if (filters.limit != null) params.limit = String(filters.limit);
 
   return useQuery<Ticket[]>({
     queryKey: ['admin-tickets', filters],

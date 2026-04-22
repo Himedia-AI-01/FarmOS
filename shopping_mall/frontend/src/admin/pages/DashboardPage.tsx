@@ -213,7 +213,7 @@ export default function DashboardPage() {
   const { data: dashboard, isLoading, isError } = useDashboard();
   const { data: escalated = [] } = useEscalatedLogs();
   const { data: ticketStats } = useDashboardTicketStats();
-  const { data: recentTickets = [] } = useTickets();
+  const { data: recentTickets = [] } = useTickets({ limit: 5 });
 
   const [dismissedEscalation, setDismissedEscalation] = useState(false);
   const [dismissedTickets, setDismissedTickets] = useState(false);
@@ -369,7 +369,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-stone-50">
-              {recentTickets.slice(0, 5).map((ticket) => (
+              {recentTickets.map((ticket) => (
                 <TicketRow
                   key={ticket.id}
                   icon={ACTION_ICON_MAP[ticket.action_type] ?? 'chat_bubble'}

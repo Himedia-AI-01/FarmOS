@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+from app.database import SessionLocal
+
 from ai.agent.clients.base import AgentClient, AgentUnavailableError, ToolCall
 from ai.agent.executor import (
     AgentExecutor,
@@ -206,11 +208,22 @@ class SupervisorExecutor:
             timed_results: list = [None] * len(response.tool_calls)
             pending_result: _OrderPendingResult | None = None
 
-            # 병렬 실행 (CS 에이전트)
+            # 병렬 실행 (CS 에이전트) — 각 호출에 독립 Session 할당
+            # asyncio.gather는 단일 스레드 내 인터리빙이지만, SQLAlchemy Session은
+            # 동시 사용을 보장하지 않으므로 호출별로 새 Session을 생성·종료한다.
             if parallel_indexed:
+                async def _cs_dispatch(tc: ToolCall) -> tuple:
+                    local_db = SessionLocal()
+                    try:
+                        return await self._timed_dispatch(tc, local_db, user_id, session_id)
+                    except Exception:
+                        local_db.rollback()
+                        raise
+                    finally:
+                        local_db.close()
+
                 par_results = await asyncio.gather(*(
-                    self._timed_dispatch(tc, db, user_id, session_id)
-                    for _, tc in parallel_indexed
+                    _cs_dispatch(tc) for _, tc in parallel_indexed
                 ))
                 for (i, _), res in zip(parallel_indexed, par_results):
                     timed_results[i] = res
@@ -267,9 +280,10 @@ class SupervisorExecutor:
                     empty_result=False,
                     iteration=iteration + 1,
                 ))
+                result_len = len(result_str)
                 logger.info(
                     f"[supervisor] iter={iteration+1} tool={tc_obj.name} "
-                    f"latency={latency_ms}ms → {result_str[:120]}"
+                    f"latency={latency_ms}ms len={result_len} ok=True"
                 )
 
             # ── Pass-through 최적화 ─────────────────────────────────────────

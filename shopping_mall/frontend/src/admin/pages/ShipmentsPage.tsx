@@ -349,8 +349,8 @@ function ShipmentDetail({ shipment }: { shipment: AdminShipment }) {
         </div>
       )}
 
-      {/* 교환 배송 등록 (교환 티켓이 완료됐고 아직 이 배송이 교환 배송이 아닐 때) */}
-      {shipment.related_ticket?.status === 'completed' && (
+      {/* 교환 배송 등록 (교환 티켓이 완료됐고 이 배송이 원본 배송일 때만) */}
+      {shipment.related_ticket?.status === 'completed' && shipment.related_ticket_id == null && (
         <div className="border border-dashed border-[#03C75A] rounded-xl p-4">
           <button
             type="button"

@@ -20,6 +20,8 @@ export interface AdminShipment {
   tracking_history: string | null;
   created_at: string | null;
   order_total: number | null;
+  /** 명시적 FK — null이면 원본 배송, non-null이면 이 배송 자체가 교환 배송 */
+  related_ticket_id: number | null;
   related_ticket: RelatedTicket | null;
 }
 

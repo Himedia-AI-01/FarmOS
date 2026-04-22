@@ -66,8 +66,10 @@ class Settings(BaseSettings):
         """
         url = self.database_url
         if not re.match(r"^postgres(?:ql)?(?:\+\w+)?://", url):
+            scheme_match = re.match(r"^([^:/]+)", url)
+            detected = scheme_match.group(1) if scheme_match else "(unknown)"
             raise ValueError(
-                f"DATABASE_URL이 PostgreSQL URL이 아닙니다: {url!r}. "
+                f"DATABASE_URL이 PostgreSQL URL이 아닙니다 (감지된 스킴: {detected!r}). "
                 "AsyncPostgresSaver는 PostgreSQL 전용입니다."
             )
         return re.sub(r"^(postgres(?:ql)?)\+\w+://", r"\1://", url)

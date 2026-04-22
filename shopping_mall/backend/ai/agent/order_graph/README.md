@@ -245,10 +245,11 @@ else:                   new_status = "registered"
 |------|------|------|
 | `id` | int PK | 티켓 번호 |
 | `user_id` | int FK | 고객 |
+| `session_id` | int FK? | 채팅 세션 (`shop_chat_sessions.id`, nullable) |
 | `order_id` | int FK | 대상 주문 |
 | `action_type` | str(20) | "cancel" \| "exchange" |
 | `reason` | Text | 사유 |
 | `refund_method` | str(50)? | 환불 방법 (취소 전용) |
 | `items` | Text? | JSON 배열 (교환 전용) |
-| `status` | str(30) | "received" → "processing" → "completed" |
+| `status` | str(30) | "received" → "processing" → "completed" \| "cancelled" |
 | `created_at` | datetime | 접수 시각 |

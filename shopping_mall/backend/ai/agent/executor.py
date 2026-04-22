@@ -19,6 +19,10 @@ MAX_ITERATIONS = 10       # 하드코딩 폴백 (settings 미설정 시)
 MAX_ANSWER_LENGTH = 1000  # 최종 응답 최대 글자 수
 _WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
+# 한국어 문자 바로 뒤의 "; " 패턴 — 코드·URL·세미콜론 리스트를 건드리지 않도록
+# 한국어 문자(U+AC00–U+D7A3) 뒤에 등장하는 세미콜론+공백만 대상으로 삼음
+_KO_SEMICOLON_RE = re.compile(r"(?<=[\uAC00-\uD7A3]);\s+")
+
 # 배송/주문 상태 한국어 매핑
 _SHIPMENT_STATUS_KO: dict[str, str] = {
     "registered": "배송 준비 중",
@@ -175,8 +179,13 @@ def _parse_answer(raw: str) -> str:
     """
     # 마크다운 헤딩 제거 (## 제목 → 제목)
     text = re.sub(r"^#{1,6}\s+", "", raw, flags=re.MULTILINE)
-    # LLM이 한국어 문장을 세미콜론으로 이어붙이는 오류 보정 ("A; B" → "A. B")
-    text = re.sub(r";\s+", ". ", text)
+    # LLM이 한국어 문장을 세미콜론으로 이어붙이는 오류 보정 ("가나다; 라마바" → "가나다. 라마바")
+    # 코드 펜스(```) 밖에서만, 한국어 문자 바로 뒤의 "; " 패턴에만 적용
+    _fence_parts = text.split("```")
+    text = "```".join(
+        _KO_SEMICOLON_RE.sub(". ", seg) if i % 2 == 0 else seg
+        for i, seg in enumerate(_fence_parts)
+    )
     # 3줄 이상 연속 빈 줄 → 2줄
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
 
@@ -505,12 +514,11 @@ class AgentExecutor:
 
         try:
             base_query = db.query(Order).filter(Order.user_id == user_id)
+            total_orders = base_query.count()
 
             if order_id:
                 orders = base_query.filter(Order.id == order_id).all()
-                total_orders = len(orders)
             else:
-                total_orders = base_query.count()
                 orders = base_query.order_by(Order.created_at.desc()).limit(3).all()
 
             if not orders:

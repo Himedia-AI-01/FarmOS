@@ -213,6 +213,7 @@ class AdminShipmentResponse(BaseModel):
     created_at: Optional[datetime] = None
     # 연관 정보
     order_total: Optional[int] = None
+    related_ticket_id: Optional[int] = None  # 명시적 FK — None이면 원본 배송(교환 배송 아님)
     related_ticket: Optional[RelatedTicketSummary] = None
 
     model_config = {"from_attributes": True}
@@ -254,6 +255,7 @@ def _enrich_shipment(s: Shipment, db: Session) -> AdminShipmentResponse:
         tracking_history=s.tracking_history,
         created_at=s.created_at,
         order_total=order.total_price if order else None,
+        related_ticket_id=s.related_ticket_id,
         related_ticket=related,
     )
 

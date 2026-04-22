@@ -71,7 +71,7 @@ function timeAgo(dateStr: string): string {
 // ExchangeShipmentPanel
 // ──────────────────────────────────────────
 
-function ExchangeShipmentPanel({ orderId }: { orderId: number }) {
+function ExchangeShipmentPanel({ orderId, relatedTicketId }: { orderId: number; relatedTicketId: number }) {
   const [open, setOpen] = useState(false);
   const [carrier, setCarrier] = useState(CARRIERS[0]);
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -83,7 +83,7 @@ function ExchangeShipmentPanel({ orderId }: { orderId: number }) {
     e.preventDefault();
     if (!trackingNumber) return;
     create(
-      { order_id: orderId, carrier, tracking_number: trackingNumber, expected_arrival: expectedArrival || undefined },
+      { order_id: orderId, carrier, tracking_number: trackingNumber, expected_arrival: expectedArrival || undefined, related_ticket_id: relatedTicketId },
       {
         onSuccess: () => {
           setTrackingNumber('');
@@ -581,7 +581,7 @@ function TicketDetail({ ticket }: { ticket: Ticket }) {
 
       {/* ── Exchange shipment panel ── */}
       {ticket.action_type === 'exchange' && ticket.status === 'completed' && (
-        <ExchangeShipmentPanel orderId={ticket.order_id} />
+        <ExchangeShipmentPanel orderId={ticket.order_id} relatedTicketId={ticket.id} />
       )}
 
       {/* ── Bottom actions ── */}
@@ -621,6 +621,17 @@ export default function TicketsPage() {
   });
   const { data: stats } = useTicketStats();
 
+  const q = searchParams.get('q')?.trim() ?? '';
+  const qLower = q.toLowerCase();
+  const visibleTickets = q
+    ? tickets.filter(
+        (t) =>
+          String(t.id).includes(qLower) ||
+          String(t.order_id).includes(qLower) ||
+          (t.user_name?.toLowerCase().includes(qLower) ?? false),
+      )
+    : tickets;
+
   // URL ?ticketId=X 로 진입하면 해당 티켓을 자동 선택
   useEffect(() => {
     const ticketId = Number(searchParams.get('ticketId'));
@@ -628,7 +639,7 @@ export default function TicketsPage() {
     const target = tickets.find((t) => t.id === ticketId);
     if (target) {
       setSelected(target);
-      setSearchParams({}, { replace: true }); // 파라미터 소비 후 제거
+      setSearchParams(q ? { q } : {}, { replace: true }); // ticketId 소비, q는 유지
     }
   }, [tickets, searchParams, setSearchParams]);
 
@@ -708,7 +719,7 @@ export default function TicketsPage() {
               })}
 
               <span className="ml-auto text-[11px] text-stone-400 font-medium">
-                {tickets.length}건
+                {visibleTickets.length}건
               </span>
             </div>
           </div>
@@ -735,6 +746,15 @@ export default function TicketsPage() {
                   <div className="h-3 w-2/3 bg-stone-100 rounded" />
                 </div>
               ))
+            ) : q && visibleTickets.length === 0 ? (
+              <div className="pt-12 text-center space-y-2">
+                <span className="material-symbols-outlined text-stone-200 text-[48px] block" aria-hidden="true">
+                  search_off
+                </span>
+                <p className="text-sm text-stone-400">
+                  <span className="font-medium text-stone-500">"{q}"</span> 검색 결과 없음
+                </p>
+              </div>
             ) : tickets.length === 0 ? (
               <div className="pt-12 text-center space-y-2">
                 <span
@@ -746,7 +766,7 @@ export default function TicketsPage() {
                 <p className="text-sm text-stone-400">티켓이 없습니다</p>
               </div>
             ) : (
-              tickets.map((ticket) => (
+              visibleTickets.map((ticket) => (
                 <TicketCard
                   key={ticket.id}
                   ticket={ticket}

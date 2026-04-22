@@ -17,7 +17,7 @@ export function renderChatText(text: string): React.ReactNode {
         const m = /^#(\d+)$/.exec(part);
         if (m) {
           const prev = i > 0 ? parts[i - 1] : '';
-          const hasOrderContext = /(?:주문|주문번호)\s*$/.test(prev);
+          const hasOrderContext = /주문(?:\s*번호)?[\s:：(]*$/.test(prev);
           if (hasOrderContext) {
             return (
               <a

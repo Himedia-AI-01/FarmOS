@@ -23,10 +23,13 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 
 export default function OrderDetailPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const numericId = Number(orderId);
+  // /^\d+$/ rejects empty, negatives, floats, and non-numeric strings
+  const isValidId = /^\d+$/.test(orderId ?? '') && Number(orderId) > 0;
+  const numericId = isValidId ? Number(orderId) : 0;
+  // pass 0 when invalid so useOrder's `enabled: !!id` suppresses the fetch
   const { data: order, isLoading, isError } = useOrder(numericId);
 
-  if (!Number.isFinite(numericId)) {
+  if (!isValidId) {
     return (
       <div className="text-center py-20">
         <p className="text-gray-500">잘못된 주문 번호입니다.</p>

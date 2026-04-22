@@ -7,6 +7,16 @@ export interface TicketItem {
   qty: number;
 }
 
+function isTicketItem(item: unknown): item is TicketItem {
+  if (typeof item !== 'object' || item === null) return false;
+  const r = item as Record<string, unknown>;
+  return (
+    typeof r.item_id === 'number' &&
+    typeof r.name === 'string' &&
+    typeof r.qty === 'number'
+  );
+}
+
 /**
  * Backend returns `items` as a JSON string. Use this helper instead of
  * inlining JSON.parse — it validates the array shape and returns null on
@@ -17,7 +27,8 @@ export function parseTicketItems(ticket: Pick<Ticket, 'items'>): TicketItem[] | 
   try {
     const parsed: unknown = JSON.parse(ticket.items);
     if (!Array.isArray(parsed)) return null;
-    return parsed as TicketItem[];
+    if (!parsed.every(isTicketItem)) return null;
+    return parsed;
   } catch {
     return null;
   }

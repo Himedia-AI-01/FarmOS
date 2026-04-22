@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.shipment import Shipment
+from app.models.ticket import ShopTicket
 from app.schemas.shipment import ShipmentCreate, ShipmentResponse
 from app.services.shipping_tracker import ShippingTracker
 
@@ -13,6 +14,10 @@ router = APIRouter(prefix="/api/shipments", tags=["shipments"])
 
 @router.post("/", response_model=ShipmentResponse)
 def create_shipment(body: ShipmentCreate, db: Session = Depends(get_db)):
+    if body.related_ticket_id is not None:
+        ticket = db.query(ShopTicket).filter(ShopTicket.id == body.related_ticket_id).first()
+        if not ticket:
+            raise HTTPException(status_code=404, detail="ShopTicket not found")
     shipment = Shipment(
         order_id=body.order_id,
         carrier=body.carrier,

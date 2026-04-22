@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.models.chat_log import ChatLog
 from app.models.chat_session import ChatSession
+from app.models.ticket import ShopTicket
 from app.models.tool_metric import ToolMetric
 from app.schemas.chatlog import (
     ChatQuestion, ChatAnswer, ChatLogResponse, ChatRating,
@@ -409,7 +410,11 @@ def delete_session(
     if session.user_id != authenticated_user_id:
         raise HTTPException(status_code=403, detail="Cannot delete other users' sessions")
 
-    # FK 의존 순서대로 삭제: ToolMetric → ChatLog → ChatSession
+    # FK 의존 순서대로 삭제: ShopTicket.session_id 해제 → ToolMetric → ChatLog → ChatSession
+    # ShopTicket.session_id는 nullable FK이지만 ondelete가 없으므로 먼저 NULL로 초기화
+    db.query(ShopTicket).filter(ShopTicket.session_id == session_id).update(
+        {ShopTicket.session_id: None}, synchronize_session=False
+    )
     # 서브쿼리 방식 — id 목록을 Python으로 가져오지 않아 파라미터 과부하 없음
     log_id_subquery = (
         db.query(ChatLog.id)

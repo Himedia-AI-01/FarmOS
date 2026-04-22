@@ -58,6 +58,19 @@ def _is_hard_cancel_intent(text: str) -> bool:
     return any(kw in text_lower for kw in HARD_CANCEL_KEYWORDS)
 
 
+def _is_flow_abort_intent(text: str, action: str) -> bool:
+    """흐름 중단 의도 판별 — 액션 컨텍스트를 반영.
+
+    취소 플로우(action='cancel')에서는 '취소'를 중단 키워드에서 제외합니다.
+    '취소 사유', '카드 취소', '배송 취소 때문에' 등 취소 플로우의 정상 응답에
+    '취소'가 포함되더라도 흐름 중단으로 오탐하지 않습니다.
+    교환 플로우에서는 CANCEL_KEYWORDS 전체를 그대로 사용합니다.
+    """
+    keywords = CANCEL_KEYWORDS - {"취소"} if action == "cancel" else CANCEL_KEYWORDS
+    text_lower = text.strip().lower()
+    return any(kw in text_lower for kw in keywords)
+
+
 def _is_confirm_intent(text: str) -> bool:
     text_lower = text.strip().lower()
     return any(kw in text_lower for kw in CONFIRM_KEYWORDS)
@@ -231,7 +244,7 @@ async def list_orders(state: OrderState, config: RunnableConfig) -> dict:
     # ── interrupt: 사용자 주문 선택 대기 ──────────────────────────────────
     user_input = interrupt(prompt)
 
-    if _is_cancel_intent(user_input):
+    if _is_flow_abort_intent(user_input, state["action"]):
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
 
     # 단일 주문일 때 긍정 응답("응", "네", "진행해줘" 등) → 유일한 주문 자동 선택
@@ -244,7 +257,7 @@ async def list_orders(state: OrderState, config: RunnableConfig) -> dict:
         # 한 번 더 물어보기
         retry_prompt = ORDER_PROMPTS["invalid_order_selection"].format(order_list=order_list)
         user_input = interrupt(retry_prompt)
-        if _is_cancel_intent(user_input):
+        if _is_flow_abort_intent(user_input, state["action"]):
             return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
         if len(orders) == 1 and _is_confirm_intent(user_input):
             order_id = orders[0].id
@@ -299,7 +312,7 @@ async def select_items(state: OrderState, config: RunnableConfig) -> dict:
     # ── interrupt: 교환 품목 선택 대기 ────────────────────────────────────
     user_input = interrupt(prompt)
 
-    if _is_cancel_intent(user_input):
+    if _is_flow_abort_intent(user_input, state["action"]):
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
 
     # 사용자 입력 파싱 — 엄격한 "N번" 앵커 사용, 수량은 동일 토큰에서만 추출
@@ -314,7 +327,7 @@ async def select_items(state: OrderState, config: RunnableConfig) -> dict:
             "진행을 중단하려면 '그만'이라고 입력하세요."
         )
         user_input = interrupt(retry_prompt)
-        if _is_cancel_intent(user_input):
+        if _is_flow_abort_intent(user_input, state["action"]):
             return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
         selected = _parse_item_selections(user_input, order_items, db)
 
@@ -362,7 +375,7 @@ async def get_reason(state: OrderState, config: RunnableConfig) -> dict:
     # ── interrupt: 사유 입력 대기 ────────────────────────────────────────
     user_input = interrupt(prompt)
 
-    if _is_cancel_intent(user_input):
+    if _is_flow_abort_intent(user_input, state["action"]):
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
 
     reason = _parse_reason(user_input, reason_map)
@@ -376,7 +389,7 @@ async def get_refund_method(state: OrderState, config: RunnableConfig) -> dict:
     # ── interrupt: 환불 방법 대기 ────────────────────────────────────────
     user_input = interrupt(prompt)
 
-    if _is_cancel_intent(user_input):
+    if _is_flow_abort_intent(user_input, state["action"]):
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
 
     refund_method = _parse_refund_method(user_input)
@@ -412,7 +425,7 @@ async def show_summary(state: OrderState, config: RunnableConfig) -> dict:
     # 명시적 중단("그만", "취소" 등)만 abort로 처리.
     # 단순 "아니오"/"아니요"는 abort가 아닌 confirmed=False로 처리하여 재확인 유도.
     is_hard_cancel = _is_hard_cancel_intent(user_input)
-    confirmed = _is_confirm_intent(user_input) and not _is_cancel_intent(user_input)
+    confirmed = _is_confirm_intent(user_input) and not _is_flow_abort_intent(user_input, state["action"])
     return {**state, "confirmed": confirmed, "abort": is_hard_cancel}
 
 

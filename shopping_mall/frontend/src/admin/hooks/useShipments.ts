@@ -1,14 +1,27 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { Shipment, ShipmentCreatePayload } from '@/admin/types/shipment';
+import type { AdminShipment, ShipmentCreatePayload } from '@/admin/types/shipment';
 
-export function useShipments(status?: string) {
-  return useQuery<Shipment[]>({
-    queryKey: ['shipments', status],
+export function useAdminShipments(status?: string) {
+  const params = status ? { status } : {};
+  return useQuery<AdminShipment[]>({
+    queryKey: ['admin-shipments', status],
     queryFn: async () => {
-      const params = status ? { status } : {};
-      const { data } = await api.get('/api/shipments', { params });
+      const { data } = await api.get('/api/admin/shipments', { params });
       return data;
+    },
+  });
+}
+
+export function useCheckShipment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (shipmentId: number) => {
+      const { data } = await api.post(`/api/admin/shipments/${shipmentId}/check`);
+      return data as AdminShipment;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-shipments'] });
     },
   });
 }
@@ -21,7 +34,7 @@ export function useCreateShipment() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shipments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-shipments'] });
     },
   });
 }

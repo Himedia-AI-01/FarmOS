@@ -1,1 +1,114 @@
 @import "tailwindcss";
+
+/* ──────────────────────────────────────────
+   FarmOS Admin Design Tokens (Material Design 3 / Emerald palette)
+   Tailwind v4 CSS-variable-based theme extension
+   ────────────────────────────────────────── */
+
+@theme {
+  /* Primary brand */
+  --color-primary: #006933;
+  --color-primary-container: #008542;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #eeffec;
+  --color-primary-fixed: #8df9a8;
+  --color-primary-fixed-dim: #71dc8e;
+  --color-on-primary-fixed: #00210c;
+  --color-on-primary-fixed-variant: #005226;
+  --color-inverse-primary: #71dc8e;
+
+  /* Secondary brand */
+  --color-secondary: #406748;
+  --color-secondary-container: #bfeac4;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #456b4c;
+  --color-secondary-fixed: #c2edc7;
+  --color-secondary-fixed-dim: #a6d1ac;
+  --color-on-secondary-fixed: #00210c;
+  --color-on-secondary-fixed-variant: #294f32;
+
+  /* Tertiary */
+  --color-tertiary: #9d364a;
+  --color-tertiary-container: #bd4e61;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #fff9f8;
+  --color-tertiary-fixed: #ffd9dc;
+  --color-tertiary-fixed-dim: #ffb2ba;
+  --color-on-tertiary-fixed: #400011;
+  --color-on-tertiary-fixed-variant: #832237;
+
+  /* Error */
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+
+  /* Surface & Background */
+  --color-background: #f8f9fa;
+  --color-on-background: #191c1d;
+  --color-surface: #f8f9fa;
+  --color-on-surface: #191c1d;
+  --color-on-surface-variant: #3e4a3f;
+  --color-surface-variant: #e1e3e4;
+  --color-surface-tint: #006d35;
+  --color-surface-bright: #f8f9fa;
+  --color-surface-dim: #d9dadb;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f4f5;
+  --color-surface-container: #edeeef;
+  --color-surface-container-high: #e7e8e9;
+  --color-surface-container-highest: #e1e3e4;
+  --color-inverse-surface: #2e3132;
+  --color-inverse-on-surface: #f0f1f2;
+
+  /* Outline */
+  --color-outline: #6e7a6e;
+  --color-outline-variant: #bdcabc;
+
+  /* Font families */
+  --font-headline: "Inter", "Pretendard", sans-serif;
+  --font-body: "Inter", "Pretendard", sans-serif;
+  --font-label: "Inter", "Pretendard", sans-serif;
+}
+
+/* ──────────────────────────────────────────
+   Global base styles
+   ────────────────────────────────────────── */
+body {
+  font-family: "Inter", "Pretendard", sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+}
+
+/* Material Symbols Outlined base variation settings */
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  vertical-align: middle;
+  line-height: 1;
+  font-size: 24px;
+  /* Prevent layout shift — treat as inline-block */
+  display: inline-block;
+  user-select: none;
+}
+
+/* No-scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Glass nav backdrop */
+.glass-nav {
+  background: rgba(248, 249, 250, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Selection color */
+::selection {
+  background-color: var(--color-primary-fixed-dim);
+  color: var(--color-on-primary-fixed);
+}

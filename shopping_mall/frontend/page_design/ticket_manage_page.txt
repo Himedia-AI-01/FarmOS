@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+
+<html lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Cultivated Archive | CS 운영</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-container": "#456b4c",
+                        "secondary-container": "#bfeac4",
+                        "on-secondary-fixed-variant": "#294f32",
+                        "on-background": "#191c1d",
+                        "secondary": "#406748",
+                        "surface": "#f8f9fa",
+                        "primary-fixed-dim": "#71dc8e",
+                        "primary-fixed": "#8df9a8",
+                        "error-container": "#ffdad6",
+                        "surface-dim": "#d9dadb",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-tertiary-fixed": "#400011",
+                        "on-surface-variant": "#3e4a3f",
+                        "inverse-surface": "#2e3132",
+                        "primary-container": "#008542",
+                        "on-primary": "#ffffff",
+                        "surface-container-low": "#f3f4f5",
+                        "surface-container-high": "#e7e8e9",
+                        "secondary-fixed-dim": "#a6d1ac",
+                        "tertiary": "#9d364a",
+                        "primary": "#006933",
+                        "on-secondary-fixed": "#00210c",
+                        "outline": "#6e7a6e",
+                        "on-tertiary-fixed-variant": "#832237",
+                        "surface-variant": "#e1e3e4",
+                        "on-primary-fixed-variant": "#005226",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#eeffec",
+                        "secondary-fixed": "#c2edc7",
+                        "on-tertiary-container": "#fff9f8",
+                        "inverse-primary": "#71dc8e",
+                        "outline-variant": "#bdcabc",
+                        "on-error-container": "#93000a",
+                        "tertiary-fixed-dim": "#ffb2ba",
+                        "tertiary-container": "#bd4e61",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-bright": "#f8f9fa",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#00210c",
+                        "background": "#f8f9fa",
+                        "surface-container": "#edeeef",
+                        "inverse-on-surface": "#f0f1f2",
+                        "tertiary-fixed": "#ffd9dc",
+                        "on-surface": "#191c1d",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#006d35",
+                        "on-error": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter", "Pretendard"],
+                        "body": ["Inter", "Pretendard"],
+                        "label": ["Inter", "Pretendard"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Pretendard', 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-surface flex min-h-screen">
+<!-- SideNavBar -->
+<aside class="w-[240px] h-screen sticky top-0 left-0 flex flex-col border-r-0 h-full p-6 space-y-8 bg-white dark:bg-stone-900 font-['Inter','Pretendard'] text-sm tracking-tight">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-white">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">eco</span>
+</div>
+<div>
+<h1 class="text-lg font-bold tracking-tighter text-emerald-900 dark:text-emerald-50 leading-none">The Cultivated Archive</h1>
+<p class="text-[10px] text-stone-500 uppercase tracking-widest mt-1">Agricultural Ledger</p>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-stone-500 dark:text-stone-400 hover:text-emerald-600 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800/50 rounded-lg" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>개요</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50/50 dark:bg-emerald-900/20 rounded-lg" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">support_agent</span>
+<span>CS 운영</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-stone-500 dark:text-stone-400 hover:text-emerald-600 transition-colors hover:bg-stone-100 dark:hover:bg-stone-800/50 rounded-lg" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>비즈니스</span>
+</a>
+</nav>
+<div class="pt-6 border-t border-stone-100 dark:border-stone-800 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-stone-500 hover:text-emerald-600 transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>설정</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-stone-500 hover:text-emerald-600 transition-colors rounded-lg" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span>로그아웃</span>
+</a>
+</div>
+</aside>
+<main class="flex-1 flex flex-col min-h-screen">
+<!-- TopNavBar -->
+<header class="w-full h-16 sticky top-0 z-40 flex items-center justify-between px-8 bg-stone-50/70 dark:bg-stone-950/70 backdrop-blur-xl no-border shadow-none">
+<div class="flex items-center flex-1">
+<div class="relative w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm">search</span>
+<input class="w-full bg-surface-container-highest border-none rounded-md pl-10 pr-4 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500/20 transition-all" placeholder="검색어를 입력하세요..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<button class="text-stone-400 hover:text-emerald-600 transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-1.5 h-1.5 bg-tertiary rounded-full"></span>
+</button>
+<button class="text-stone-400 hover:text-emerald-600 transition-colors">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<div class="flex items-center gap-3 ml-2">
+<div class="text-right">
+<p class="text-[10px] font-bold text-emerald-800 uppercase tracking-widest leading-tight">Admin</p>
+<p class="text-xs text-stone-500">관리자님</p>
+</div>
+<img alt="Admin headshot" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAl3punzvuSuPOCqd7QN9m9-6EpOrk9dNYIYIpwx-Vygr-MlrXgErwyxGiVum8KG2g5eqPNREjIB_ZCERespPDxz73OQQChqa4UexqJDd35rYEuZtU05cCxy_E8XWy8ynCk0Y0NLa7soUzPFgn3BpLFjUh-JXxn4IFXE73GJdVE8tr_xEeGf8fQh_5nnFB3YjiDUwZzGXQ9IXk8twW9mFDmqVZt4NdXGPVl_bZK4GTZ_1G2tqwaLGC_q5539yCPMqwru7emwnGuh5E"/>
+</div>
+</div>
+</header>
+<section class="flex flex-1 overflow-hidden">
+<!-- Left Panel: Ticket List -->
+<div class="w-[320px] bg-surface-container-low flex flex-col border-r border-stone-200/60">
+<div class="p-6 pb-4">
+<h2 class="text-headline-sm font-bold text-on-surface mb-6">CS 운영</h2>
+<!-- Tabs -->
+<div class="flex gap-1 overflow-x-auto hide-scrollbar mb-4 bg-surface-container rounded-lg p-1">
+<button class="px-3 py-1.5 text-xs font-semibold bg-white text-primary rounded-md shadow-sm">전체 <span class="ml-1 opacity-60">24</span></button>
+<button class="px-3 py-1.5 text-xs font-medium text-stone-500 hover:bg-white/50 rounded-md transition-colors">접수됨 <span class="ml-1 opacity-60">8</span></button>
+<button class="px-3 py-1.5 text-xs font-medium text-stone-500 hover:bg-white/50 rounded-md transition-colors">처리중 <span class="ml-1 opacity-60">12</span></button>
+</div>
+<!-- Toggles -->
+<div class="flex items-center gap-2 mb-4">
+<button class="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-stone-200 text-stone-700">전체</button>
+<button class="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-primary-fixed-dim/20 text-on-primary-fixed-variant">교환</button>
+<button class="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant">취소</button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto px-4 space-y-3 pb-6">
+<!-- Ticket Item (Active) - Updated style -->
+<div class="p-4 rounded-xl bg-emerald-50 border border-emerald-100 shadow-sm transition-all">
+<div class="flex justify-between items-start mb-2">
+<span class="text-sm font-bold flex items-center gap-1.5">
+                            김*희
+                            <span class="material-symbols-outlined text-[14px] text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</span>
+<span class="text-[10px] text-stone-400">12분 전</span>
+</div>
+<div class="flex gap-2 mb-3">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700">교환</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">접수됨</span>
+</div>
+<p class="text-xs text-stone-600 line-clamp-2 leading-relaxed">배송된 과일 중 일부가 파손되어 왔습니다. 신선도에 문제가 있어 교환 요청 드립니다...</p>
+</div>
+<!-- Ticket Item -->
+<div class="p-4 rounded-xl bg-white/40 border border-transparent hover:bg-surface-container-lowest hover:border-stone-100 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-2">
+<span class="text-sm font-bold text-stone-700">이*우</span>
+<span class="text-[10px] text-stone-400">45분 전</span>
+</div>
+<div class="flex gap-2 mb-3">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700">취소</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700">처리중</span>
+</div>
+<p class="text-xs text-stone-500 line-clamp-2 leading-relaxed">단순 변심으로 인한 주문 취소 요청합니다. 아직 배송 준비 전으로 확인됩니다.</p>
+</div>
+<!-- Ticket Item -->
+<div class="p-4 rounded-xl bg-white/40 border border-transparent hover:bg-surface-container-lowest hover:border-stone-100 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-2">
+<span class="text-sm font-bold text-stone-700">박*준</span>
+<span class="text-[10px] text-stone-400">2시간 전</span>
+</div>
+<div class="flex gap-2 mb-3">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700">교환</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">접수됨</span>
+</div>
+<p class="text-xs text-stone-500 line-clamp-2 leading-relaxed">주문한 상품과 다른 상품이 배송되었습니다. 오배송 확인 부탁드립니다.</p>
+</div>
+<!-- Ticket Item -->
+<div class="p-4 rounded-xl bg-white/40 border border-transparent hover:bg-surface-container-lowest hover:border-stone-100 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-2">
+<span class="text-sm font-bold text-stone-700">정*민</span>
+<span class="text-[10px] text-stone-400">4시간 전</span>
+</div>
+<div class="flex gap-2 mb-3">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700">취소</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-stone-100 text-stone-500">완료</span>
+</div>
+<p class="text-xs text-stone-500 line-clamp-2 leading-relaxed">재고 부족으로 인한 업체 취소 건입니다. 환불 처리 확인되었습니다.</p>
+</div>
+</div>
+</div>
+<!-- Right Panel: Ticket Detail -->
+<div class="flex-1 bg-background overflow-y-auto p-8">
+<div class="max-w-5xl mx-auto space-y-8">
+<!-- Meta Header -->
+<div class="flex items-end justify-between">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<h3 class="text-2xl font-bold tracking-tight">김*희 (ID: grower_9923)</h3>
+<div class="flex gap-2">
+<span class="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-blue-50 text-blue-700">교환</span>
+<span class="px-3 py-1 rounded-full text-[11px] font-bold tracking-wider bg-emerald-50 text-emerald-700">접수됨</span>
+</div>
+</div>
+<div class="flex items-center gap-4 text-sm text-stone-500">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-base">calendar_today</span> 2023.10.24 14:22</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-base">payments</span> 총 주문 금액: 124,500원</span>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="px-5 py-2 rounded-xl bg-secondary-container text-on-secondary-fixed-variant text-sm font-bold hover:opacity-90 transition-all scale-95 active:scale-90">반려</button>
+<button class="px-5 py-2 rounded-xl bg-primary-container text-white text-sm font-bold hover:opacity-90 shadow-md transition-all scale-95 active:scale-90">접수 승인</button>
+</div>
+</div>
+<!-- Timeline -->
+<div class="bg-surface-container-lowest rounded-xl p-8 border border-stone-100/50">
+<div class="relative flex justify-between items-center px-12">
+<!-- Line -->
+<div class="absolute top-1/2 left-24 right-24 h-0.5 bg-stone-100 -translate-y-1/2 z-0">
+<div class="h-full bg-primary-container w-[50%]"></div>
+</div>
+<!-- Step 1 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-primary-container text-white flex items-center justify-center shadow-lg ring-4 ring-emerald-50">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<span class="mt-3 text-xs font-bold text-primary">접수됨</span>
+<span class="text-[10px] text-stone-400 mt-1">10.24 14:22</span>
+</div>
+<!-- Step 2 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-white border-2 border-primary-container text-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined">pending</span>
+</div>
+<span class="mt-3 text-xs font-bold text-stone-700">처리중</span>
+<span class="text-[10px] text-stone-300 mt-1">-</span>
+</div>
+<!-- Step 3 -->
+<div class="relative z-10 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-white border-2 border-stone-200 text-stone-300 flex items-center justify-center">
+<span class="material-symbols-outlined">verified</span>
+</div>
+<span class="mt-3 text-xs font-bold text-stone-400">완료</span>
+<span class="text-[10px] text-stone-300 mt-1">-</span>
+</div>
+</div>
+</div>
+<!-- Info Sections -->
+<div class="grid grid-cols-2 gap-6">
+<!-- Order Info -->
+<div class="bg-surface-container-lowest rounded-xl p-6 border border-stone-100/50">
+<h4 class="text-sm font-bold text-emerald-900 mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">inventory_2</span> 주문 정보
+                        </h4>
+<div class="space-y-3">
+<div class="flex justify-between py-2 border-b border-stone-50">
+<span class="text-xs text-stone-500">주문 번호</span>
+<span class="text-xs font-medium">ORD-20231024-8812</span>
+</div>
+<div class="flex justify-between py-2 border-b border-stone-50">
+<span class="text-xs text-stone-500">배송 방법</span>
+<span class="text-xs font-medium">새벽 배송 (정기)</span>
+</div>
+<div class="flex justify-between py-2 border-b border-stone-50">
+<span class="text-xs text-stone-500">결제 수단</span>
+<span class="text-xs font-medium">비즈니스 법인카드</span>
+</div>
+</div>
+</div>
+<!-- Reason -->
+<div class="bg-surface-container-lowest rounded-xl p-6 border border-stone-100/50">
+<h4 class="text-sm font-bold text-emerald-900 mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">description</span> 교환 사유
+                        </h4>
+<div class="bg-stone-50/80 rounded-lg p-4 border border-stone-100">
+<p class="text-xs text-stone-700 leading-relaxed italic">
+                                "어제 수령한 유기농 사과 박스 중 하단에 위치한 5과 정도가 심하게 눌려 갈변이 진행된 상태입니다. B2B 납품용으로 사용이 불가능하여 해당 수량만큼 교환 처리를 부탁드립니다. 사진 첨부합니다."
+                            </p>
+</div>
+</div>
+</div>
+<!-- Item List Table -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden border border-stone-100/50">
+<div class="p-6 border-b border-stone-50">
+<h4 class="text-sm font-bold text-emerald-900">상품 리스트</h4>
+</div>
+<table class="w-full text-left">
+<thead class="bg-surface-container-low text-[11px] font-bold uppercase tracking-wider text-stone-500">
+<tr>
+<th class="px-6 py-4">상품명</th>
+<th class="px-6 py-4 text-center">수량</th>
+<th class="px-6 py-4 text-right">금액</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-stone-50">
+<tr class="hover:bg-stone-50/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-stone-100 overflow-hidden border border-stone-100">
+<img alt="Organic red apples" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB857BW6gKwH-8vKAcoMWXSM2seQUrxTldwXe1q7Yt3166q147JnTPPdq5DAf1vVF8-NJP591ylHSgc7TQx39fapeOdj1R9T8c2EJPh7WUfFqfBTpbUsZLGiVMxGQIPJ_rirP99jBTarkZlNAceYYn5xgBcHm_UchZtR4r0PzaSm7ZQ1yofFeFkVTb415TeC9MgKKRfIXLGFBQrnI6os0UboT4JDAsXDGALsTZ_7fOPZPzSHZdKU0yGyUERkCnFn81i_Kbp_AIhQyw"/>
+</div>
+<div>
+<p class="text-xs font-bold text-stone-800">국산 유기농 부사 사과 (10kg)</p>
+<p class="text-[10px] text-stone-400 mt-0.5">원산지: 경북 청송</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-center text-xs font-medium">1 box</td>
+<td class="px-6 py-4 text-right text-xs font-bold text-stone-900">89,000원</td>
+</tr>
+<tr class="hover:bg-stone-50/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-stone-100 overflow-hidden border border-stone-100">
+<img alt="Fresh kale leaves" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRe0073Ys7iL2t5VqfSuNLdmAsnbK5Nyv6valUbqrpURR8lX4A8JOCkv4WMEmg4epwhivHuzzBpeSh5WYmxP-8Z8H2JHI8nA3tlcJK5BoM-Frged3k-fEDGofw-He7iFn-mOI0dD0Or9MD1mqJQ6Xcez4PkrxKita7db1arOtOb30U7I2xT4ztqTVgVmohMqH-5gmbbsZv0FwNv5TulWx-NsK3GPZbvz3GqBGHKzzeFL5m6W4V7giKEHgFHrEERuL2NWpMKPf0Gus"/>
+</div>
+<div>
+<p class="text-xs font-bold text-stone-800">무농약 케일 (2kg)</p>
+<p class="text-[10px] text-stone-400 mt-0.5">원산지: 경기 양평</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-center text-xs font-medium">2 pack</td>
+<td class="px-6 py-4 text-right text-xs font-bold text-stone-900">35,500원</td>
+</tr>
+</tbody>
+<tfoot class="bg-emerald-50/30">
+<tr>
+<td class="px-6 py-4 text-right text-xs font-bold text-emerald-900" colspan="2">합계 금액</td>
+<td class="px-6 py-4 text-right text-sm font-extrabold text-emerald-900">124,500원</td>
+</tr>
+</tfoot>
+</table>
+</div>
+<!-- Additional Actions -->
+<div class="flex justify-center gap-4 pt-4">
+<button class="flex items-center gap-2 px-6 py-3 text-stone-500 text-xs font-bold hover:text-stone-800 transition-colors">
+<span class="material-symbols-outlined text-lg">print</span> 문서 출력
+                    </button>
+<button class="flex items-center gap-2 px-6 py-3 text-stone-500 text-xs font-bold hover:text-stone-800 transition-colors">
+<span class="material-symbols-outlined text-lg">history</span> 처리 이력 보기
+                    </button>
+</div>
+</div>
+</div>
+</section>
+</main>
+</body></html>

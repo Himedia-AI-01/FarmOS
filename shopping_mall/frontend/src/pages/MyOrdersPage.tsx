@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useOrders } from '@/hooks/useOrders';
 import { formatPrice, formatDate } from '@/lib/utils';
 
@@ -24,7 +25,7 @@ export default function MyOrdersPage() {
           {orders.map((order) => {
             const status = statusMap[order.status] ?? { label: order.status, color: 'bg-gray-100' };
             return (
-              <div key={order.id} className="bg-white rounded-lg border p-4">
+              <Link key={order.id} to={`/mypage/orders/${order.id}`} className="block bg-white rounded-lg border p-4 hover:border-[#03C75A]/50 transition-colors">
                 <div className="flex justify-between items-center mb-3">
                   <div>
                     <span className="text-sm text-gray-500">주문번호 #{order.id}</span>
@@ -39,7 +40,7 @@ export default function MyOrdersPage() {
                   {(order.items?.length ?? 0) > 3 && <span className="text-sm text-gray-500">+{order.items.length - 3}</span>}
                 </div>
                 <p className="text-right font-bold mt-2">{formatPrice(order.totalPrice)}</p>
-              </div>
+              </Link>
             );
           })}
         </div>

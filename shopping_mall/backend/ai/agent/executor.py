@@ -1,5 +1,5 @@
 """에이전트 실행기 — tool_use 루프 + 12개 도구 구현."""
-import json
+import asyncio
 import logging
 import re
 import time
@@ -18,6 +18,37 @@ logger = logging.getLogger(__name__)
 MAX_ITERATIONS = 10       # 하드코딩 폴백 (settings 미설정 시)
 MAX_ANSWER_LENGTH = 1000  # 최종 응답 최대 글자 수
 _WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
+
+# 배송/주문 상태 한국어 매핑
+_SHIPMENT_STATUS_KO: dict[str, str] = {
+    "registered": "배송 준비 중",
+    "picked_up":  "배송 중 (픽업 완료)",
+    "in_transit": "배송 중",
+    "delivered":  "배송 완료",
+}
+_ORDER_STATUS_KO: dict[str, str] = {
+    "pending":    "주문 접수",
+    "registered": "배송 준비 중",
+    "shipping":   "배송 중",
+    "delivered":  "배송 완료",
+    "cancelled":  "취소 완료",
+}
+
+# DB 세션이 필요 없는 RAG 전용 도구 — asyncio.gather로 병렬 실행 가능
+_RAG_TOOLS: frozenset[str] = frozenset({
+    "search_faq",
+    "search_storage_guide",
+    "search_season_info",
+    "search_policy",
+    "search_farm_info",
+})
+
+# 로그인 필요 도구가 비로그인 상태로 호출될 때 반환하는 사전 정의 메시지.
+# LLM이 이 문자열을 받으면 재가공하지 않고 그대로 사용자에게 전달됩니다.
+_LOGIN_REQUIRED_RESPONSE = (
+    "주문 내역 조회는 로그인 후 이용하실 수 있는 서비스예요. "
+    "로그인하신 뒤 다시 이용해 주세요."
+)
 
 
 # ── 요청 컨텍스트 ──────────────────────────────────────────────────────────────
@@ -42,7 +73,7 @@ class RequestContext:
 
     def to_system_suffix(self) -> str:
         """시스템 프롬프트 끝에 붙일 컨텍스트 블록."""
-        login_status = f"로그인 (user_id={self.user_id})" if self.is_logged_in else "비로그인"
+        login_status = "로그인" if self.is_logged_in else "비로그인"
         return (
             f"\n\n## 현재 요청 컨텍스트\n"
             f"- 날짜/시각: {self.current_date} {self.current_time}\n"
@@ -75,9 +106,7 @@ _TOOL_SOURCE: dict[str, str] = {
     "search_products": "db",
     "get_product_detail": "db",
     "escalate_to_agent": "action",
-    "create_exchange_request": "action",
-    "confirm_pending_action": "action",
-    "cancel_pending_action": "action",
+    "refuse_request": "action",
 }
 
 
@@ -146,6 +175,8 @@ def _parse_answer(raw: str) -> str:
     """
     # 마크다운 헤딩 제거 (## 제목 → 제목)
     text = re.sub(r"^#{1,6}\s+", "", raw, flags=re.MULTILINE)
+    # LLM이 한국어 문장을 세미콜론으로 이어붙이는 오류 보정 ("A; B" → "A. B")
+    text = re.sub(r";\s+", ". ", text)
     # 3줄 이상 연속 빈 줄 → 2줄
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
 
@@ -201,24 +232,29 @@ class AgentExecutor:
         user_message: str,
         user_id: int | None,
         history: list[dict],
-        system: str,
+        input_system: str,
+        output_system: str,
         session_id: int | None = None,
         context: RequestContext | None = None,
     ) -> AgentResult:
         """에이전트 루프 실행. Primary 실패 시 Fallback으로 전환."""
         ctx = context or RequestContext.build(user_id)
-        system_with_ctx = system + ctx.to_system_suffix()
+        suffix = ctx.to_system_suffix()
+        input_with_ctx = input_system + suffix
+        output_with_ctx = output_system + suffix
 
         try:
             return await self._run_loop(
-                self.primary, db, user_message, user_id, session_id, history, system_with_ctx
+                self.primary, db, user_message, user_id, session_id, history,
+                input_with_ctx, output_with_ctx,
             )
         except AgentUnavailableError as e:
             logger.warning(f"Primary LLM 실패: {e}. Fallback 시도.")
             if self.fallback:
                 try:
                     return await self._run_loop(
-                        self.fallback, db, user_message, user_id, session_id, history, system_with_ctx
+                        self.fallback, db, user_message, user_id, session_id, history,
+                        input_with_ctx, output_with_ctx,
                     )
                 except AgentUnavailableError as e2:
                     logger.error(f"Fallback LLM도 실패: {e2}")
@@ -238,7 +274,8 @@ class AgentExecutor:
         user_id: int | None,
         session_id: int | None,
         history: list[dict],
-        system: str,
+        input_system: str,
+        output_system: str,
     ) -> AgentResult:
         messages = list(history) + [{"role": "user", "content": user_message}]
         tools_used: list[str] = []
@@ -247,11 +284,17 @@ class AgentExecutor:
         escalated = False
 
         for iteration in range(self.max_iterations):
-            response = await client.chat_with_tools(messages, self.tools, system)
+            response = await client.chat_with_tools(messages, self.tools, input_system)
 
-            # 도구 호출 없음 → 최종 답변
+            # 도구 호출 없음 → 최종 답변 생성
             if not response.tool_calls:
-                raw_answer = response.text or "죄송합니다. 답변을 생성하지 못했습니다."
+                if tools_used:
+                    # 도구 결과가 있으면 output_system으로 응답 합성
+                    synth = await client.chat_with_tools(messages, [], output_system)
+                    raw_answer = synth.text or "죄송합니다. 답변을 생성하지 못했습니다."
+                else:
+                    # 도구 없이 직접 답변 (엣지 케이스)
+                    raw_answer = response.text or "죄송합니다. 답변을 생성하지 못했습니다."
                 answer = _parse_answer(raw_answer)
                 intent = TOOL_TO_INTENT.get(tools_used[0], "other") if tools_used else "other"
 
@@ -286,12 +329,28 @@ class AgentExecutor:
                 if tc.name == "escalate_to_agent":
                     escalated = True
 
-            # 도구 실행 — 동일 Session을 공유하므로 항상 순차 실행
-            timed_results: list[tuple[ToolCall, str, int]] = []
-            for tc in response.tool_calls:
-                timed_results.append(
-                    await self._timed_dispatch(tc, db, user_id, session_id)
-                )
+            # RAG 도구는 병렬, DB/액션 도구는 순차 실행 (동일 Session 공유)
+            rag_indexed = [
+                (i, tc) for i, tc in enumerate(response.tool_calls)
+                if tc.name in _RAG_TOOLS
+            ]
+            db_indexed = [
+                (i, tc) for i, tc in enumerate(response.tool_calls)
+                if tc.name not in _RAG_TOOLS
+            ]
+
+            timed_results: list[tuple[ToolCall, str, int]] = [None] * len(response.tool_calls)  # type: ignore[list-item]
+
+            if rag_indexed:
+                rag_results = await asyncio.gather(*(
+                    self._timed_dispatch(tc, db, user_id, session_id)
+                    for _, tc in rag_indexed
+                ))
+                for (i, _), res in zip(rag_indexed, rag_results):
+                    timed_results[i] = res
+
+            for i, tc in db_indexed:
+                timed_results[i] = await self._timed_dispatch(tc, db, user_id, session_id)
 
             # trace + metrics 기록 (원래 순서)
             results: list[tuple[ToolCall, str]] = []
@@ -319,6 +378,18 @@ class AgentExecutor:
                 logger.info(
                     f"[trace] iter={iteration+1} tool={tc.name} "
                     f"args={tc.arguments} latency={latency_ms}ms → {result[:120]}"
+                )
+
+            # 로그인 필요 단락: 사전 정의 메시지를 그대로 반환 (LLM 재가공 없이)
+            if len(results) == 1 and results[0][1] == _LOGIN_REQUIRED_RESPONSE:
+                _log_trace(trace, user_message)
+                return AgentResult(
+                    answer=_LOGIN_REQUIRED_RESPONSE,
+                    intent=TOOL_TO_INTENT.get(tools_used[0], "other") if tools_used else "other",
+                    escalated=False,
+                    tools_used=tools_used,
+                    trace=trace,
+                    metrics=metrics,
                 )
 
             client.add_tool_results(messages, response, results)
@@ -361,7 +432,15 @@ class AgentExecutor:
                 case "search_policy":
                     return await self._tool_search_policy(**args)
                 case "get_order_status":
-                    args.pop("user_id", None)  # 서버 세션의 user_id를 신뢰, LLM 값 무시
+                    # LLM이 user_id를 인자로 넘기면 타인 정보 조회 시도로 간주 — 즉시 거절.
+                    # get_order_status 도구 스키마에 user_id 파라미터가 없으므로,
+                    # LLM이 이를 명시하는 경우는 사용자가 특정 user_id를 요청한 것입니다.
+                    if "user_id" in args:
+                        logger.warning(
+                            "get_order_status에 user_id 인자 감지 — 타인 정보 조회 시도로 거절: %s",
+                            args.get("user_id"),
+                        )
+                        return self._tool_refuse_request("other_user_info")
                     return await self._tool_get_order_status(db, user_id, **args)
                 case "search_products":
                     return await self._tool_search_products(db, **args)
@@ -369,15 +448,10 @@ class AgentExecutor:
                     return await self._tool_get_product_detail(db, **args)
                 case "search_farm_info":
                     return await self._tool_search_farm_info(**args)
-                case "create_exchange_request":
-                    args.pop("user_id", None)
-                    return await self._tool_create_exchange_request(db, user_id, session_id, **args)
-                case "confirm_pending_action":
-                    return await self._tool_confirm_pending_action(db, user_id, session_id)
-                case "cancel_pending_action":
-                    return await self._tool_cancel_pending_action(db, user_id, session_id)
                 case "escalate_to_agent":
                     return self._tool_escalate_to_agent(**args)
+                case "refuse_request":
+                    return self._tool_refuse_request(**args)
                 case _:
                     return f"[오류] 알 수 없는 도구: {tc.name}"
         except Exception as e:
@@ -425,21 +499,26 @@ class AgentExecutor:
         self, db: Session, user_id: int | None, order_id: int | None = None, **_
     ) -> str:
         if not user_id:
-            return "주문 조회는 로그인이 필요합니다."
+            return _LOGIN_REQUIRED_RESPONSE
 
         from app.models.order import Order
         from app.models.shipment import Shipment
 
         try:
-            query = db.query(Order).filter(Order.user_id == user_id)
-            if order_id:
-                query = query.filter(Order.id == order_id)
-            else:
-                query = query.order_by(Order.created_at.desc()).limit(3)
+            base_query = db.query(Order).filter(Order.user_id == user_id)
 
-            orders = query.all()
+            if order_id:
+                orders = base_query.filter(Order.id == order_id).all()
+                total_orders = len(orders)
+            else:
+                total_orders = base_query.count()
+                orders = base_query.order_by(Order.created_at.desc()).limit(3).all()
+
             if not orders:
                 return "조회된 주문이 없습니다."
+
+            # LLM이 "다른 주문이 없다"는 사실을 알 수 있도록 전체 주문 수를 헤더로 제공
+            header = f"[이 사용자의 전체 주문: {total_orders}건 / 아래 최근 {len(orders)}건 표시]\n\n"
 
             parts = []
             for order in orders:
@@ -449,18 +528,20 @@ class AgentExecutor:
                     for item in order.items
                     if item.product
                 )
+                order_status_ko = _ORDER_STATUS_KO.get(order.status, order.status)
                 part = (
                     f"주문번호: #{order.id}\n"
                     f"주문일: {order.created_at.strftime('%Y-%m-%d')}\n"
                     f"상품: {items_summary or '정보 없음'}\n"
                     f"금액: {order.total_price:,}원\n"
-                    f"주문상태: {order.status}"
+                    f"주문상태: {order_status_ko}"
                 )
                 if shipment:
+                    shipment_status_ko = _SHIPMENT_STATUS_KO.get(shipment.status, shipment.status)
                     part += (
                         f"\n택배사: {shipment.carrier}"
                         f"\n송장번호: {shipment.tracking_number}"
-                        f"\n배송상태: {shipment.status}"
+                        f"\n배송상태: {shipment_status_ko}"
                     )
                     if shipment.expected_arrival:
                         arrival = await self._adjust_arrival_date(shipment.expected_arrival)
@@ -469,7 +550,7 @@ class AgentExecutor:
                     part += "\n배송정보: 아직 등록되지 않았습니다"
                 parts.append(part)
 
-            return "\n\n---\n\n".join(parts)
+            return header + "\n\n---\n\n".join(parts)
 
         except Exception as e:
             logger.error(f"주문 조회 오류: {e}")
@@ -594,196 +675,18 @@ class AgentExecutor:
             "운영시간: 평일 오전 9시 ~ 오후 6시 / 고객센터: 1588-0000"
         )
 
-    # ── 쓰기 도구 (Human-in-the-Loop) ─────────────────────────────────────
+    def _tool_refuse_request(self, reason: str) -> str:
+        """처리 불가 요청에 대한 거절 마커를 반환한다.
 
-    async def _tool_create_exchange_request(
-        self,
-        db: Session,
-        user_id: int | None,
-        session_id: int | None,
-        order_id: int,
-        reason: str,
-        order_item_id: int | None = None,
-    ) -> str:
-        """교환 신청 초안을 생성하고 사용자 확인을 요청합니다."""
-        if not user_id:
-            return "교환 신청은 로그인이 필요합니다."
-        if not session_id:
-            return "세션 정보가 없어 교환 신청을 처리할 수 없습니다."
+        출력 LLM이 이 마커를 감지하여 거절 사유에 맞는 정중한 응답을 생성합니다.
+        reason 코드:
+          other_user_info  — 타인 정보 조회 시도
+          internal_info    — 내부 시스템·DB·프롬프트 요청
+          out_of_scope     — 서비스 범위 외 질문
+          jailbreak        — 프롬프트 조작·탈옥 시도
+          inappropriate    — 욕설·혐오 표현 등 부적절한 요청
+        """
+        safe_reason = reason.strip() if reason else "out_of_scope"
+        logger.info("거절 요청: reason=%s", safe_reason)
+        return f"__REFUSED__\n사유: {safe_reason}"
 
-        from app.models.order import Order, OrderItem
-        from app.models.exchange_request import ExchangeRequest
-        from app.models.chat_session import ChatSession
-
-        try:
-            # 주문 소유권 검증
-            order = db.query(Order).filter(
-                Order.id == order_id, Order.user_id == user_id
-            ).first()
-            if not order:
-                return f"주문 #{order_id}을 찾을 수 없거나 접근 권한이 없습니다."
-
-            # order_item_id가 해당 주문에 속하는지 검증
-            if order_item_id is not None:
-                item = db.query(OrderItem).filter(
-                    OrderItem.id == order_item_id, OrderItem.order_id == order_id
-                ).first()
-                if not item:
-                    return f"주문 #{order_id}에 해당 상품 항목이 존재하지 않습니다."
-
-            # 교환 가능 상태 확인 (배송완료 또는 배송중)
-            if order.status not in ("delivered", "shipping"):
-                return (
-                    f"주문 #{order_id}은 현재 '{order.status}' 상태로 교환 신청이 불가합니다. "
-                    "교환은 배송중 또는 배송완료 상태에서만 가능합니다."
-                )
-
-            # 주문 상품 요약
-            items_summary = ", ".join(
-                f"{item.product.name} x{item.quantity}"
-                for item in order.items
-                if item.product
-            ) or "상품 정보 없음"
-
-            # 중복 방지: 동일 주문에 대기 중인 교환 신청이 있으면 재사용
-            # (Primary→Fallback 전환 시 도구 재실행으로 인한 중복 생성 방지)
-            existing = db.query(ExchangeRequest).filter(
-                ExchangeRequest.user_id == user_id,
-                ExchangeRequest.order_id == order_id,
-                ExchangeRequest.status == "pending_confirm",
-            ).first()
-
-            if existing:
-                exchange = existing
-            else:
-                # 교환 신청 초안 생성 (pending_confirm 상태)
-                exchange = ExchangeRequest(
-                    user_id=user_id,
-                    order_id=order_id,
-                    order_item_id=order_item_id,
-                    reason=reason,
-                    status="pending_confirm",
-                )
-                db.add(exchange)
-                db.flush()  # ID 확보 (commit 전)
-
-            # 세션에 대기 액션 저장 (소유권 검증 포함)
-            session = db.query(ChatSession).filter(
-                ChatSession.id == session_id, ChatSession.user_id == user_id
-            ).first()
-            if session:
-                session.pending_action = json.dumps({
-                    "type": "exchange_request",
-                    "exchange_request_id": exchange.id,
-                    "summary": f"주문 #{order_id} / {items_summary} / 사유: {reason}",
-                }, ensure_ascii=False)
-                db.add(session)
-
-            db.commit()
-
-            return (
-                f"교환 신청 내용을 확인해 주세요.\n\n"
-                f"주문번호: #{order_id}\n"
-                f"상품: {items_summary}\n"
-                f"교환 사유: {reason}\n\n"
-                f"위 내용으로 교환을 신청하시겠어요? (확인/취소)"
-            )
-
-        except Exception as e:
-            db.rollback()
-            logger.error(f"교환 신청 초안 생성 오류: {e}")
-            return "교환 신청 처리 중 오류가 발생했습니다."
-
-    async def _tool_confirm_pending_action(
-        self,
-        db: Session,
-        user_id: int | None,
-        session_id: int | None,
-    ) -> str:
-        """대기 중인 액션을 확인하여 최종 실행합니다."""
-        if not session_id:
-            return "확인할 대기 중인 요청이 없습니다."
-
-        from app.models.chat_session import ChatSession
-        from app.models.exchange_request import ExchangeRequest
-
-        try:
-            session = db.query(ChatSession).filter(
-                ChatSession.id == session_id, ChatSession.user_id == user_id
-            ).first()
-            if not session or not session.pending_action:
-                return "확인할 대기 중인 요청이 없습니다."
-
-            action = json.loads(session.pending_action)
-
-            if action.get("type") == "exchange_request":
-                exchange_id = action["exchange_request_id"]
-                exchange = db.query(ExchangeRequest).filter(
-                    ExchangeRequest.id == exchange_id,
-                    ExchangeRequest.user_id == user_id,
-                ).first()
-
-                if not exchange or exchange.status != "pending_confirm":
-                    session.pending_action = None
-                    db.commit()
-                    return "이미 처리되었거나 유효하지 않은 요청입니다."
-
-                exchange.status = "confirmed"
-                exchange.confirmed_at = datetime.now(timezone.utc)
-                session.pending_action = None
-                db.commit()
-
-                return (
-                    f"교환 신청이 완료됐습니다.\n"
-                    f"접수번호: #{exchange.id}\n"
-                    f"처리까지 1~3 영업일이 소요됩니다. "
-                    f"진행 상황은 마이페이지 > 교환/반품 내역에서 확인하실 수 있습니다."
-                )
-
-            return "알 수 없는 액션 유형입니다."
-
-        except Exception as e:
-            db.rollback()
-            logger.error(f"액션 확인 오류: {e}")
-            return "요청 처리 중 오류가 발생했습니다."
-
-    async def _tool_cancel_pending_action(
-        self,
-        db: Session,
-        user_id: int | None,
-        session_id: int | None,
-    ) -> str:
-        """대기 중인 액션을 취소합니다."""
-        if not session_id:
-            return "취소할 대기 중인 요청이 없습니다."
-
-        from app.models.chat_session import ChatSession
-        from app.models.exchange_request import ExchangeRequest
-
-        try:
-            session = db.query(ChatSession).filter(
-                ChatSession.id == session_id, ChatSession.user_id == user_id
-            ).first()
-            if not session or not session.pending_action:
-                return "취소할 대기 중인 요청이 없습니다."
-
-            action = json.loads(session.pending_action)
-
-            if action.get("type") == "exchange_request":
-                exchange_id = action["exchange_request_id"]
-                exchange = db.query(ExchangeRequest).filter(
-                    ExchangeRequest.id == exchange_id,
-                    ExchangeRequest.user_id == user_id,  # 소유권 검증
-                ).first()
-                if exchange and exchange.status == "pending_confirm":
-                    exchange.status = "cancelled"
-                    db.add(exchange)
-
-            session.pending_action = None
-            db.commit()
-            return "교환 신청을 취소했습니다. 다른 도움이 필요하시면 말씀해 주세요."
-
-        except Exception as e:
-            db.rollback()
-            logger.error(f"액션 취소 오류: {e}")
-            return "취소 처리 중 오류가 발생했습니다."

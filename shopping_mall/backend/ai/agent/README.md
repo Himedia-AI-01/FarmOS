@@ -1,75 +1,114 @@
 # ai/agent/
 
-tool_use 기반 챗봇 에이전트 서브패키지.
+tool_use 기반 챗봇 에이전트 서브패키지.  
+**SupervisorExecutor** 오케스트레이터가 CS 서브 에이전트와 OrderGraph(LangGraph)를 조율합니다.
 
-## 파일
+---
 
-| 파일 | 역할 |
-|------|------|
-| `executor.py` | 에이전트 루프 — LLM 호출 → 도구 실행 → 반복. `AgentExecutor`, `AgentResult`, `RequestContext` 정의 |
-| `tools.py` | 12개 도구의 JSON Schema 정의 (`TOOL_DEFINITIONS`, `TOOL_TO_INTENT`) |
-| `holiday.py` | 한국천문연구원 공휴일 API 클라이언트 + 월별 메모리 캐시. 배송 예정일 보정에 사용 |
-| `prompts.py` | 에이전트 시스템 프롬프트 (`AGENT_SYSTEM_PROMPT`) — 페르소나, 도구 사용 원칙, 답변 스타일 |
+## 디렉터리 구조
 
-## 서브패키지
+```
+ai/agent/
+├── __init__.py               공개 API (AgentExecutor, 클라이언트, RequestContext 등)
+├── executor.py               AgentExecutor 루프 (CS 서브 에이전트로 재사용)
+├── tools.py                  TOOL_DEFINITIONS 9개 + TOOL_TO_INTENT 매핑
+├── prompts.py                CS 에이전트 기본 시스템 프롬프트
+├── holiday.py                공휴일 API + 캐시 (배송 예정일 보정)
+│
+├── clients/                  LLM 클라이언트 (provider 교체 가능)
+│   ├── base.py               AgentClient 추상 인터페이스
+│   ├── openai.py             OpenAI 호환 (OpenRouter / Ollama / OpenAI)
+│   └── claude.py             Anthropic SDK (Fallback)
+│
+├── supervisor/               오케스트레이터
+│   ├── executor.py           SupervisorExecutor
+│   ├── tools.py              SUPERVISOR_TOOLS (call_cs_agent, call_order_agent)
+│   └── prompts.py            SUPERVISOR_SYSTEM_PROMPT
+│
+├── subagents/cs/             CS 서브 에이전트
+│   ├── tools.py              CS_TOOLS (TOOL_DEFINITIONS 9개)
+│   └── prompts.py            CS_AGENT_SYSTEM_PROMPT
+│
+└── order_graph/              LangGraph 기반 취소/교환 플로우
+    ├── state.py              OrderState TypedDict
+    ├── nodes.py              그래프 노드 함수 + 조건부 라우팅
+    ├── graph.py              build_order_graph() — StateGraph 컴파일
+    └── prompts.py            ORDER_PROMPTS 딕셔너리 + 키워드 상수
+```
 
-| 디렉터리 | 역할 |
-|----------|------|
-| `clients/` | LLM 클라이언트 구현체 (OpenAI 호환, Claude) |
+---
 
-## 12개 도구 요약
+## 요청 흐름
+
+```
+POST /api/chatbot/ask
+  → MultiAgentChatbotService.answer()
+  → SupervisorExecutor.run()
+      ├── call_cs_agent  → AgentExecutor.run() [CS_TOOLS 9개]
+      │                     RAG 조회 / DB 읽기 / escalate
+      └── call_order_agent → OrderGraph (LangGraph StateGraph)
+                              interrupt/resume 기반 멀티스텝 HitL
+                              주문 선택 → 사유 → 환불방법 → 확인 → ShopTicket
+  → ChatLog + ToolMetric 저장
+```
+
+Supervisor LLM이 질문을 분석해 서브 에이전트를 선택·호출합니다.  
+취소/교환은 OrderGraph가 전담하며 여러 턴에 걸쳐 진행됩니다.
+
+---
+
+## 도구 목록
+
+9개 도구가 `tools.py`에 정의됩니다. CS 에이전트(`CS_TOOLS`)가 모두 사용합니다.
 
 | 도구 | 유형 | 설명 |
 |------|------|------|
 | `search_faq` | RAG | 일반 운영 FAQ |
 | `search_storage_guide` | RAG | 농산물 보관 방법 |
 | `search_season_info` | RAG | 제철 농산물 정보 |
-| `search_policy` | RAG | 6개 정책 문서 (return/payment/delivery/quality/service/membership) |
-| `get_order_status` | DB | 주문·배송 현황 + 공휴일 기반 도착일 보정 |
+| `search_policy` | RAG | 6개 정책 문서 |
+| `search_farm_info` | RAG | 농장·플랫폼 소개 |
+| `get_order_status` | DB | 주문·배송 현황 + 공휴일 도착일 보정 |
 | `search_products` | DB | 상품 검색·재고 확인 |
 | `get_product_detail` | DB | 상품 상세 정보 |
-| `search_farm_info` | RAG | 농장·플랫폼 소개 |
 | `escalate_to_agent` | Action | 상담원 에스컬레이션 |
-| `create_exchange_request` | Write | 교환 신청 접수 (PENDING 상태로 저장 후 사용자 확인 요청) |
-| `confirm_pending_action` | Write | 대기 중인 액션 최종 실행 (사용자가 동의했을 때) |
-| `cancel_pending_action` | Write | 대기 중인 액션 취소 (사용자가 거부했을 때) |
+
+> 취소/교환은 `call_order_agent` → OrderGraph가 처리합니다.
+
+---
+
+## AgentExecutor 공통 동작
+
+`AgentExecutor`는 CS 서브 에이전트로 사용됩니다.
+
+**병렬 실행**: RAG 도구(`_RAG_TOOLS`)는 `asyncio.gather`로 동시 실행.  
+DB/Action 도구는 SQLAlchemy Session 공유 문제로 순차 실행.
+
+**Primary → Fallback 전환**: `AgentUnavailableError` 발생 시 자동 전환.  
+둘 다 실패하면 `escalated=True` + 안내 메시지 반환.
+
+**보안**: `get_order_status` 호출 시 LLM이 전달한 `user_id` 파라미터를 강제 제거하고  
+서버 세션의 `user_id`를 주입합니다.
+
+---
 
 ## RequestContext
 
-`AgentExecutor.run()` 호출 시 시스템 프롬프트 뒤에 자동으로 현재 시각과 로그인 상태가 주입됩니다.
+`AgentExecutor.run()` 호출 시 시스템 프롬프트 끝에 자동 주입됩니다.
 
-```text
-[현재 시각] 2026-04-14 (월) 14:32
-[로그인 상태] 로그인 (user_id=5)
+```
+## 현재 요청 컨텍스트
+- 날짜/시각: 2026-04-20 14:32
+- 사용자 상태: 로그인 (user_id=5)
+- 주문 조회 가능: 예
 ```
 
-## Human-in-the-Loop (교환 신청 확인 플로우)
+---
 
-쓰기 작업(교환 신청 등)은 즉시 실행하지 않고 사용자 확인 후 처리합니다.
+## 관련 문서
 
-```text
-사용자: "주문 123번 교환 신청해줘"
-  → LLM: create_exchange_request(order_id=123, reason="...")
-     └─ DB: ExchangeRequest(status="pending_confirm") 생성
-     └─ ChatSession.pending_action = {"type": "exchange_request", "exchange_request_id": 42, "summary": "..."}
-     └─ 챗봇: "교환 신청 내용을 확인해드릴게요. [내용] 신청하시겠어요?"
-
-사용자: "네, 신청해줘"
-  → LLM: confirm_pending_action()
-     └─ pending_action에서 exchange_request_id 꺼냄
-     └─ ExchangeRequest.status = "confirmed"
-     └─ ChatSession.pending_action = None
-     └─ 챗봇: "교환 신청이 완료됐습니다."
-
-사용자: "아니요, 취소할게요"
-  → LLM: cancel_pending_action()
-     └─ ExchangeRequest.status = "cancelled"
-     └─ ChatSession.pending_action = None
-     └─ 챗봇: "취소됐습니다."
-```
-
-**DB 관련 모델**: `ExchangeRequest` (`shop_exchange_requests`), `ChatSession.pending_action` (Text, JSON)
-
-## 보안 주의
-
-`get_order_status` 도구 실행 시 LLM이 생성한 `user_id`는 무시하고, 서버 세션의 `user_id`를 강제 주입합니다.
+| 위치 | 내용 |
+|------|------|
+| `supervisor/README.md` | SupervisorExecutor 오케스트레이션 로직 |
+| `order_graph/README.md` | LangGraph interrupt/resume 패턴, 취소/교환 플로우 |
+| `clients/README.md` | LLM 클라이언트 provider 전환 |

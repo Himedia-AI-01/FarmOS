@@ -35,33 +35,55 @@ OpenAIAgentClient (PRIMARY_LLM_*)
     → 둘 다 실패 시 escalated=True
 ```
 
+**아키텍처**: `SupervisorExecutor` 오케스트레이터 → CS 서브 에이전트(10개 도구) + OrderGraph(LangGraph, 취소/교환 멀티스텝 HitL), `MultiAgentChatbotService`
+
 ### 핵심 파일 맵
+
+**공통 인프라**
 
 | 파일 | 역할 |
 |------|------|
-| `ai/agent/clients/openai.py` | Primary LLM — OpenAI 호환 (OpenRouter/Ollama/OpenAI 등) |
+| `ai/agent/clients/base.py` | AgentClient 추상 인터페이스 |
+| `ai/agent/clients/openai.py` | Primary LLM — OpenAI 호환 |
 | `ai/agent/clients/claude.py` | Fallback LLM — Anthropic SDK |
-| `ai/agent/clients/base.py` | 클라이언트 추상 인터페이스 |
-| `ai/agent/executor.py` | 에이전트 루프, RequestContext, TraceStep |
-| `ai/agent/tools.py` | TOOL_DEFINITIONS 12개 (중립 JSON Schema, HitL 도구 3개 포함) |
+| `ai/agent/executor.py` | AgentExecutor 루프, RequestContext, TraceStep, ToolMetricData |
+| `ai/agent/tools.py` | TOOL_DEFINITIONS 9개, TOOL_TO_INTENT |
 | `ai/agent/holiday.py` | 공휴일 API + 월별 캐시 |
-| `ai/agent/prompts.py` | 에이전트 시스템 프롬프트 |
 | `ai/rag.py` | retrieve() / retrieve_multiple() + distance_threshold 필터 |
-| `ai/llm_client.py` | Ollama 클라이언트 — 리포트/비용분류 전용 (에이전트와 무관) |
-| `ai/seed_rag.py` | ChromaDB 데이터 적재 |
 | `app/core/config.py` | Settings 클래스 — 전체 환경변수 관리 |
-| `app/paths.py` | 경로 상수 |
-| `app/services/agent_chatbot.py` | AgentChatbotService |
-| `app/routers/chatbot.py` | POST /api/chatbot/ask?debug=true |
-| `app/schemas/chatlog.py` | TraceStepSchema, ChatAnswer |
 | `app/main.py` | 에이전트 초기화 + UTF-8 로그 핸들러 |
+| `app/routers/chatbot.py` | POST /api/chatbot/ask?debug=true |
+
+**에이전트 구조**
+
+| 파일 | 역할 |
+|------|------|
+| `ai/agent/supervisor/executor.py` | SupervisorExecutor — 오케스트레이션 루프 |
+| `ai/agent/supervisor/tools.py` | SUPERVISOR_TOOLS (call_cs_agent, call_order_agent) |
+| `ai/agent/supervisor/prompts.py` | SUPERVISOR_SYSTEM_PROMPT |
+| `ai/agent/subagents/cs/tools.py` | CS_TOOLS — 9개 도구 서브셋 |
+| `ai/agent/subagents/cs/prompts.py` | CS_AGENT_SYSTEM_PROMPT |
+| `ai/agent/order_graph/state.py` | OrderState TypedDict |
+| `ai/agent/order_graph/nodes.py` | 노드 함수 + 조건부 라우팅 (interrupt/resume 패턴) |
+| `ai/agent/order_graph/graph.py` | build_order_graph(checkpointer) |
+| `ai/agent/order_graph/prompts.py` | ORDER_PROMPTS, CANCEL_KEYWORDS, CONFIRM_KEYWORDS |
+| `app/services/multi_agent_chatbot.py` | MultiAgentChatbotService — ChatLog/ToolMetric 저장 포함 |
+| `app/models/ticket.py` | ShopTicket — shop_tickets 테이블, 취소/교환 접수 결과 |
 
 ### 보안 규칙
 
-`get_order_status` 호출 시 LLM이 생성한 `user_id`는 반드시 제거하고 서버 세션 값 주입:
+`refuse_request` 도구 — 타인 정보·내부 정보·서비스 범위 외 질문·탈옥·부적절 콘텐츠를 필터링합니다.
+도구가 `__REFUSED__\n사유: <코드>` 마커를 반환하면, 출력 LLM이 사유에 맞는 정중한 거절 메시지를 생성합니다.
+reason 코드: `other_user_info` | `internal_info` | `out_of_scope` | `jailbreak` | `inappropriate`
+
+`RequestContext.to_system_suffix()`는 로그인 여부(`로그인` / `비로그인`)만 LLM에 전달합니다. 실제 `user_id` 숫자는 시스템 프롬프트에 포함하지 않습니다 — LLM이 응답에서 내부 ID를 노출하는 것을 방지합니다.
+
+`get_order_status` 호출 시 LLM이 `user_id`를 인자로 넘기면 **타인 정보 조회 시도**로 간주하고 즉시 거절합니다.
+`get_order_status` 스키마에 `user_id` 파라미터가 없으므로, LLM이 이를 명시한다는 것은 사용자가 특정 user_id를 요청한 신호입니다.
 ```python
-args.pop("user_id", None)
-await self._tool_get_order_status(db, user_id, **args)
+if "user_id" in args:
+    return self._tool_refuse_request("other_user_info")   # 코드 레벨 차단
+return await self._tool_get_order_status(db, user_id, **args)  # 서버 세션 user_id 사용
 ```
 
 ### 히스토리 역할 매핑
@@ -69,7 +91,7 @@ await self._tool_get_order_status(db, user_id, **args)
 프론트엔드가 어시스턴트 메시지를 `role: "bot"` 으로 전송합니다. `_build_history` 에서 반드시 매핑:
 
 ```python
-# agent_chatbot.py
+# multi_agent_chatbot.py
 _ROLE_MAP = {"user": "user", "assistant": "assistant", "bot": "assistant"}
 ```
 
@@ -151,8 +173,11 @@ curl -X POST "http://localhost:4000/api/chatbot/ask?debug=true" \
 
 | 위치 | 내용 |
 |------|------|
-| `ai/README.md` | AI 모듈 전체 구조 |
-| `ai/agent/README.md` | 에이전트 도구 목록, RequestContext |
+| `ai/README.md` | AI 모듈 전체 구조, RAG 셋업 가이드 |
+| `ai/agent/README.md` | 운영 모드, 도구 전체 목록, AgentExecutor 동작 원리 |
+| `ai/agent/supervisor/README.md` | SupervisorExecutor 오케스트레이션, 도구 선택 기준, 진행 중 플로우 처리 |
+| `ai/agent/order_graph/README.md` | LangGraph interrupt/resume 패턴, 취소·교환 플로우, DB 주입, ShopTicket |
+| `ai/agent/subagents/cs/README.md` | CS_TOOLS 구성, CS 에이전트 제약 사항 |
 | `ai/agent/clients/README.md` | LLM 클라이언트, provider 전환 예시 |
 | `app/core/README.md` | Settings 필드 전체 목록 |
 | `app/services/README.md` | 서비스 레이어 구조 |

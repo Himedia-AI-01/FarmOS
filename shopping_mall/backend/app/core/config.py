@@ -43,6 +43,9 @@ class Settings(BaseSettings):
 
     # ── 에이전트 ────────────────────────────────────────────────────────────
     agent_max_iterations: int = 10
+    # true → SupervisorExecutor (멀티 에이전트 + LangGraph OrderGraph)
+    # false → 기존 단일 AgentExecutor
+    use_multi_agent: bool = False
 
     # ── 외부 API ────────────────────────────────────────────────────────────
     anniversary_api_key: str = ""

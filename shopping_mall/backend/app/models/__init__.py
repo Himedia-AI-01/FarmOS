@@ -16,6 +16,7 @@ from .chat_session import ChatSession
 from .chat_log import ChatLog
 from .exchange_request import ExchangeRequest
 from .tool_metric import ToolMetric
+from .ticket import ShopTicket
 
 __all__ = [
     "Category",
@@ -37,4 +38,5 @@ __all__ = [
     "ChatLog",
     "ExchangeRequest",
     "ToolMetric",
+    "ShopTicket",
 ]

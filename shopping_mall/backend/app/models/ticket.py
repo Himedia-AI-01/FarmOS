@@ -1,0 +1,52 @@
+"""교환/취소 티켓 모델 — OrderGraph 멀티스텝 HitL 최종 결과물."""
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class ShopTicket(Base):
+    """교환·취소 접수 티켓.
+
+    OrderGraph가 사용자와 멀티스텝 대화로 수집한 정보를 최종 저장합니다.
+    오피스 툴에서 이 테이블을 읽어 처리합니다.
+    """
+
+    __tablename__ = "shop_tickets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("shop_users.id"), nullable=False, index=True
+    )
+    session_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("shop_chat_sessions.id"), nullable=True, index=True
+    )
+    order_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("shop_orders.id"), nullable=False
+    )
+
+    # "cancel" | "exchange"
+    action_type: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    # 취소/교환 공통 사유
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # 취소 플로우만: "원결제 수단" | "포인트" 등
+    refund_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # 교환 플로우만: JSON 배열 — [{"item_id": int, "name": str, "qty": int}]
+    items: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # "received" → "processing" → "completed" | "cancelled"
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="received")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # ── 관계 ──────────────────────────────────────────────────────────────────
+    user = relationship("User", back_populates=None, lazy="raise")
+    order = relationship("Order", back_populates=None, lazy="raise")

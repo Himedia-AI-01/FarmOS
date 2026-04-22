@@ -40,7 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 from app.routers import products, categories, cart, orders, users, reviews, stores, wishlists
-from app.routers import shipments, calendar, reports, analytics, chatbot
+from app.routers import shipments, calendar, reports, analytics, chatbot, admin
 from app import models  # noqa: F401 - Import models to register them with Base
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ Base.metadata.create_all(bind=engine)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle: start and stop APScheduler."""
+    sched = None
     try:
         from jobs.scheduler import setup_scheduler
         sched = setup_scheduler()
@@ -59,18 +60,21 @@ async def lifespan(app: FastAPI):
         logger.info("APScheduler started.")
     except Exception as e:
         logger.warning(f"Failed to start scheduler: {e}")
-        sched = None
 
     try:
         from app.core.config import settings
         from app.routers.chatbot import set_chatbot_service
         from ai.rag import RAGService
-        from ai.agent import OpenAIAgentClient, ClaudeAgentClient, AgentExecutor, TOOL_DEFINITIONS
-        from ai.agent.prompts import AGENT_SYSTEM_PROMPT
-        from app.services.agent_chatbot import AgentChatbotService
+        from ai.agent import OpenAIAgentClient, ClaudeAgentClient, AgentExecutor
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from ai.agent.subagents.cs.tools import CS_TOOLS
+        from ai.agent.subagents.cs.prompts import CS_INPUT_PROMPT, CS_OUTPUT_PROMPT
+        from ai.agent.order_graph.graph import build_order_graph
+        from ai.agent.supervisor import SupervisorExecutor
+        from ai.agent.supervisor.prompts import SUPERVISOR_INPUT_PROMPT, SUPERVISOR_OUTPUT_PROMPT
+        from app.services.multi_agent_chatbot import MultiAgentChatbotService
 
         rag = RAGService()
-
         primary = OpenAIAgentClient(
             base_url=settings.primary_llm_base_url,
             api_key=settings.primary_llm_api_key,
@@ -81,24 +85,44 @@ async def lifespan(app: FastAPI):
             model=settings.claude_fallback_model,
         ) if settings.anthropic_api_key else None
 
-        executor = AgentExecutor(
-            primary=primary,
-            fallback=fallback,
-            rag_service=rag,
-            tools=TOOL_DEFINITIONS,
-            max_iterations=settings.agent_max_iterations,
-        )
-        set_chatbot_service(AgentChatbotService(executor, AGENT_SYSTEM_PROMPT))
-        logger.info("Agent chatbot service initialized.")
+        # AsyncPostgresSaver uses psycopg3 libpq parser — strip SQLAlchemy driver suffix
+        import re as _re
+        _pg_url = _re.sub(r"^(postgres(?:ql)?)\+\w+://", r"\1://", settings.database_url)
+        async with AsyncPostgresSaver.from_conn_string(_pg_url) as checkpointer:
+            await checkpointer.setup()
+            order_graph = build_order_graph(checkpointer)
+
+            cs_executor = AgentExecutor(
+                primary=primary,
+                fallback=fallback,
+                rag_service=rag,
+                tools=CS_TOOLS,
+                max_iterations=settings.agent_max_iterations,
+            )
+            supervisor = SupervisorExecutor(
+                primary=primary,
+                fallback=fallback,
+                cs_executor=cs_executor,
+                cs_input_prompt=CS_INPUT_PROMPT,
+                cs_output_prompt=CS_OUTPUT_PROMPT,
+                order_graph=order_graph,
+            )
+            set_chatbot_service(MultiAgentChatbotService(
+                supervisor,
+                input_prompt=SUPERVISOR_INPUT_PROMPT,
+                output_prompt=SUPERVISOR_OUTPUT_PROMPT,
+            ))
+            logger.info("Multi-agent chatbot service initialized.")
+            yield
 
     except Exception as e:
         logger.warning(f"Failed to initialize chatbot service: {e}")
+        yield
 
-    yield
-
-    if sched is not None:
-        sched.shutdown(wait=False)
-        logger.info("APScheduler stopped.")
+    finally:
+        if sched is not None:
+            sched.shutdown(wait=False)
+            logger.info("APScheduler stopped.")
 
 
 app = FastAPI(title="Shopping Mall API", version="0.2.0", lifespan=lifespan)
@@ -127,6 +151,7 @@ app.include_router(calendar.router)
 app.include_router(reports.router)
 app.include_router(analytics.router)
 app.include_router(chatbot.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

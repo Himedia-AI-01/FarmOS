@@ -1,11 +1,11 @@
-"""에이전트 기반 챗봇 서비스 — ChatbotService와 동일한 인터페이스."""
+"""멀티 에이전트 챗봇 서비스 — AgentChatbotService와 동일한 인터페이스."""
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
-from ai.agent import AgentExecutor
+from ai.agent.supervisor import SupervisorExecutor
 
 if TYPE_CHECKING:
     from ai.agent import ToolMetricData
@@ -14,13 +14,24 @@ logger = logging.getLogger(__name__)
 
 HISTORY_WINDOW_SIZE = 6
 
+# 서비스 장애로 생성된 오류 메시지 패턴 — 해당 턴은 히스토리에서 제외
+_SERVICE_ERROR_PATTERNS: tuple[str, ...] = (
+    "현재 서비스에 일시적인 문제가 발생했습니다",
+    "요청을 처리하는 데 시간이 걸리고 있습니다",
+)
 
-class AgentChatbotService:
-    """AgentExecutor를 래핑하여 기존 ChatbotService.answer() 인터페이스를 구현."""
 
-    def __init__(self, executor: AgentExecutor, system_prompt: str):
-        self.executor = executor
-        self.system_prompt = system_prompt
+def _is_service_error(content: str) -> bool:
+    return any(p in content for p in _SERVICE_ERROR_PATTERNS)
+
+
+class MultiAgentChatbotService:
+    """SupervisorExecutor를 래핑하여 AgentChatbotService와 동일한 answer() 인터페이스를 구현."""
+
+    def __init__(self, supervisor: SupervisorExecutor, input_prompt: str, output_prompt: str):
+        self.supervisor = supervisor
+        self.input_prompt = input_prompt
+        self.output_prompt = output_prompt
 
     async def answer(
         self,
@@ -37,14 +48,15 @@ class AgentChatbotService:
         from ai.agent import RequestContext
         context = RequestContext.build(user_id)
 
-        # 에이전트 실행
-        result = await self.executor.run(
+        # Supervisor 에이전트 실행
+        result = await self.supervisor.run(
             db=db,
             user_message=question,
             user_id=user_id,
             session_id=session_id,
             history=messages,
-            system=self.system_prompt,
+            input_system=self.input_prompt,
+            output_system=self.output_prompt,
             context=context,
         )
 
@@ -118,19 +130,34 @@ class AgentChatbotService:
     }
 
     def _build_history(self, history: list | None) -> list[dict]:
-        """기존 history 형식 → LLM 메시지 형식 변환."""
+        """기존 history 형식 → LLM 메시지 형식 변환.
+
+        escalated=True인 bot 응답(서비스 오류 포함)은 해당 user+bot 쌍 전체를 제거합니다.
+        LLM이 미해결 질문으로 오인하여 현재 메시지 대신 이전 질문에 재답변하는 문제를 방지합니다.
+        """
         if not history:
             return []
 
-        messages = []
-        for item in history[-HISTORY_WINDOW_SIZE:]:
+        messages: list[dict] = []
+        # window의 2배를 읽어 필터 후 HISTORY_WINDOW_SIZE로 잘라냄
+        for item in history[-(HISTORY_WINDOW_SIZE * 2):]:
             raw_role = item.get("role", "user")
             role = self._ROLE_MAP.get(raw_role)
             if not role:
                 logger.debug("알 수 없는 history role 무시: %s", raw_role)
                 continue
             content = item.get("content") or item.get("text", "")
-            if content:
-                messages.append({"role": role, "content": content})
+            if not content:
+                continue
 
-        return messages
+            if role == "assistant":
+                escalated = item.get("escalated", False)
+                if escalated or _is_service_error(content):
+                    # 이 응답과 대응하는 직전 user 메시지를 함께 제거
+                    if messages and messages[-1]["role"] == "user":
+                        messages.pop()
+                    continue
+
+            messages.append({"role": role, "content": content})
+
+        return messages[-HISTORY_WINDOW_SIZE:]

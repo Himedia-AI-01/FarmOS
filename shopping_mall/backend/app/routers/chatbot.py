@@ -1,5 +1,4 @@
 """Chatbot router."""
-import json
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -11,12 +10,13 @@ from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.models.chat_log import ChatLog
 from app.models.chat_session import ChatSession
+from app.models.tool_metric import ToolMetric
 from app.schemas.chatlog import (
     ChatQuestion, ChatAnswer, ChatLogResponse, ChatRating,
     ToolAnalyticsItem, ToolAnalyticsResponse,
 )
 from app.schemas.chat_session import ChatSessionCreate, ChatSessionResponse, ChatSessionMessages
-from app.services.agent_chatbot import AgentChatbotService
+from app.services.multi_agent_chatbot import MultiAgentChatbotService
 from app.farmos_auth import get_farmos_user_optional, FarmOSUser
 from app.models.user import User
 
@@ -24,16 +24,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chatbot", tags=["chatbot"])
 
-_chatbot_service_instance: Optional[AgentChatbotService] = None
+_chatbot_service_instance: Optional[MultiAgentChatbotService] = None
 
 
-def set_chatbot_service(service: AgentChatbotService) -> None:
+def set_chatbot_service(service: MultiAgentChatbotService) -> None:
     """앱 시작 시 lifespan에서 싱글턴 서비스를 주입합니다."""
     global _chatbot_service_instance
     _chatbot_service_instance = service
 
 
-def _get_chatbot_service() -> AgentChatbotService:
+def _get_chatbot_service() -> MultiAgentChatbotService:
     if _chatbot_service_instance is None:
         raise RuntimeError("Chatbot service not initialized. Check app startup.")
     return _chatbot_service_instance
@@ -388,23 +388,6 @@ def close_session(
     if session.user_id != authenticated_user_id:
         raise HTTPException(status_code=403, detail="Cannot close other users' sessions")
 
-    # 대기 중인 교환 신청이 있으면 자동 취소
-    if session.pending_action:
-        try:
-            from app.models.exchange_request import ExchangeRequest
-            action = json.loads(session.pending_action)
-            if action.get("type") == "exchange_request":
-                exchange = db.query(ExchangeRequest).filter(
-                    ExchangeRequest.id == action["exchange_request_id"],
-                    ExchangeRequest.status == "pending_confirm",
-                ).first()
-                if exchange:
-                    exchange.status = "cancelled"
-                    db.add(exchange)
-        except Exception:
-            logger.exception("세션 종료 시 pending_action 정리 실패 (session_id=%s)", session_id)
-        session.pending_action = None
-
     session.status = "closed"
     session.closed_at = datetime.now(timezone.utc)
     db.commit()
@@ -426,9 +409,13 @@ def delete_session(
     if session.user_id != authenticated_user_id:
         raise HTTPException(status_code=403, detail="Cannot delete other users' sessions")
 
-    # Delete all chat logs for this session
-    db.query(ChatLog).filter(ChatLog.session_id == session_id).delete()
-    # Delete the session
+    # FK 의존 순서대로 삭제: ToolMetric → ChatLog → ChatSession
+    log_ids = [
+        row.id for row in db.query(ChatLog.id).filter(ChatLog.session_id == session_id).all()
+    ]
+    if log_ids:
+        db.query(ToolMetric).filter(ToolMetric.chat_log_id.in_(log_ids)).delete(synchronize_session=False)
+    db.query(ChatLog).filter(ChatLog.session_id == session_id).delete(synchronize_session=False)
     db.delete(session)
     db.commit()
 

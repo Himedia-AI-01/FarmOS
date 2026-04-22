@@ -12,6 +12,7 @@ def to_camel(s: str) -> str:
 class ChatHistoryItem(BaseModel):
     role: str  # "user" | "bot"
     text: str
+    escalated: bool | None = None  # bot 응답의 escalated 상태 (null 허용 — user 메시지는 null로 전송됨)
 
 
 class ChatQuestion(BaseModel):

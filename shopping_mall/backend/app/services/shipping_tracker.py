@@ -13,7 +13,12 @@ class ShippingTracker:
 
     @classmethod
     def check_status(cls, shipment: Shipment) -> str:
-        """Simulate status progression based on days since creation."""
+        """Simulate status progression based on days since creation.
+
+        delivered 상태는 자동 전환하지 않습니다.
+        배송 지연·내부 사정 등을 고려하여 배송 완료는 관리자가 직접 처리해야 합니다.
+        자동 전환 최대 단계: in_transit
+        """
         if shipment.status == "delivered":
             return "delivered"
 
@@ -23,9 +28,7 @@ class ShippingTracker:
 
         days_elapsed = (now - shipment.created_at).total_seconds() / 86400
 
-        if days_elapsed >= 3:
-            new_status = "delivered"
-        elif days_elapsed >= 2:
+        if days_elapsed >= 2:
             new_status = "in_transit"
         elif days_elapsed >= 1:
             new_status = "picked_up"

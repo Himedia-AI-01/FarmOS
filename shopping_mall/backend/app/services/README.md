@@ -6,7 +6,7 @@
 
 | 파일 | 역할 |
 |------|------|
-| `agent_chatbot.py` | 챗봇 메인 서비스 — `AgentExecutor`를 래핑해 라우터 인터페이스(`answer()`) 제공. ChatLog/ChatSession 저장 포함 |
+| `multi_agent_chatbot.py` | 챗봇 서비스 — `SupervisorExecutor` 래핑, ChatLog/ToolMetric 저장 |
 | `ai_classifier.py` | 비용 항목 자동 분류 — Ollama LLM 또는 키워드 룰 폴백으로 `ExpenseEntry.category` 채움 |
 | `ai_report.py` | 주간 리포트 생성 — 매출/비용/인기상품 집계 후 Ollama LLM으로 인사이트 텍스트 생성 |
 | `demand_forecaster.py` | 수요 예측 |
@@ -18,9 +18,10 @@
 
 ```text
 POST /api/chatbot/ask
-  → app/routers/chatbot.py
-  → AgentChatbotService.answer()
-  → AgentExecutor.run()          # ai/agent/executor.py
-  → LLM tool_use 루프
-  → ChatLog 저장
+  → chatbot.py (router)
+  → MultiAgentChatbotService.answer()
+  → SupervisorExecutor.run()
+      ├── call_cs_agent  → AgentExecutor (CS_TOOLS 9개)
+      └── call_order_agent → OrderGraph (LangGraph StateGraph)
+  → ChatLog + ToolMetric 저장
 ```

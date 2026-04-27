@@ -144,12 +144,16 @@ async def seed(count: int = 30) -> tuple[int, int]:
                     """
                     INSERT INTO ai_agent_activity_daily
                         (day, control_type, count, by_source, by_priority,
-                         avg_duration_ms, last_at, updated_at)
+                         avg_duration_ms, duration_count, duration_sum,
+                         last_at, updated_at)
                     VALUES
                         (:day, :ct, 1,
                          jsonb_build_object(CAST(:src AS text), 1),
                          jsonb_build_object(CAST(:pr AS text), 1),
-                         :dur, :last_at, now())
+                         CAST(:dur AS INTEGER),
+                         CASE WHEN :dur IS NULL THEN 0 ELSE 1 END,
+                         CASE WHEN :dur IS NULL THEN 0 ELSE CAST(:dur AS INTEGER) END,
+                         :last_at, now())
                     ON CONFLICT (day, control_type) DO UPDATE SET
                         count = ai_agent_activity_daily.count + 1,
                         by_source = jsonb_set(
@@ -162,13 +166,27 @@ async def seed(count: int = 30) -> tuple[int, int]:
                             ARRAY[CAST(:pr AS text)],
                             to_jsonb(COALESCE((ai_agent_activity_daily.by_priority->>:pr)::int, 0) + 1)
                         ),
+                        duration_count = ai_agent_activity_daily.duration_count
+                            + CASE WHEN :dur IS NULL THEN 0 ELSE 1 END,
+                        duration_sum = ai_agent_activity_daily.duration_sum
+                            + CASE WHEN :dur IS NULL THEN 0 ELSE CAST(:dur AS INTEGER) END,
                         avg_duration_ms = CASE
-                            WHEN :dur IS NULL THEN ai_agent_activity_daily.avg_duration_ms
-                            WHEN ai_agent_activity_daily.avg_duration_ms IS NULL THEN :dur
-                            ELSE (
-                                (ai_agent_activity_daily.avg_duration_ms * ai_agent_activity_daily.count + :dur)
-                                / (ai_agent_activity_daily.count + 1)
-                            )
+                            WHEN (
+                                ai_agent_activity_daily.duration_count
+                                + CASE WHEN :dur IS NULL THEN 0 ELSE 1 END
+                            ) = 0
+                                THEN ai_agent_activity_daily.avg_duration_ms
+                            ELSE ROUND(
+                                (
+                                    ai_agent_activity_daily.duration_sum
+                                    + CASE WHEN :dur IS NULL THEN 0 ELSE CAST(:dur AS INTEGER) END
+                                )::numeric
+                                / NULLIF(
+                                    ai_agent_activity_daily.duration_count
+                                    + CASE WHEN :dur IS NULL THEN 0 ELSE 1 END,
+                                    0
+                                )
+                            )::int
                         END,
                         last_at = GREATEST(ai_agent_activity_daily.last_at, :last_at),
                         updated_at = now()

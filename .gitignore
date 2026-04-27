@@ -55,3 +55,6 @@ backend/benchmark_stt.py
 
 # ========== 로컬 실행 스크립트 ==========
 start.cmd
+
+# ========== 런처 세팅 파일 ==========
+settings.json

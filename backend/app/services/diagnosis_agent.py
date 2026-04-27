@@ -76,9 +76,9 @@ def map_to_grid(lat, lon):
     if theta < -math.pi:
         theta += 2.0 * math.pi
     theta *= sn
-    x = math.floor(ra * math.sin(theta) + XO + 0.5)
-    y = math.floor(ro - ra * math.cos(theta) + YO + 0.5)
-    return str(int(x)), str(int(y))
+    x = int(ra * math.sin(theta) + XO + 0.5)
+    y = int(ro - ra * math.cos(theta) + YO + 0.5)
+    return str(x), str(y)
 
 
 def _clean_ai_text(text: str) -> str:
@@ -323,20 +323,45 @@ async def fetch_weather(state: DiagnosisState) -> dict:
 
     # 2. 기상청 단기예보 조회 (약 3일치)
     from datetime import datetime, timedelta
-    current_time = datetime.now()
-    if current_time.hour < 2 or (current_time.hour == 2 and current_time.minute < 10):
-        target = current_time - timedelta(days=1)
-        target = target.replace(hour=23, minute=0, second=0)
-        base_date, base_time = target.strftime("%Y%m%d"), "2300"
-    else:
-        base_date, base_time = current_time.strftime("%Y%m%d"), "0200"
+    now_dt = datetime.now()
     
-    url = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+    # 단기예보 발표 시각: 0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300 (1일 8회)
+    # 각 시각 10분 이후부터 조회 가능하다고 가정
+    available_times = [2, 5, 8, 11, 14, 17, 20, 23]
+    base_date = now_dt.strftime("%Y%m%d")
+    base_time = "0200"
+    
+    found = False
+    for t in reversed(available_times):
+        # 현재 시각이 발표 시각 + 10분 경과했는지 확인
+        if now_dt.hour > t or (now_dt.hour == t and now_dt.minute >= 10):
+            base_time = f"{t:02d}00"
+            found = True
+            break
+            
+    if not found:
+        # 02:10 이전이라면 전날 23:00 데이터를 가져옴
+        target = now_dt - timedelta(days=1)
+        base_date = target.strftime("%Y%m%d")
+        base_time = "2300"
+    
+    url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
     last_error = "기상청 예보 조회 실패"
 
     import requests
-    for service_key in api_candidates:
-        params = {"serviceKey": service_key, "pageNo": "1", "numOfRows": "1000", "dataType": "JSON", "base_date": base_date, "base_time": base_time, "nx": nx, "ny": ny}
+    for raw_service_key in api_candidates:
+        # Decoding Key를 사용할 때는 unquote 처리가 필수적인 경우가 많음
+        service_key = urllib.parse.unquote(raw_service_key)
+        params = {
+            "serviceKey": service_key,
+            "pageNo": "1",
+            "numOfRows": "1000",
+            "dataType": "JSON",
+            "base_date": base_date,
+            "base_time": base_time,
+            "nx": nx,
+            "ny": ny
+        }
         try:
             resp = requests.get(url, params=params, timeout=10)
         except Exception as e:

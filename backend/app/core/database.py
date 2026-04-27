@@ -107,6 +107,9 @@ async def _ensure_ai_agent_activity_daily_columns():
 
 async def init_db():
     """앱 시작 시 테이블 생성."""
+    # Base.metadata 등록을 위해 모든 모델을 임포트한다.
+    import app.models
+    
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _ensure_column_widths()

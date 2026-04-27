@@ -41,9 +41,8 @@ BACKEND_DIR = ROOT / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-# Base.metadata 등록을 위해 모델 모듈을 명시적으로 import 한다.
-import app.models.journal  # noqa: F401
-import app.models.review_analysis  # noqa: F401
+# Base.metadata 등록을 위해 모든 모델을 임포트한다.
+import app.models 
 from app.core.config import settings
 from app.core.database import async_session, close_db, init_db
 from app.core.security import hash_password

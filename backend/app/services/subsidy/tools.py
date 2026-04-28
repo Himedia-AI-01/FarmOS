@@ -116,11 +116,18 @@ def _get_rag() -> GovSubsidyRAG:
     return GovSubsidyRAG()
 
 
+@lru_cache(maxsize=256)
 def search_subsidy_regulations(query: str, top_k: int = 5) -> list[Citation]:
     """자연어 질의에 가장 관련 높은 시행지침 조항을 반환한다.
 
     Solar asymmetric embedding + bge-reranker-v2-m3-ko + 타이틀 키워드 부스트.
     RAG 초기화에 실패하면 (예: UPSTAGE_API_KEY 미설정) 빈 리스트 반환.
+
+    프로세스 단위 LRU 캐시 (256 엔트리):
+      - (query, top_k) 동일하면 재계산 없이 즉시 반환 — Solar HTTP + 리랭커 비용 0.
+      - "영농일지 꼭 써야함?" 같은 자주 묻는 질의는 첫 호출 후 ~수 ms 응답.
+      - 시행지침 PDF 가 갱신되면 프로세스 재시작 시 캐시 자동 비움.
+      - 반환된 list 는 호출자가 mutate 하지 말 것 (cache-by-reference).
     """
     try:
         rag = _get_rag()

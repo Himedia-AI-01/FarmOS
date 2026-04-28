@@ -137,6 +137,9 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 _log.error(f"자동 인덱싱 실패 — /subsidy/ask 는 빈 결과 반환: {e}", exc_info=True)
         await _asyncio.to_thread(_get_reranker)
+        # Hybrid retrieval 의 sparse 절반 — BM25 인덱스를 미리 빌드해 첫 요청 지연 방지
+        if rag.count() > 0:
+            await _asyncio.to_thread(rag._ensure_bm25_built)
         app.state.subsidy_rag_ready = rag.count() > 0
     except Exception as e:
         # UPSTAGE_API_KEY 미설정·네트워크 오류·모델 로드 실패 등 — 서버 기동은 계속

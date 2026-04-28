@@ -55,3 +55,8 @@ backend/benchmark_stt.py
 
 # ========== 로컬 실행 스크립트 ==========
 start.cmd
+
+# ========== 로컬 도구의 DB credentials 설정 (커밋 절대 금지) ==========
+# 일부 GUI 도구(pgAdmin shortcut 등)가 repo 루트에 settings.json 으로 DB 비밀번호를 남김.
+# 코드는 이 파일을 참조하지 않음 — 백엔드 DB 설정은 backend/.env 의 DATABASE_URL 사용.
+/settings.json

@@ -73,18 +73,72 @@ class SubsidyDetail(BaseModel):
 # ── 자격 판정 결과 ─────────────────────────────────────────
 
 
+class Reason(BaseModel):
+    """판정 사유 한 줄 + 근거 조항 태그.
+
+    `source` 는 시행지침 소단원 식별자 (예: "II-3", "II-3 ⑤").
+    UI 에서 reason 옆에 작은 chip 으로 표시되어 사용자가 근거를 추적할 수 있게 한다.
+    None 일 경우 UI 는 chip 을 숨긴다 (집계성 메시지 등).
+    """
+
+    text: str
+    source: str | None = None
+
+
+class SourceClause(BaseModel):
+    """판정에 인용된 시행지침 소단원의 (태그, 본문, 원문 발췌).
+
+    예: tag="II-3 ⑤", text="신청자 개인 농업 외 종합소득 2,000만원 미만".
+    EligibilityResult.reasons 에 등장한 source 태그 중 unique 한 것만 채워진다.
+
+    snippet 은 ChromaDB 에 인덱싱된 시행지침 원문의 발췌(±200자) — 사용자가
+    클릭했을 때 원문 인용을 보여 주기 위함. 인덱스 조회 실패 시 None.
+    """
+
+    tag: str
+    text: str
+    snippet: str | None = None
+
+
+class PaymentStep(BaseModel):
+    """지급액 계산의 한 줄 (fixed 의 경우 1줄, tiered 는 구간별 N줄)."""
+
+    description: str
+    amount_krw: int
+
+
+class PaymentCalculation(BaseModel):
+    """예상 수령액의 계산 내역.
+
+    - fixed 지급: steps 에 "정액 지급" 한 줄, note 로 면적 무관 설명.
+    - tiered_by_area: steps 에 각 면적구간별 계산 한 줄씩, note 로 구간 정책 설명.
+    """
+
+    total_krw: int
+    steps: list[PaymentStep] = []
+    note: str | None = None
+
+
 class EligibilityResult(BaseModel):
     """단일 지원금에 대한 자격 판정 결과."""
 
     subsidy_code: str
     subsidy_name: str
     status: Literal["eligible", "ineligible", "needs_review"]
-    reasons: list[str] = Field(
+    reasons: list[Reason] = Field(
         default_factory=list,
-        description="해당/비해당 사유 (사용자 안내용)",
+        description="해당/비해당 사유 (사용자 안내용, 각 항목은 근거 조항 태그 포함 가능)",
     )
     estimated_amount_krw: int | None = None
     source_articles: list[str] = []
+    source_clauses: list[SourceClause] = Field(
+        default_factory=list,
+        description="판정에 실제 인용된 시행지침 소단원 (tag, 본문) — 출처 섹션 표시용",
+    )
+    payment_calculation: PaymentCalculation | None = Field(
+        default=None,
+        description="예상 수령액 계산 내역 — eligible/needs_review 에서만 채워짐",
+    )
 
 
 class MatchResponse(BaseModel):
@@ -96,7 +150,44 @@ class MatchResponse(BaseModel):
     needs_review: list[EligibilityResult] = []
 
 
+# ── Lazy clause snippets (detail drawer 가 열릴 때 호출) ──────
+
+
+class ClauseLookup(BaseModel):
+    """단일 clause 발췌 조회 단위 — tag 와 catalog text 를 함께 보낸다."""
+
+    tag: str
+    text: str
+
+
+class ClauseSnippetsRequest(BaseModel):
+    items: list[ClauseLookup] = Field(
+        max_length=20,
+        description="한 번에 조회할 clause 개수 상한 — DetailDrawer 한 장의 size 가 전형 5-10",
+    )
+
+
+class ClauseSnippetsResponse(BaseModel):
+    snippets: dict[str, str] = Field(
+        default_factory=dict,
+        description="tag → snippet. 조회 실패 항목은 키 자체가 누락",
+    )
+
+
 # ── RAG 질의응답 ─────────────────────────────────────────────
+
+
+class ChatTurn(BaseModel):
+    """대화 이력의 한 턴. 프론트가 누적해 백엔드에 매 호출마다 전체 history 를 보낸다.
+
+    role:
+        - "user"       : 사용자가 입력한 질문
+        - "assistant"  : 이전 LLM 답변 (citations 는 history 에는 포함하지 않는다 —
+                         답변 텍스트만 LLM 재인식에 필요)
+    """
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
 
 
 class SubsidyAskRequest(BaseModel):
@@ -107,6 +198,14 @@ class SubsidyAskRequest(BaseModel):
     )
     subsidy_code: str | None = Field(
         default=None, description="특정 지원금에 한정한 질문인 경우",
+    )
+    history: list[ChatTurn] = Field(
+        default_factory=list,
+        description=(
+            "직전까지의 대화 이력 (시간 순). 가장 최신 사용자 turn 은 question 으로 따로 보내고, "
+            "history 에는 그 직전까지의 (user, assistant) 쌍만 포함한다."
+        ),
+        max_length=40,  # frontend 가 thread 를 무한히 키우지 못하도록 안전 상한.
     )
 
 

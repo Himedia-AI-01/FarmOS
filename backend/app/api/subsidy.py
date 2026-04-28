@@ -158,7 +158,7 @@ async def _call_llm(system_prompt: str, user_prompt: str) -> str:
     diagnosis.py 와 동일한 컨벤션:
       - settings.LITELLM_API_KEY / settings.LITELLM_URL 사용
       - async with httpx.AsyncClient 로 커넥션 누수 방지
-      - model_kwargs.extra_body.reasoning.exclude=True 로 reasoning 토큰 출력 제외
+      - extra_body.reasoning.exclude=True 로 reasoning 토큰 출력 제외
 
     속도 튜닝:
       - max_tokens=500: 장문 답변의 꼬리 지연 제거 (시행지침 Q&A 는 3~5 문장이면 충분)
@@ -182,11 +182,7 @@ async def _call_llm(system_prompt: str, user_prompt: str) -> str:
             temperature=0.2,
             max_tokens=500,
             http_async_client=http_client,
-            model_kwargs={
-                "extra_body": {
-                    "reasoning": {"effort": "minimal", "exclude": True}
-                }
-            },
+            extra_body={"reasoning": {"effort": "minimal", "exclude": True}},
         )
         response = await llm.ainvoke([
             SystemMessage(content=system_prompt),

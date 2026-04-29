@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from _bootstrap_common import (  # type: ignore[import-not-found]
     error,
@@ -67,6 +68,7 @@ LEGACY_TABLE_NAMES = [
     "targets",
 ]
 LOG_PREFIX = "PESTICIDE"
+KST = ZoneInfo("Asia/Seoul")
 
 PARSER = argparse.ArgumentParser(
     description="농약 원본 JSON(json_raw)을 정제하여 PostgreSQL RAG 테이블에 적재합니다."
@@ -165,7 +167,7 @@ def ensure_backend_uv_python() -> None:
     env = os.environ.copy()
     env["FARMOS_PESTICIDE_SEED_REEXEC"] = "1"
     cmd = [str(backend_python), str(Path(__file__).resolve()), *sys.argv[1:]]
-    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT), env=env)
+    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT), env=env, check=False)
     raise SystemExit(result.returncode)
 
 
@@ -175,7 +177,7 @@ def utcnow_iso() -> str:
 
 def log(message: str) -> None:
     safe_message = message.replace("\r", " ").replace("\n", " ")
-    info(f"[{datetime.now().strftime('%H:%M:%S')}] {safe_message}")
+    info(f"[{datetime.now(KST).strftime('%H:%M:%S KST')}] {safe_message}")
 
 
 def clean_text(value: Any) -> str | None:
@@ -529,6 +531,7 @@ def upsert_product(
     caches: UpsertCaches,
     candidate: Product,
     now: str,
+    *,
     append_mode: bool,
 ) -> Product:
     cached = caches.products.get(candidate.product_id)
@@ -957,11 +960,11 @@ def iter_pairs(raw_row: dict[str, Any]) -> list[tuple[str, str, str]]:
     target_names = split_top_level(raw_row.get("SICKNS_HLSCT_NM_WEEDS_NM")) or [
         "대상정보없음"
     ]
-    pairs: list[tuple[str, str, str]] = []
-    for crop_name in crop_names:
-        for target_name in target_names:
-            pairs.append((crop_name, target_name, infer_target_kind(target_name)))
-    return pairs
+    return [
+        (crop_name, target_name, infer_target_kind(target_name))
+        for crop_name in crop_names
+        for target_name in target_names
+    ]
 
 
 def populate_database(

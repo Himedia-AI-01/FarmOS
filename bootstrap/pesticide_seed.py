@@ -1148,16 +1148,8 @@ def main() -> int:
         log("DB commit을 수행합니다.")
         session.commit()
 
-    if not args.db_url:
-        destination = normalize_db_url(os.getenv("DATABASE_URL")) or (
-            f"{first_non_empty(args.postgres_host, os.getenv('POSTGRES_HOST'), DEFAULT_POSTGRES_HOST)}:"
-            f"{int(first_non_empty(args.postgres_port, os.getenv('POSTGRES_PORT'), DEFAULT_POSTGRES_PORT))}/"
-            f"{first_non_empty(args.postgres_db, os.getenv('POSTGRES_DB'), DEFAULT_POSTGRES_DB)}"
-        )
-    else:
-        destination = normalize_db_url(args.db_url)
-
-    log(f"[DONE] destination={destination}")
+    safe_destination = engine.url.render_as_string(hide_password=True)
+    log(f"[DONE] destination={safe_destination}")
     log(
         "[DONE] summary: "
         f"files_seen={stats.files_seen}, "

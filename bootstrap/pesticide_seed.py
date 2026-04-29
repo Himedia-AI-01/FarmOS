@@ -22,20 +22,16 @@ from _bootstrap_common import (  # type: ignore[import-not-found]
 )
 from _venv_utils import _venv_python
 from dotenv import dotenv_values, load_dotenv
+from pesticide import Base, Crop, Product, ProductApplication, RagDocument, Target
 from sqlalchemy import (
-    Boolean,
-    Date,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
+    and_,
     create_engine,
     inspect,
+    or_,
     select,
 )
 from sqlalchemy.engine import URL
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Session
 
 SERVICE_ID = "I1910"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -76,32 +72,35 @@ PARSER = argparse.ArgumentParser(
     description="농약 원본 JSON(json_raw)을 정제하여 PostgreSQL RAG 테이블에 적재합니다."
 )
 PARSER.add_argument(
-    "--input-dir", type=Path, default=DEFAULT_INPUT_DIR, help="API raw JSON 디렉터리"
+    "--append",
+    action="store_true",
+    help="기존 테이블을 유지하고 누적 적재합니다. 기본값은 관리 대상 테이블 재생성입니다.",
 )
-PARSER.add_argument("--glob", default="*.json.gz", help="입력 파일 검색 패턴")
 PARSER.add_argument(
     "--backend-env-path",
     type=Path,
     default=DEFAULT_BACKEND_ENV_PATH,
     help="PostgreSQL 접속 정보 로딩에 사용할 backend/.env 경로",
 )
-PARSER.add_argument("--postgres-host", default=None, help="PostgreSQL 호스트")
-PARSER.add_argument("--postgres-port", type=int, default=None, help="PostgreSQL 포트")
-PARSER.add_argument("--postgres-user", default=None, help="PostgreSQL 사용자명")
 PARSER.add_argument(
-    "--postgres-password",
-    default=None,
-    help="PostgreSQL 비밀번호",
+    "--commit-every-files",
+    type=int,
+    default=0,
+    help="파일 기준 중간 commit 주기. 0 이하면 마지막에 한 번만 commit 합니다.",
 )
-PARSER.add_argument("--postgres-db", default=None, help="PostgreSQL DB 이름")
 PARSER.add_argument(
     "--db-url",
     help="SQLAlchemy DB URL 직접 지정. 지정하면 개별 DB 옵션보다 우선합니다.",
 )
 PARSER.add_argument(
-    "--append",
-    action="store_true",
-    help="기존 테이블을 유지하고 누적 적재합니다. 기본값은 관리 대상 테이블 재생성입니다.",
+    "--flush-every",
+    type=int,
+    default=2000,
+    help="row 기준 중간 flush/expunge 주기. 0 이하면 비활성화합니다.",
+)
+PARSER.add_argument("--glob", default="*.json.gz", help="입력 파일 검색 패턴")
+PARSER.add_argument(
+    "--input-dir", type=Path, default=DEFAULT_INPUT_DIR, help="API raw JSON 디렉터리"
 )
 PARSER.add_argument(
     "--log-every",
@@ -109,233 +108,44 @@ PARSER.add_argument(
     default=5000,
     help="처리한 raw row 수 기준 중간 로그 주기. 0 이하면 파일 단위 로그만 출력합니다.",
 )
+PARSER.add_argument("--postgres-db", default=None, help="PostgreSQL DB 이름")
+PARSER.add_argument("--postgres-host", default=None, help="PostgreSQL 호스트")
 PARSER.add_argument(
     "--postgres-max-retries",
     type=int,
     default=10,
     help="PostgreSQL 서버 연결 재시도 최대 횟수(기본 10회)",
 )
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-class Product(Base):
-    __tablename__ = "rag_pesticide_products"
-
-    product_id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=False
-    )
-    product_code: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True
-    )
-    registration_number: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True
-    )
-    ingredient_or_formulation_name: Mapped[str | None] = mapped_column(
-        Text, nullable=True, index=True
-    )
-    pesticide_name_eng: Mapped[str | None] = mapped_column(Text, nullable=True)
-    brand_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    corporation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    pesticide_category_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    usage_purpose_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    formulation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_registered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    registration_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    registration_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
-    registration_standard: Mapped[str | None] = mapped_column(Text, nullable=True)
-    manufacturer_importer_type: Mapped[str | None] = mapped_column(Text, nullable=True)
-    representative_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    business_registration_number: Mapped[str | None] = mapped_column(
-        String(100), nullable=True
-    )
-    business_registration_event_name: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    raw_row_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    source_file_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    source_row_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
-    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
-    applications: Mapped[list["ProductApplication"]] = relationship(
-        back_populates="product"
-    )
-
-
-class Crop(Base):
-    __tablename__ = "rag_pesticide_crops"
-    __table_args__ = (
-        UniqueConstraint(
-            "crop_name_normalized", name="uq_rag_pesticide_crops_crop_name_normalized"
-        ),
-    )
-
-    crop_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    crop_name: Mapped[str] = mapped_column(Text, nullable=False)
-    crop_name_normalized: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True
-    )
-    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
-    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
-    applications: Mapped[list["ProductApplication"]] = relationship(
-        back_populates="crop"
-    )
-
-
-class Target(Base):
-    __tablename__ = "rag_pesticide_targets"
-    __table_args__ = (
-        UniqueConstraint(
-            "target_name_normalized",
-            "target_kind",
-            name="uq_rag_pesticide_targets_normalized_kind",
-        ),
-    )
-
-    target_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    target_name: Mapped[str] = mapped_column(Text, nullable=False)
-    target_name_normalized: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True
-    )
-    target_kind: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
-    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
-    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
-    applications: Mapped[list["ProductApplication"]] = relationship(
-        back_populates="target"
-    )
-
-
-class ProductApplication(Base):
-    __tablename__ = "rag_pesticide_product_applications"
-    __table_args__ = (
-        UniqueConstraint(
-            "product_id",
-            "crop_id",
-            "target_id",
-            name="uq_rag_pesticide_product_applications_triplet",
-        ),
-    )
-
-    application_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    product_id: Mapped[int] = mapped_column(
-        ForeignKey("rag_pesticide_products.product_id"), nullable=False, index=True
-    )
-    crop_id: Mapped[int] = mapped_column(
-        ForeignKey("rag_pesticide_crops.crop_id"), nullable=False, index=True
-    )
-    target_id: Mapped[int] = mapped_column(
-        ForeignKey("rag_pesticide_targets.target_id"), nullable=False, index=True
-    )
-    application_method: Mapped[str | None] = mapped_column(Text, nullable=True)
-    application_timing: Mapped[str | None] = mapped_column(Text, nullable=True)
-    dilution_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    dilution_factor: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    use_quantity: Mapped[str | None] = mapped_column(Text, nullable=True)
-    use_unit: Mapped[str | None] = mapped_column(Text, nullable=True)
-    max_use_count_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    max_use_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    test_drug_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    human_livestock_toxicity: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ecotoxicity: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source_file_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    source_row_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
-    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
-    product: Mapped[Product] = relationship(back_populates="applications")
-    crop: Mapped[Crop] = relationship(back_populates="applications")
-    target: Mapped[Target] = relationship(back_populates="applications")
-    rag_document: Mapped["RagDocument | None"] = relationship(
-        back_populates="application"
-    )
-
-
-class RagDocument(Base):
-    __tablename__ = "rag_pesticide_documents"
-    __table_args__ = (
-        UniqueConstraint(
-            "application_id", name="uq_rag_pesticide_documents_application_id"
-        ),
-    )
-
-    document_id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(
-        ForeignKey("rag_pesticide_product_applications.application_id"),
-        nullable=False,
-        index=True,
-    )
-    crop_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    crop_name_normalized: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True
-    )
-    target_name: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    target_name_normalized: Mapped[str] = mapped_column(
-        String(255), nullable=False, index=True
-    )
-    target_kind: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
-    ingredient_or_formulation_name: Mapped[str | None] = mapped_column(
-        Text, nullable=True, index=True
-    )
-    pesticide_name_eng: Mapped[str | None] = mapped_column(Text, nullable=True)
-    brand_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    corporation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    registration_number: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True
-    )
-    product_code: Mapped[str | None] = mapped_column(
-        String(100), nullable=True, index=True
-    )
-    usage_purpose_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    formulation_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    application_method: Mapped[str | None] = mapped_column(Text, nullable=True)
-    application_timing: Mapped[str | None] = mapped_column(Text, nullable=True)
-    dilution_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    dilution_factor: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    use_quantity: Mapped[str | None] = mapped_column(Text, nullable=True)
-    use_unit: Mapped[str | None] = mapped_column(Text, nullable=True)
-    max_use_count_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    max_use_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    human_livestock_toxicity: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ecotoxicity: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_registered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    registration_valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
-    source_file_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    source_row_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    search_text: Mapped[str] = mapped_column(Text, nullable=False)
-    render_text: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[str] = mapped_column(String(40), nullable=False)
-    updated_at: Mapped[str] = mapped_column(String(40), nullable=False)
-
-    application: Mapped[ProductApplication] = relationship(
-        back_populates="rag_document"
-    )
+PARSER.add_argument(
+    "--postgres-password",
+    default=None,
+    help="PostgreSQL 비밀번호",
+)
+PARSER.add_argument("--postgres-port", type=int, default=None, help="PostgreSQL 포트")
+PARSER.add_argument("--postgres-user", default=None, help="PostgreSQL 사용자명")
 
 
 @dataclass
 class Stats:
-    files_seen: int = 0
-    rows_seen: int = 0
-    products_written: int = 0
-    crops_written: int = 0
-    targets_written: int = 0
     applications_written: int = 0
+    crops_written: int = 0
+    files_seen: int = 0
+    products_written: int = 0
     rag_documents_written: int = 0
+    rows_seen: int = 0
+    targets_written: int = 0
 
 
 AppKey = tuple[int, str, str, str]
+ProductIdentityKey = tuple[str, str]
 
 
 @dataclass
 class UpsertCaches:
-    products: dict[int, Product]
     applications: dict[AppKey, ProductApplication]
     documents: dict[AppKey, RagDocument]
+    products_by_identity: dict[ProductIdentityKey, Product]
+    products: dict[int, Product]
 
 
 def parse_args() -> argparse.Namespace:
@@ -516,8 +326,7 @@ def parse_range_from_result_path(path: Path) -> tuple[int, int]:
     return int(match.group("start")), int(match.group("end"))
 
 
-def make_product_id(source_file: Path, row_index: int) -> int:
-    start_index, _ = parse_range_from_result_path(source_file)
+def make_product_id(start_index: int, row_index: int) -> int:
     return start_index + row_index + 1
 
 
@@ -595,10 +404,14 @@ def build_render_text(
 
 
 def build_product(
-    raw_row: dict[str, Any], source_file: Path, row_index: int, now: str
+    raw_row: dict[str, Any],
+    source_file: Path,
+    start_index: int,
+    row_index: int,
+    now: str,
 ) -> Product:
     return Product(
-        product_id=make_product_id(source_file, row_index),
+        product_id=make_product_id(start_index, row_index),
         product_code=clean_text(raw_row.get("AGCHM_PRDLST_NO")),
         registration_number=clean_text(raw_row.get("PRDLST_REG_NO")),
         ingredient_or_formulation_name=clean_text(raw_row.get("PRDLST_KOR_NM")),
@@ -654,6 +467,63 @@ def make_app_key(product: Product, crop: Crop, target: Target) -> AppKey:
     )
 
 
+def product_identity_keys(product: Product) -> list[ProductIdentityKey]:
+    keys: list[ProductIdentityKey] = []
+    if product.product_code and product.registration_number:
+        keys.append(
+            ("code+reg", f"{product.product_code}::{product.registration_number}")
+        )
+    if product.product_code:
+        keys.append(("code", product.product_code))
+    if product.registration_number:
+        keys.append(("reg", product.registration_number))
+    if product.raw_row_hash:
+        keys.append(("raw_hash", product.raw_row_hash))
+    return keys
+
+
+def find_existing_product_by_identity(
+    session: Session, candidate: Product
+) -> Product | None:
+    conditions = []
+    if candidate.product_code and candidate.registration_number:
+        conditions.append(
+            and_(
+                Product.product_code == candidate.product_code,
+                Product.registration_number == candidate.registration_number,
+            )
+        )
+    if candidate.product_code:
+        conditions.append(Product.product_code == candidate.product_code)
+    if candidate.registration_number:
+        conditions.append(Product.registration_number == candidate.registration_number)
+    conditions.append(Product.raw_row_hash == candidate.raw_row_hash)
+
+    rows = session.scalars(select(Product).where(or_(*conditions))).all()
+    if not rows:
+        return None
+
+    if candidate.product_code and candidate.registration_number:
+        for row in rows:
+            if (
+                row.product_code == candidate.product_code
+                and row.registration_number == candidate.registration_number
+            ):
+                return row
+    if candidate.product_code:
+        for row in rows:
+            if row.product_code == candidate.product_code:
+                return row
+    if candidate.registration_number:
+        for row in rows:
+            if row.registration_number == candidate.registration_number:
+                return row
+    for row in rows:
+        if row.raw_row_hash == candidate.raw_row_hash:
+            return row
+    return None
+
+
 def upsert_product(
     session: Session,
     caches: UpsertCaches,
@@ -664,20 +534,34 @@ def upsert_product(
     cached = caches.products.get(candidate.product_id)
     if cached is not None:
         existing = cached
-    elif not append_mode:
-        session.add(candidate)
-        caches.products[candidate.product_id] = candidate
-        return candidate
-    else:
-        existing = session.get(Product, candidate.product_id)
+    elif append_mode:
+        existing = None
+        for identity_key in product_identity_keys(candidate):
+            cached_by_identity = caches.products_by_identity.get(identity_key)
+            if cached_by_identity is not None:
+                existing = cached_by_identity
+                break
+        if existing is None:
+            existing = find_existing_product_by_identity(session, candidate)
         if existing is None:
             session.add(candidate)
             caches.products[candidate.product_id] = candidate
+            for identity_key in product_identity_keys(candidate):
+                caches.products_by_identity[identity_key] = candidate
             return candidate
-        caches.products[candidate.product_id] = existing
-
-    if existing is None:
+    else:
+        existing = None
+        session.add(candidate)
+        caches.products[candidate.product_id] = candidate
+        for identity_key in product_identity_keys(candidate):
+            caches.products_by_identity[identity_key] = candidate
         return candidate
+
+    caches.products[candidate.product_id] = existing
+    for identity_key in product_identity_keys(existing):
+        caches.products_by_identity[identity_key] = existing
+    for identity_key in product_identity_keys(candidate):
+        caches.products_by_identity[identity_key] = existing
 
     existing.product_code = candidate.product_code
     existing.registration_number = candidate.registration_number
@@ -1013,19 +897,17 @@ def get_or_create_crop(
     cache: dict[str, Crop],
     crop_name: str,
     now: str,
-    append_mode: bool,
 ) -> Crop:
     normalized = normalize_keyword(crop_name)
     cached = cache.get(normalized)
     if cached is not None:
         return cached
-    if append_mode:
-        existing = session.scalar(
-            select(Crop).where(Crop.crop_name_normalized == normalized)
-        )
-        if existing is not None:
-            cache[normalized] = existing
-            return existing
+    existing = session.scalar(
+        select(Crop).where(Crop.crop_name_normalized == normalized)
+    )
+    if existing is not None:
+        cache[normalized] = existing
+        return existing
     crop = Crop(
         crop_name=crop_name,
         crop_name_normalized=normalized,
@@ -1043,23 +925,21 @@ def get_or_create_target(
     target_name: str,
     target_kind: str,
     now: str,
-    append_mode: bool,
 ) -> Target:
     normalized = normalize_keyword(target_name)
     cache_key = (normalized, target_kind)
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    if append_mode:
-        existing = session.scalar(
-            select(Target).where(
-                Target.target_name_normalized == normalized,
-                Target.target_kind == target_kind,
-            )
+    existing = session.scalar(
+        select(Target).where(
+            Target.target_name_normalized == normalized,
+            Target.target_kind == target_kind,
         )
-        if existing is not None:
-            cache[cache_key] = existing
-            return existing
+    )
+    if existing is not None:
+        cache[cache_key] = existing
+        return existing
     target = Target(
         target_name=target_name,
         target_name_normalized=normalized,
@@ -1085,23 +965,38 @@ def iter_pairs(raw_row: dict[str, Any]) -> list[tuple[str, str, str]]:
 
 
 def populate_database(
-    session: Session, source_files: list[Path], log_every: int, append_mode: bool
+    session: Session,
+    source_files: list[Path],
+    log_every: int,
+    append_mode: bool,
+    flush_every: int,
+    commit_every_files: int,
 ) -> Stats:
     stats = Stats()
     crop_cache: dict[str, Crop] = {}
     target_cache: dict[tuple[str, str], Target] = {}
-    caches = UpsertCaches(products={}, applications={}, documents={})
+    seen_crop_keys: set[str] = set()
+    seen_target_keys: set[tuple[str, str]] = set()
+    caches = UpsertCaches(
+        products={},
+        products_by_identity={},
+        applications={},
+        documents={},
+    )
 
     for source_file in source_files:
         log(f"파일 처리 시작: {source_file.name}")
         stats.files_seen += 1
+        source_start_index, _ = parse_range_from_result_path(source_file)
         rows = load_rows(source_file)
         log(f"파일 로드 완료: {source_file.name}, rows={len(rows)}")
 
         for row_index, raw_row in enumerate(rows):
             stats.rows_seen += 1
             now = utcnow_iso()
-            product_candidate = build_product(raw_row, source_file, row_index, now)
+            product_candidate = build_product(
+                raw_row, source_file, source_start_index, row_index, now
+            )
             product = upsert_product(
                 session,
                 caches,
@@ -1120,15 +1015,17 @@ def populate_database(
                     crop_cache,
                     crop_name,
                     now,
-                    append_mode=append_mode,
                 )
+                seen_crop_keys.add(crop.crop_name_normalized)
                 target = get_or_create_target(
                     session,
                     target_cache,
                     target_name,
                     target_kind,
                     now,
-                    append_mode=append_mode,
+                )
+                seen_target_keys.add(
+                    (target.target_name_normalized, target.target_kind)
                 )
 
                 application = upsert_application(
@@ -1164,15 +1061,45 @@ def populate_database(
                     f"applications={stats.applications_written}, "
                     f"rag_documents={stats.rag_documents_written}"
                 )
+            if flush_every > 0 and stats.rows_seen % flush_every == 0:
+                session.flush()
+                session.expunge_all()
+                crop_cache.clear()
+                target_cache.clear()
+                caches = UpsertCaches(
+                    products={},
+                    products_by_identity={},
+                    applications={},
+                    documents={},
+                )
+                log(
+                    f"중간 flush/expunge 완료: rows_seen={stats.rows_seen}, "
+                    f"files_seen={stats.files_seen}"
+                )
 
         log(
             "파일 처리 완료: "
             f"{source_file.name}, 누적 rows_seen={stats.rows_seen}, "
             f"누적 rag_documents={stats.rag_documents_written}"
         )
+        if commit_every_files > 0 and stats.files_seen % commit_every_files == 0:
+            session.commit()
+            session.expunge_all()
+            crop_cache.clear()
+            target_cache.clear()
+            caches = UpsertCaches(
+                products={},
+                products_by_identity={},
+                applications={},
+                documents={},
+            )
+            log(
+                f"중간 commit 완료: files_seen={stats.files_seen}, "
+                f"rows_seen={stats.rows_seen}"
+            )
 
-    stats.crops_written = len(crop_cache)
-    stats.targets_written = len(target_cache)
+    stats.crops_written = len(seen_crop_keys)
+    stats.targets_written = len(seen_target_keys)
     return stats
 
 
@@ -1185,6 +1112,10 @@ def main() -> int:
         raise RuntimeError("--log-every 는 0 이상이어야 합니다.")
     if args.postgres_max_retries <= 0:
         raise RuntimeError("--postgres-max-retries 는 1 이상이어야 합니다.")
+    if args.flush_every < 0:
+        raise RuntimeError("--flush-every 는 0 이상이어야 합니다.")
+    if args.commit_every_files < 0:
+        raise RuntimeError("--commit-every-files 는 0 이상이어야 합니다.")
     input_dir: Path = args.input_dir
     if not input_dir.exists() or not input_dir.is_dir():
         error(f"json_raw 디렉터리가 없어 적재를 건너뜁니다: {input_dir}")
@@ -1207,7 +1138,12 @@ def main() -> int:
 
     with Session(engine) as session:
         stats = populate_database(
-            session, source_files, args.log_every, append_mode=args.append
+            session,
+            source_files,
+            args.log_every,
+            append_mode=args.append,
+            flush_every=args.flush_every,
+            commit_every_files=args.commit_every_files,
         )
         log("DB commit을 수행합니다.")
         session.commit()

@@ -248,8 +248,12 @@ export async function* askSubsidyStream(
  * AbortSignal.any 가 있으면 그걸 쓰고, 구형 환경에선 직접 합성 (Safari 16 미만 등).
  */
 function composeSignals(signals: AbortSignal[]): AbortSignal {
-  // @ts-expect-error — AbortSignal.any 는 최신 표준 (TS 타입에 따라 미정의일 수 있음)
-  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals);
+  const abortSignalWithAny = AbortSignal as unknown as {
+    any?: (signals: AbortSignal[]) => AbortSignal;
+  };
+  if (typeof abortSignalWithAny.any === 'function') {
+    return abortSignalWithAny.any(signals);
+  }
   const ctl = new AbortController();
   for (const s of signals) {
     if (s.aborted) {

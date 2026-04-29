@@ -12,11 +12,16 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     fetchDailySummary(date).then((res) => {
+      // 빠른 날짜 토글 시 이전 fetch가 늦게 도착해 최신 결과를 덮어쓰는 경합 방지.
+      // 또한 컴포넌트 언마운트 후 setState 경고도 함께 차단한다.
+      if (cancelled) return;
       setSummary(res);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [date, fetchDailySummary]);
 
   const moveDate = (days: number) => {

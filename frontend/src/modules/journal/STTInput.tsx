@@ -5,7 +5,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { MdMic, MdStop, MdAutorenew, MdClose } from "react-icons/md";
+import { MdMic, MdStop, MdClose } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
 import type { STTParseResult } from "@/types";
 
@@ -350,7 +350,10 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
                       : "일지를 채우는 중입니다..."}
                   </p>
                   <div className="w-64 h-1.5 rounded-full bg-white/20 overflow-hidden">
-                    <div className="stt-pulse-bar h-full w-full rounded-full bg-white/90" />
+                    <div
+                      className="h-full rounded-full bg-white/90 transition-[width] duration-200"
+                      style={{ width: `${Math.max(8, Math.round(progress))}%` }}
+                    />
                   </div>
                 </div>
               )}

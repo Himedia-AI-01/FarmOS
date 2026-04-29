@@ -144,12 +144,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // 서버 호출 실패(네트워크 오프라인 등)에 관계없이 클라이언트 상태는 반드시 정리한다.
+    // 과거: 실패 시 setUser(null)이 실행되지 않아 사용자가 "로그인 상태"로 보였다.
     clearRefreshTimer();
-    await fetch(`${API_BASE}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    setUser(null);
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (err) {
+      // 네트워크 오류 무시 — 클라이언트 측 세션은 어차피 종료
+      console.warn('[auth] logout request failed (서버 쿠키는 만료 시 자동 정리):', err);
+    } finally {
+      setUser(null);
+    }
   };
 
   const refreshUser = useCallback(async () => {

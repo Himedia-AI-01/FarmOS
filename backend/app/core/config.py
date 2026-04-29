@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     # JWT 시크릿 키 (FarmOS-ShoppingMall 공유 인증)
     JWT_SECRET_KEY: str = ""
 
+    # 쿠키 보안 (운영 = True / 로컬 HTTP = False)
+    # secure=True 면 HTTPS 응답에서만 브라우저가 쿠키 전송한다.
+    # 프로덕션 배포 시 반드시 .env 에서 COOKIE_SECURE=true 로 오버라이드.
+    COOKIE_SECURE: bool = False
+
+    # 비밀번호 재설정 이메일 발신 토글
+    # False (기본): /find-password 응답에 reset_token 포함하지 않고 200만 반환 → 이메일 채널 미구축 환경에서도 토큰 노출 차단
+    # True: 이메일 발송 인프라가 구비된 경우 SMTP 연동 (별도 구현 필요).
+    PASSWORD_RESET_EMAIL_ENABLED: bool = False
+
     # CORS 허용 도메인 (JSON 배열 형식)
     # 프론트엔드 → 백엔드 API 호출 허용
     CORS_ORIGINS: list[str] = []
@@ -121,10 +131,49 @@ class Settings(BaseSettings):
     FARM_NX: int = 84
     FARM_NY: int = 106
 
+    # 기상청 중기예보 지역 코드 (5일 이상 예보용).
+    # MID_LAND_REG_ID: 육상예보권역 코드 — 11B00000(서울·경기), 11D10000(영동),
+    #   11D20000(영서), 11C20000(대전·세종·충남), 11C10000(충북),
+    #   11F10000(광주·전남), 11F20000(전북), 11H10000(대구·경북),
+    #   11H20000(부산·울산·경남), 11G00000(제주)
+    # MID_TEMP_REG_ID: 시군 단위 코드. 영주=11H10401, 서울=11B10101 등.
+    # 자세한 매핑은 공공데이터포털 기상청 중기예보 API 문서 참고.
+    KMA_MID_LAND_REG_ID: str = "11H10000"
+    KMA_MID_TEMP_REG_ID: str = "11H10401"
+
     # 한글 폰트 (PDF 생성용) — 저장소에 번들된 Pretendard(SIL OFL 1.1) 기본 사용.
     # 시스템 폰트 사용하려면 .env에서 절대 경로로 오버라이드 가능.
     FONT_PATH: str = str(_BUNDLED_FONTS_DIR / "Pretendard-Regular.ttf")
     FONT_BOLD_PATH: str = str(_BUNDLED_FONTS_DIR / "Pretendard-Bold.ttf")
+
+    # ── Farm Agent (FarmOS Deep Agent) ──────────────────────────────────────
+    # Fast-path: 단순 질의(날씨/시세/일지/IoT 이력)를 LLM 우회로 즉시 응답.
+    # 안전 민감 키워드(농약/직불/진단 등)는 자동으로 fast-path 거부.
+    FARM_AGENT_FAST_PATH_ENABLED: bool = True
+    # 입력 길이 제한 — fast-path 매칭 시 너무 긴 질의는 복잡한 의도로 보고 정상 흐름으로 위임
+    FARM_AGENT_FAST_PATH_MAX_LEN: int = 80
+    # SSE 스트리밍 heartbeat 주기 (초). nginx 등 리버스 프록시의 idle timeout 회피.
+    # Gemma 가 task 위임 직후 첫 토큰까지 10초 이상 걸릴 수 있어 heartbeat 필요.
+    FARM_AGENT_SSE_HEARTBEAT_SEC: int = 15
+
+    # LangSmith 트레이싱 (Deep Agent + 서브에이전트 + 도구 호출 전체 추적).
+    # API 키가 비어 있으면 자동 비활성. shopping_mall과 동일 키 공유 가능.
+    LANGCHAIN_TRACING_V2: str = "false"
+    LANGCHAIN_API_KEY: str = ""
+    LANGCHAIN_PROJECT: str = "farmos-deepagent"
+    LANGCHAIN_ENDPOINT: str = "https://api.smith.langchain.com"
+
+    # ── MCP (Model Context Protocol) ────────────────────────────────────────
+    # 클라이언트 모드: FarmOS Deep Agent 가 외부 MCP 서버의 도구를 흡수.
+    # JSON 형식 — 키는 서버명, 값은 langchain-mcp-adapters 의 server config.
+    # 예: '{"weather":{"url":"http://localhost:9001/mcp","transport":"http"}}'
+    # 비어있으면 외부 MCP 도구 없이 네이티브 서브에이전트만 동작.
+    MCP_SERVERS_JSON: str = ""
+
+    # 서버 모드: FarmOS REST 엔드포인트를 MCP 도구로 노출 (Claude/Cursor 클라이언트용).
+    # /mcp 경로에 마운트. 기존 JWT 쿠키 인증 (get_current_user) 그대로 적용된다.
+    MCP_SERVER_ENABLED: bool = False
+    MCP_SERVER_NAME: str = "FarmOS"
 
     # 공익직불 RAG (정부 지원금 매칭) — subsidy-scoped, does not affect other modules
     UPSTAGE_API_KEY: str = ""

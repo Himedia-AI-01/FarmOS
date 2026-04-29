@@ -1,3 +1,4 @@
+import logging
 import secrets
 import time
 from collections import defaultdict
@@ -5,6 +6,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.core.security import (
@@ -17,6 +19,8 @@ from app.schemas.auth import (
     SignupRequest, LoginRequest, FindIdRequest, FindPasswordRequest,
     ResetPasswordRequest, UserResponse, OnboardingRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -54,7 +58,7 @@ def _set_token_cookie(response: Response, token: str):
         key=COOKIE_KEY,
         value=token,
         httponly=True,
-        secure=False,       # 개발환경 HTTP → False, 프로덕션에서는 True
+        secure=settings.COOKIE_SECURE,  # .env 의 COOKIE_SECURE 로 결정 — 프로덕션 = true
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
@@ -66,7 +70,7 @@ def _set_refresh_cookie(response: Response, token: str):
         key=REFRESH_COOKIE_KEY,
         value=token,
         httponly=True,
-        secure=False,       # 개발환경 HTTP → False, 프로덕션에서는 True
+        secure=settings.COOKIE_SECURE,  # .env 의 COOKIE_SECURE 로 결정 — 프로덕션 = true
         samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/",
@@ -183,39 +187,72 @@ async def complete_onboarding(
 
 
 @router.post("/find-id")
-async def find_id(req: FindIdRequest, db: AsyncSession = Depends(get_db)):
-    """아이디 찾기 — 이름 + 이메일로 조회."""
+async def find_id(req: FindIdRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """아이디 찾기 — 이름 + 이메일로 조회.
+
+    보안: 일치 여부와 무관하게 동일 형식의 200 응답을 반환해 (이름, 이메일) 페어
+    존재 여부를 누설하지 않는다. 일치 시에만 마스킹된 user_id를 응답에 포함.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     user = await user_store.find_by_name_and_email(db, req.name, req.email)
-    if not user:
-        raise HTTPException(404, "일치하는 회원 정보를 찾을 수 없습니다.")
+    if user is None:
+        # 일관된 응답 — 미일치 케이스에도 200 + 빈 user_id_masked
+        return {"user_id_masked": "", "message": "조회를 완료했습니다."}
     uid = user.id
-    masked = uid[:2] + "*" * (len(uid) - 2)
-    return {"user_id_masked": masked, "message": "아이디를 찾았습니다."}
+    masked = uid[:2] + "*" * (len(uid) - 2) if len(uid) > 2 else uid
+    return {"user_id_masked": masked, "message": "조회를 완료했습니다."}
 
 
 @router.post("/find-password")
-async def find_password(req: FindPasswordRequest, db: AsyncSession = Depends(get_db)):
-    """비밀번호 찾기 — 아이디 + 이메일 확인 후 일회용 재설정 토큰 발급."""
-    user = await user_store.find_by_id_and_email(db, req.user_id, req.email)
-    if not user:
-        raise HTTPException(404, "일치하는 회원 정보를 찾을 수 없습니다.")
+async def find_password(req: FindPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """비밀번호 찾기 — 아이디 + 이메일 확인.
 
-    # 만료된 토큰 정리
+    보안:
+      - 응답은 (id, email) 일치 여부와 무관하게 동일한 200 메시지 반환 (계정 열거 방지).
+      - 일치하면 일회용 reset_token 을 발급해 이메일로 발송 (이메일 미구축 환경에서는
+        토큰을 응답에 절대 포함하지 않음 — 과거 디자인의 평문 토큰 노출 취약점 제거).
+      - 동일 IP 의 요청 횟수를 제한해 무차별 대입 방지 (`/login`과 동일한 윈도우).
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
+    user = await user_store.find_by_id_and_email(db, req.user_id, req.email)
+
+    # 만료된 토큰 정리 (정상 흐름이든 미일치 흐름이든 GC 기회)
     now = time.time()
     expired = [k for k, v in _reset_tokens.items() if v["expires"] < now]
     for k in expired:
         del _reset_tokens[k]
 
-    # 일회용 재설정 토큰 발급
-    reset_token = secrets.token_urlsafe(32)
-    _reset_tokens[reset_token] = {
-        "user_id": req.user_id,
-        "expires": now + RESET_TOKEN_EXPIRE_SECONDS,
-    }
+    # 일치하는 사용자가 있으면 토큰 생성 + 이메일 발송 (없으면 조용히 스킵).
+    # 응답은 양쪽 모두 동일하게 200을 반환 — (id, email) 페어 존재 여부 누설 차단.
+    if user is not None:
+        reset_token = secrets.token_urlsafe(32)
+        _reset_tokens[reset_token] = {
+            "user_id": req.user_id,
+            "expires": now + RESET_TOKEN_EXPIRE_SECONDS,
+        }
+        if settings.PASSWORD_RESET_EMAIL_ENABLED:
+            # TODO: 이메일 인프라 구축 후 SMTP/SES 발송 로직 연결.
+            # 현재는 발송 인프라 미구축 — 토큰만 로그에 남기고 이메일 발송은 NoOp.
+            logger.info(
+                "password_reset.token_issued user=%s expires_in=%ds (email send: TODO)",
+                req.user_id, RESET_TOKEN_EXPIRE_SECONDS,
+            )
+        else:
+            # 운영자가 reset 흐름이 활성화되었음을 알 수 있도록 정보성 로그만 남김.
+            # 토큰 본문은 로그에 절대 포함하지 않음 (로그 파일 노출 시 PII 누출 방지).
+            logger.info(
+                "password_reset.requested user=%s (PASSWORD_RESET_EMAIL_ENABLED=False, 토큰 미발송)",
+                req.user_id,
+            )
+
+    # 동일한 메시지로 200 반환 — 계정 열거 차단
     return {
-        "verified": True,
-        "reset_token": reset_token,
-        "message": "본인 확인이 완료되었습니다. 새 비밀번호를 설정하세요.",
+        "message": "입력하신 정보가 등록되어 있다면 비밀번호 재설정 안내를 이메일로 발송했습니다. "
+                   "메일이 도착하지 않으면 입력 정보를 다시 확인해주세요.",
     }
 
 

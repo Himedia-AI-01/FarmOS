@@ -1,18 +1,53 @@
-﻿import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  MdAgriculture,
+  MdArticle,
+  MdAutoAwesome,
+  MdBugReport,
+  MdCloud,
+  MdDashboard,
+  MdLogout,
+  MdManageAccounts,
+  MdPayments,
+  MdReviews,
+  MdSensors,
+  MdShowChart,
+  MdStorefront,
+} from 'react-icons/md';
 import { useAuth } from '@/context/AuthContext';
 
-const NAV_ITEMS = [
-  { to: '/', icon: '/images/icons/dashboard.jpg', label: '대시보드' },
-  { to: '/diagnosis', icon: '/images/icons/diagnosis.jpg', label: '해충 진단' },
-  { to: '/iot', icon: '/images/icons/iot-sensors.jpg', label: 'IoT 센서' },
-  { to: '/reviews', icon: '/images/icons/reviews.jpg', label: '리뷰 분석' },
-  { to: '/documents', icon: '/images/icons/documents.jpg', label: '행정 서류' },
-  { to: '/weather', icon: '/images/icons/weather.jpg', label: '기상 스케줄' },
-  { to: '/harvest', icon: '/images/icons/harvest.jpg', label: '수확 예측' },
-  { to: '/journal', icon: '/images/icons/journal.jpg', label: '영농일지' },
-  { to: '/market', icon: '/images/icons/harvest.jpg', label: '시세 정보' },
-  { to: '/subsidy', icon: '/images/icons/documents.jpg', label: '공익직불' },
-  { to: '/scenario', icon: '/images/icons/scenario.jpg', label: '시나리오' },
+type NavItem = {
+  to: string;
+  label: string;
+  detail: string;
+  icon: React.ElementType;
+};
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Command',
+    items: [
+      { to: '/', label: '운영 커맨드', detail: '브리핑 · 우선순위', icon: MdDashboard },
+      { to: '/iot', label: '시설 제어', detail: '센서 · 자동화', icon: MdSensors },
+      { to: '/diagnosis', label: '진단 워크벤치', detail: '이미지 · 처방', icon: MdBugReport },
+    ],
+  },
+  {
+    label: 'Work',
+    items: [
+      { to: '/journal', label: '영농 기록', detail: '음성 · 통합일지', icon: MdAgriculture },
+      { to: '/weather', label: '기상 작전', detail: '예보 · 작업 캘린더', icon: MdCloud },
+      { to: '/market', label: '시세 정보', detail: 'KAMIS 가격', icon: MdShowChart },
+    ],
+  },
+  {
+    label: 'Business',
+    items: [
+      { to: '/subsidy', label: '공익직불', detail: '자격 · 근거', icon: MdPayments },
+      { to: '/documents', label: '행정 문서', detail: '신고 · 증빙', icon: MdArticle },
+      { to: '/reviews', label: '판매 인사이트', detail: '리뷰 · 전략', icon: MdReviews },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -25,67 +60,103 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-[280px] bg-white border-r border-gray-200 h-screen sticky top-0 flex flex-col overflow-y-auto">
-      {/* User Card + 프로필 버튼 */}
-      <div className="p-5 border-b border-gray-100">
+    <aside className="sticky top-0 flex h-screen w-[268px] flex-col border-r border-gray-200 bg-white">
+      <div className="border-b border-gray-200 px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-2xl">
-            🧑‍🌾
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-white">
+            <MdAutoAwesome className="text-2xl" />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-lg text-gray-900">{user?.name}</p>
-            <p className="text-sm text-gray-500">{user?.user_id}</p>
+          <div className="min-w-0">
+            <p className="text-base font-black tracking-tight text-gray-950">FarmOS</p>
+            <p className="text-xs font-semibold text-primary">Agentic Farm Ops</p>
           </div>
         </div>
+      </div>
+
+      <div className="border-b border-gray-200 px-4 py-4">
         <NavLink
           to="/profile"
           className={({ isActive }) =>
-            `mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${
+            `flex items-center gap-3 rounded-lg border px-3 py-3 transition ${
               isActive
-                ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
-                : 'bg-primary/5 text-primary hover:bg-primary/15'
+                ? 'border-primary/30 bg-primary/5 text-primary'
+                : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-primary/30 hover:bg-white'
             }`
           }
         >
-          <span>👤</span>
-          <span>내 프로필</span>
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-primary shadow-sm">
+            <MdManageAccounts className="text-xl" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold">{user?.name ?? '농장 관리자'}</p>
+            <p className="truncate text-xs text-gray-500">
+              {user?.farmname || user?.main_crop || user?.user_id}
+            </p>
+          </div>
         </NavLink>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-2">
-        {NAV_ITEMS.map(({ to, icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `flex items-center gap-4 px-5 py-3 min-h-[52px] text-lg transition-colors ${
-                isActive
-                  ? 'bg-primary/10 text-primary font-bold border-l-4 border-primary'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900 border-l-4 border-transparent'
-              }`
-            }
-          >
-            <img src={icon} alt={label} className="w-7 h-7 rounded-md object-cover flex-shrink-0" />
-            <span>{label}</span>
-          </NavLink>
+      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="mb-5 last:mb-0">
+            <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-gray-400">
+              {group.label}
+            </p>
+            <div className="space-y-1">
+              {group.items.map(({ to, label, detail, icon: Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={to === '/'}
+                  className={({ isActive }) =>
+                    `group flex items-center gap-3 rounded-lg px-3 py-2.5 transition ${
+                      isActive
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-gray-700 hover:bg-gray-100 hover:text-gray-950'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span
+                        className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md ${
+                          isActive ? 'bg-white/15 text-white' : 'bg-white text-primary shadow-sm'
+                        }`}
+                      >
+                        <Icon className="text-xl" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold">{label}</span>
+                        <span
+                          className={`block truncate text-[11px] ${
+                            isActive ? 'text-white/75' : 'text-gray-400'
+                          }`}
+                        >
+                          {detail}
+                        </span>
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-gray-100">
-        {user && (
-          <button
-            onClick={handleLogout}
-            className="w-full mb-2 px-4 py-2.5 text-base text-gray-600 hover:text-danger hover:bg-danger/5 rounded-xl transition flex items-center justify-center gap-2"
-          >
-            <span>🚪</span>
-            <span>로그아웃</span>
-          </button>
-        )}
-        <p className="text-xs text-gray-400 text-center">FarmOS 2.0 POC</p>
-        <p className="text-xs text-gray-300 text-center">Harness Engineering</p>
+      <div className="border-t border-gray-200 p-3">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold text-gray-500 transition hover:bg-red-50 hover:text-red-600"
+        >
+          <MdLogout className="text-lg" />
+          로그아웃
+        </button>
+        <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-gray-400">
+          <MdStorefront className="text-sm" />
+          Harness Engineering
+        </div>
       </div>
     </aside>
   );

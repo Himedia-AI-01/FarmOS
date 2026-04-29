@@ -23,6 +23,19 @@ shopping_mall/backend/ai/docs/
 .env.local
 !.env.example
 
+# ========== Secrets / credentials (never commit) ==========
+# 인증 쿠키 덤프 파일 (curl --cookie-jar 등이 생성)
+cookies.txt
+*.cookies
+# 개인키 / 인증서 (운영 환경 비밀)
+*.key
+*.pem
+*.p12
+*.pfx
+# 응답에 포함된 시크릿이 들어갈 수 있는 디렉터리
+secrets/
+.secrets/
+
 # ========== IDE / Editor ==========
 .vscode/
 .idea/

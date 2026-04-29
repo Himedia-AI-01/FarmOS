@@ -312,5 +312,8 @@ async def get_bridge_status(request: Request) -> dict[str, Any]:
         "last_backfill_at": bridge.last_backfill_at.isoformat() if bridge.last_backfill_at else None,
         "last_error": bridge.last_error,
         "total_processed": bridge.total_processed,
+        # dead-letter 카운터 노출 — UPSERT 실패로 영구 유실된 이벤트 수
+        # > 0 이면 /logs/farmos.log 에서 ai_agent_bridge.dead_letter 검색하여 수동 복원 가능
+        "total_failed": getattr(bridge, "total_failed", 0),
         "relay_base_url": settings.IOT_RELAY_BASE_URL,
     }

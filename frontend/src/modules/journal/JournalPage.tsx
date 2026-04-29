@@ -15,7 +15,6 @@ import JournalEntryForm, {
 } from "./JournalEntryForm";
 import STTInput, { type STTInputHandle } from "./STTInput";
 import MissingFieldsAlert from "./MissingFieldsAlert";
-import DailySummaryCard from "./DailySummaryCard";
 import DailyJournalPanel from "./DailyJournalPanel";
 import type { JournalEntryAPI, STTParseResult } from "@/types";
 import { toLocalDateString } from "@/utils/date";
@@ -50,7 +49,6 @@ export default function JournalPage() {
     deleteEntry,
     parseSTT,
     transcribeAudio,
-    fetchDailySummary,
     fetchMissingFields,
   } = useJournalData();
   const [filter, setFilter] = useState<string>("all");

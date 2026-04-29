@@ -23,6 +23,8 @@ export default function FindIdPage() {
       const res = await fetch(`${API_BASE}/auth/find-id`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // 일관성: 다른 인증 호출과 같이 credentials 포함 (서버측 rate-limit / CSRF 토큰 호환)
+        credentials: 'include',
         body: JSON.stringify({ name, email }),
       });
       if (!res.ok) {
@@ -30,7 +32,12 @@ export default function FindIdPage() {
         throw new Error(err.detail || '아이디를 찾을 수 없습니다.');
       }
       const data = await res.json();
-      setResult(data.user_id_masked);
+      // 서버는 일치/불일치 모두 200 + masked 반환 (계정 열거 방지). 빈 문자열이면 미일치 안내.
+      if (data.user_id_masked) {
+        setResult(data.user_id_masked);
+      } else {
+        toast.error('일치하는 회원 정보를 찾을 수 없습니다. 입력 정보를 확인해주세요.');
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '아이디 찾기에 실패했습니다.');
     } finally {

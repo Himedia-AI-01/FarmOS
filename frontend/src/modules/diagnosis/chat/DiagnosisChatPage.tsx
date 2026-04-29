@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, useParams, useParams as useReactRouterParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MdSend, MdArrowBack, MdRefresh, MdSmartToy, MdPerson } from 'react-icons/md';
 import toast from 'react-hot-toast';
@@ -14,7 +14,7 @@ interface Message {
 }
 
 // 마크다운 렌더러 컴포넌트 (개선된 파서)
-function MarkdownRenderer({ content, isUser = false }: { content: string, isUser?: boolean }) {
+function MarkdownRenderer({ content }: { content: string }) {
   const parseMarkdown = (text: string): string => {
     // DOMPurify가 소독을 담당하므로 수동 이스케이프를 제거하여 백엔드 HTML 태그 보존
     const formatInline = (value: string): string =>
@@ -40,7 +40,7 @@ function MarkdownRenderer({ content, isUser = false }: { content: string, isUser
     const BACKEND_ORIGIN = import.meta.env.VITE_BACKEND_ORIGIN || 'http://localhost:8000';
     const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
-    processedText = processedText.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
+    processedText = processedText.replace(/!\[(.*?)\]\((.*?)\)/g, (_match, alt, url) => {
       const fullUrl = url.startsWith('/uploads') ? `${BACKEND_ORIGIN}${url}` : url;
       return `<img src="${escapeAttr(fullUrl)}" alt="${escapeAttr(alt)}" class="rounded-xl max-w-full h-auto my-2 border border-gray-100 shadow-sm" />`;
     });
@@ -225,13 +225,24 @@ function MarkdownRenderer({ content, isUser = false }: { content: string, isUser
     if (inList) result.push('</ul>');
 
     const combinedHtml = result.join('');
-    // DOMPurify로 최종 소독하여 XSS 방지하면서 의도된 태그/스타일은 유지
+    // DOMPurify XSS 방어 — 강화된 설정:
+    //   1) `style` 속성 제거: CSS 주입 (expression(), url(javascript:...), 가시성 조작) 차단
+    //   2) URI 스킴 화이트리스트: javascript:/data:/vbscript: URL 차단, http(s)·내부 경로만 허용
+    //   3) 모든 on* 이벤트 핸들러 명시 차단 (FORBID_ATTR)
+    //   4) 위험 태그 명시 차단 (script/iframe/object/embed/form/input/textarea/svg)
     return DOMPurify.sanitize(combinedHtml, {
       ALLOWED_TAGS: [
         'div', 'span', 'p', 'br', 'blockquote', 'strong', 'b', 'ul', 'li', 'h2', 'h3',
         'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img'
       ],
-      ALLOWED_ATTR: ['class', 'style', 'title', 'src', 'alt']
+      ALLOWED_ATTR: ['class', 'title', 'src', 'alt'],
+      // http(s) URL 또는 동일 출처 상대 경로(/uploads/...)만 허용. javascript:·data: 차단.
+      ALLOWED_URI_REGEXP: /^(?:https?:|\/[^/])/i,
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'svg', 'style'],
+      FORBID_ATTR: [
+        'onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout', 'onfocus', 'onblur',
+        'onchange', 'onsubmit', 'onkeydown', 'onkeyup', 'onkeypress', 'style',
+      ],
     });
   };
 
@@ -258,7 +269,6 @@ export default function DiagnosisChatPage() {
 
   // 1. 초기 컨텍스트 수신 (DiagnosisPage에서 보낸 데이터)
   const context = location.state?.diagnosisContext;
-  const isHistory = location.state?.fromHistory === true;
 
   // DB에서 채팅 내역 불러오기
   const fetchChatMessages = async () => {
@@ -291,6 +301,10 @@ export default function DiagnosisChatPage() {
     }
   };
 
+  // 의존성을 stable identifier(`context?.id`)로 좁힌다.
+  // 과거 `[context]` 는 location.state 가 매 navigation 마다 새 객체를 만들어
+  // fetchChatMessages 가 반복 호출되며 UI 깜빡임의 원인이었다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!context) {
       navigate('/diagnosis');
@@ -300,7 +314,7 @@ export default function DiagnosisChatPage() {
     // 진단이 막 생성되었거나, 히스토리에서 왔거나 상관없이
     // 이미 백엔드 생성 과정에서 초기 메시지가 DB에 저장되므로 DB에서 불러옴
     fetchChatMessages();
-  }, [context]);
+  }, [context?.id]);
 
   // 스크롤 하단 이동
   useEffect(() => {
@@ -462,7 +476,7 @@ export default function DiagnosisChatPage() {
                           <MarkdownRenderer content={msg.content} />
                         </div>
                       ) : (
-                        <MarkdownRenderer content={msg.content} isUser={true} />
+                        <MarkdownRenderer content={msg.content} />
                       )}
                     </div>
                   )}
@@ -493,7 +507,13 @@ export default function DiagnosisChatPage() {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => {
+              // onKeyPress 는 React 19 에서 deprecated. onKeyDown 으로 마이그레이션.
+              // IME 조합 중(한글 입력 마지막 글자) Enter 가 발생하면 send 를 막아 잘림 방지.
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                handleSend();
+              }
+            }}
             disabled={isTyping}
             placeholder={isTyping ? "진단봇의 답변을 기다리는 중..." : "추가 질문을 입력하세요..."}
             className={`flex-1 bg-gray-100 border-none rounded-2xl py-3.5 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all ${

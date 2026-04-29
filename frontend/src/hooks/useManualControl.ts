@@ -128,14 +128,14 @@ export function useManualControl() {
   ) => {
     if (!controlState) return;
 
-    const current = controlState[controlType];
-    const newActive = !current.active;
+    const newActive = !controlState[controlType].active;
 
     let toggleState: Record<string, unknown>;
     switch (controlType) {
       case 'ventilation':
         // Design Ref: §5.2 — 시뮬 OFF 시 현재값 저장 → 수동 ON 토글 시 복원 가능
         if (!newActive) {
+          const current = controlState.ventilation;
           lastKnownValuesRef.current.ventilation = {
             window_open_pct: current.window_open_pct,
             fan_speed: current.fan_speed,
@@ -156,6 +156,7 @@ export function useManualControl() {
       case 'shading':
         // Design Ref: §5.2 — 시뮬 OFF 시 현재값 저장
         if (!newActive) {
+          const current = controlState.shading;
           lastKnownValuesRef.current.shading = {
             shade_pct: current.shade_pct,
             insulation_pct: current.insulation_pct,
@@ -271,7 +272,7 @@ export function useManualControl() {
         !('on' in incoming) &&
         (ct === 'ventilation' || ct === 'lighting' || ct === 'shading')
       ) {
-        const prevState = prev[ct] as Record<string, unknown>;
+        const prevState = prev[ct] as unknown as Record<string, unknown>;
         const ledOn = incoming.led_on ?? prevState.led_on;
         const active = incoming.active ?? prevState.active;
         const derived = ledOn ?? active ?? prevState.on;
@@ -279,7 +280,7 @@ export function useManualControl() {
           merged.on = Boolean(derived);
         }
       }
-      return { ...prev, [ct]: merged as (typeof prev)[typeof ct] };
+      return { ...prev, [ct]: merged as unknown as (typeof prev)[typeof ct] };
     });
   }, []);
 

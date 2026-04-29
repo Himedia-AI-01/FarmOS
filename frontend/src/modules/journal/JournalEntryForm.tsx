@@ -6,7 +6,9 @@ export interface JournalEntryFormHandle {
   getFormData: () => Record<string, unknown>;
 }
 
-const WORK_STAGES = [
+type WorkStage = JournalEntryAPI["work_stage"];
+
+const WORK_STAGES: WorkStage[] = [
   "사전준비",
   "경운",
   "파종",
@@ -46,7 +48,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
     );
     const [fieldName, setFieldName] = useState(initialData?.field_name || "");
     const [crop, setCrop] = useState(initialData?.crop || "");
-    const [workStage, setWorkStage] = useState(
+    const [workStage, setWorkStage] = useState<WorkStage>(
       initialData?.work_stage || "작물관리",
     );
     const [weather, setWeather] = useState(initialData?.weather || "");
@@ -148,7 +150,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
             </label>
             <select
               value={workStage}
-              onChange={(e) => setWorkStage(e.target.value)}
+              onChange={(e) => setWorkStage(e.target.value as WorkStage)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               {WORK_STAGES.map((s) => (

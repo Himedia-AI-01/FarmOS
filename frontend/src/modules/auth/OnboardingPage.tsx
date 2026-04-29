@@ -47,11 +47,14 @@ const slideVariants = {
 };
 
 /* ────────────── 메인 컴포넌트 ────────────── */
+// 모듈 스코프 상수 — 컴포넌트 매 렌더마다 재생성되지 않도록 hoist.
+// 이전에 컴포넌트 내부 변수였을 때 useEffect deps 정적 분석에서 빠지는 문제도 함께 해소.
+const DRAFT_KEY = 'farmos_onboarding_draft';
+
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
 
-  const DRAFT_KEY = 'farmos_onboarding_draft';
   const isAnimating = useRef(false);
 
   const [step, setStep] = useState(1);
@@ -83,6 +86,9 @@ export default function OnboardingPage() {
   });
 
   // 로그인 상태 확인 + localStorage 초안 복원
+  // 의존성에 user 포함 — 초기 마운트 시 user=null인 상태에서 빈 deps로 1회만 실행되면
+  // checkAuth()가 user를 채워도 초안이 절대 복원되지 않는 버그가 있었다.
+  // user.user_id를 dep로 사용해 같은 사용자에 대한 재실행을 방지한다.
   useEffect(() => {
     if (user) {
       try {
@@ -98,7 +104,8 @@ export default function OnboardingPage() {
       } catch { /* 손상된 데이터 무시 */ }
       setStep(2);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.user_id]);
 
   // Steps 2-4 입력 데이터를 localStorage에 자동 저장 (계정 정보 제외)
   useEffect(() => {
@@ -113,19 +120,28 @@ export default function OnboardingPage() {
                     crop.main_crop || crop.farmland_type ||
                     detail.years_farming || detail.years_rural_residence;
     if (step >= 2 && step <= 4 && hasData) {
-      const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+      const handler = (e: BeforeUnloadEvent) => {
+        // Chrome/Edge는 e.preventDefault()만으로 prompt를 표시하지 않는다.
+        // returnValue=''까지 설정해야 모던 브라우저에서 일관되게 경고가 노출된다.
+        e.preventDefault();
+        e.returnValue = '';
+      };
       window.addEventListener('beforeunload', handler);
       return () => window.removeEventListener('beforeunload', handler);
     }
   }, [step, farm, crop, detail]);
 
-  // Kakao 주소 검색 스크립트 로드
+  // Kakao 주소 검색 스크립트 로드 — 명시적 https + 로드 실패 가시화
   useEffect(() => {
     if (document.getElementById('daum-postcode-script')) return;
     const script = document.createElement('script');
     script.id = 'daum-postcode-script';
-    script.src = '//t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+    // protocol-relative(`//`) 대신 명시적 https — file:// 등 비표준 환경에서도 안전.
+    script.src = 'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
     script.async = true;
+    script.onerror = () => {
+      console.warn('[onboarding] Kakao postcode 스크립트 로드 실패 — 주소 검색 사용 불가');
+    };
     document.head.appendChild(script);
   }, []);
 

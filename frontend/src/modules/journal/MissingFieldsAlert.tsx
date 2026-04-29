@@ -18,13 +18,17 @@ export default function MissingFieldsAlert({
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const today = new Date().toISOString().slice(0, 10);
     const weekAgo = new Date(Date.now() - 7 * 86400000)
       .toISOString()
       .slice(0, 10);
     fetchMissingFields(weekAgo, today).then((res) => {
+      // 언마운트 후 setState 차단 — 화면 전환 중 fetch가 늦게 끝나는 경우 대비
+      if (cancelled) return;
       if (res && res.total > 0) setAlerts(res.missing_fields);
     });
+    return () => { cancelled = true; };
   }, [fetchMissingFields]);
 
   if (dismissed || alerts.length === 0) return null;

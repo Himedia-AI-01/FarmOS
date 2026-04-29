@@ -120,6 +120,19 @@ def fetch_clause_snippet(tag: str, query: str) -> str | None:
 
 
 @lru_cache(maxsize=128)
+def _rag_excerpt_cached(tag: str, query: str) -> str | None:
+    """성공 결과만 캐시. 예외는 호출자(_rag_excerpt)가 잡아 캐시되지 않게 막는다."""
+    from app.services.subsidy.tools import _get_rag
+    rag = _get_rag()
+    natural_query = query.lstrip("• ").strip()
+    if not natural_query:
+        return None
+    citations = rag.search_fast(natural_query, top_k=1)
+    if not citations:
+        return None
+    return citations[0].snippet
+
+
 def _rag_excerpt(tag: str, query: str) -> str | None:
     """Solar 임베딩 + ChromaDB top-1 발췌 (cross-encoder 스킵, 한 호출 ~500ms).
 
@@ -127,42 +140,21 @@ def _rag_excerpt(tag: str, query: str) -> str | None:
     충분히 정확하고, 리랭커는 한 콜을 ~17s 로 만들어 lazy detail-open 마저 망친다.
     품질이 부족하다 판단되면 호출자가 search() (리랭커 포함) 로 폴백 가능.
 
-    tag 는 캐시 키 분리용 — 동일 텍스트가 다른 조항을 가리킬 가능성 대비.
+    캐시 정책: 성공 결과만 `_rag_excerpt_cached` (LRU 128) 에 보관.
+    실패는 캐시 미스로 다음 호출에서 재시도 가능 (transient failure ≠ 영구 fallback).
     """
     try:
-        from app.services.subsidy.tools import _get_rag
-        rag = _get_rag()
-    except Exception as e:
-        logger.warning(f"RAG 초기화 실패 ({tag}): {e}")
+        return _rag_excerpt_cached(tag, query)
+    except Exception as e:  # noqa: BLE001 — 실패는 캐시되면 안 됨
+        logger.warning(f"RAG 발췌 실패 ({tag}): {e}")
         return None
-
-    natural_query = query.lstrip("• ").strip()
-    if not natural_query:
-        return None
-    try:
-        citations = rag.search_fast(natural_query, top_k=1)
-    except Exception as e:
-        logger.warning(f"RAG 검색 실패 ({tag}): {e}")
-        return None
-    if not citations:
-        return None
-    return citations[0].snippet
 
 
 @lru_cache(maxsize=128)
-def _index_excerpt(tag: str, query: str) -> str | None:
-    """RAG fallback: Roman.Arabic 메타데이터 인덱스에서 substring 매칭.
-
-    - "II-1 ②" → 인덱스 키 "II-1" 의 전체 본문 조회
-    - 본문 내에서 catalog text 의 앞 8글자 위치 검색 → ±200자 발췌
-    - 못 찾으면 첫 400자
-    """
-    try:
-        from app.services.subsidy.tools import _get_rag
-        index = _get_rag().get_clauses_index()
-    except Exception as e:
-        logger.warning(f"clause 인덱스 로드 실패 ({tag}): {e}")
-        return None
+def _index_excerpt_cached(tag: str, query: str) -> str | None:
+    """성공 결과만 캐시. 예외는 호출자(_index_excerpt)가 잡는다."""
+    from app.services.subsidy.tools import _get_rag
+    index = _get_rag().get_clauses_index()
 
     base = tag.split(" ", 1)[0]
     full = index.get(base)
@@ -182,6 +174,23 @@ def _index_excerpt(tag: str, query: str) -> str | None:
     if end < len(full):
         excerpt = excerpt + "…"
     return excerpt
+
+
+def _index_excerpt(tag: str, query: str) -> str | None:
+    """RAG fallback: Roman.Arabic 메타데이터 인덱스에서 substring 매칭.
+
+    - "II-1 ②" → 인덱스 키 "II-1" 의 전체 본문 조회
+    - 본문 내에서 catalog text 의 앞 8글자 위치 검색 → ±200자 발췌
+    - 못 찾으면 첫 400자
+
+    캐시 정책: 성공 결과만 `_index_excerpt_cached` (LRU 128) 에 보관.
+    실패는 캐시되지 않아 다음 호출에서 재시도 가능.
+    """
+    try:
+        return _index_excerpt_cached(tag, query)
+    except Exception as e:  # noqa: BLE001 — 실패는 캐시되면 안 됨
+        logger.warning(f"clause 인덱스 발췌 실패 ({tag}): {e}")
+        return None
 
 
 def _calculate_payment(

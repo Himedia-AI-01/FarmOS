@@ -213,11 +213,11 @@ function IrrigationModal({ irrigations, onClose }: IrrigationModalProps) {
                   />
                   <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} allowDecimals={false} />
                   <Tooltip
-                    formatter={(value: number, _name: string, props: any) => [
-                      `${value}분`,
-                      `밸브 ${props.payload.valveAction}`,
+                    formatter={(value, _name, props) => [
+                      `${Number(value ?? 0)}분`,
+                      `밸브 ${String(props.payload?.valveAction ?? '')}`,
                     ]}
-                    labelFormatter={(label: string) => label}
+                    labelFormatter={(label) => String(label ?? '')}
                     contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   />
                   <Bar dataKey="duration" radius={[4, 4, 0, 0]} maxBarSize={40}>
@@ -527,7 +527,7 @@ export default function IoTDashboardPage() {
           ) : (
             <>
               <div className="space-y-2">
-                {filteredIrrigations.slice(0, INITIAL_COUNT).map((e: any) => (
+                {filteredIrrigations.slice(0, INITIAL_COUNT).map((e) => (
                   <div key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
                     <span className={`w-3 h-3 rounded-full ${e.valveAction === '열림' ? 'bg-blue-500' : 'bg-gray-400'}`} />
                     <div className="flex-1 min-w-0">
@@ -572,7 +572,7 @@ export default function IoTDashboardPage() {
           ) : (
             <>
               <div className="space-y-2">
-                {filteredAlerts.slice(0, INITIAL_COUNT).map((a: any) => (
+                {filteredAlerts.slice(0, INITIAL_COUNT).map((a) => (
                   <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl ${
                     a.severity === '위험' || a.severity === '경고' ? 'bg-red-50' :
                     a.severity === '주의' ? 'bg-yellow-50' : 'bg-blue-50'

@@ -117,24 +117,35 @@ def _get_rag() -> GovSubsidyRAG:
 
 
 @lru_cache(maxsize=256)
+def _search_subsidy_regulations_cached(query: str, top_k: int) -> tuple[Citation, ...]:
+    """LRU 캐시 적중 시 즉시 반환 — 성공 케이스만 캐시한다.
+
+    실패는 캐시에 저장하면 안 되므로 본 함수 안에서 예외 발생 시 캐시가 만들어지지
+    않도록 호출자(`search_subsidy_regulations`)가 try/except로 감싼다.
+    """
+    rag = _get_rag()
+    return tuple(rag.search(query, top_k=top_k))
+
+
 def search_subsidy_regulations(query: str, top_k: int = 5) -> list[Citation]:
     """자연어 질의에 가장 관련 높은 시행지침 조항을 반환한다.
 
     Solar asymmetric embedding + bge-reranker-v2-m3-ko + 타이틀 키워드 부스트.
-    RAG 초기화에 실패하면 (예: UPSTAGE_API_KEY 미설정) 빈 리스트 반환.
 
-    프로세스 단위 LRU 캐시 (256 엔트리):
-      - (query, top_k) 동일하면 재계산 없이 즉시 반환 — Solar HTTP + 리랭커 비용 0.
-      - "영농일지 꼭 써야함?" 같은 자주 묻는 질의는 첫 호출 후 ~수 ms 응답.
-      - 시행지침 PDF 가 갱신되면 프로세스 재시작 시 캐시 자동 비움.
-      - 반환된 list 는 호출자가 mutate 하지 말 것 (cache-by-reference).
+    캐시 정책:
+      - 성공 결과는 `_search_subsidy_regulations_cached`(LRU 256)에 보관.
+      - 일시적 실패(Solar 타임아웃, ChromaDB 락 등)는 절대 캐시되지 않음.
+        과거 단일 데코레이터 구현은 빈 리스트가 캐시되어 프로세스 재시작 전까지
+        영구적으로 "검색 결과 없음"을 반환하는 영구 폴백 버그가 있었다.
     """
     try:
-        rag = _get_rag()
+        return list(_search_subsidy_regulations_cached(query, top_k))
     except RuntimeError as e:
         logger.error(f"RAG 초기화 실패: {e}")
         return []
-    return rag.search(query, top_k=top_k)
+    except Exception as e:  # noqa: BLE001 — 실패는 캐시 미스로 다음 호출에서 재시도 가능해야 함
+        logger.warning("search_subsidy_regulations.failed query=%s err=%s", query, e)
+        return []
 
 
 # ── 5. 지원금 상세 정보 ───────────────────────────────────

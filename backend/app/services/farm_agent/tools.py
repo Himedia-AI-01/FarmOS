@@ -24,6 +24,7 @@ from app.models.ai_agent import AiAgentDecision
 from app.models.user import User
 from app.services.diagnosis_agent import run_diagnosis
 from app.services.kamis import kamis_service
+from app.services.kamis_aliases import matches_kamis_item, resolve_kamis_terms
 from app.services.subsidy.tools import (
     check_eligibility_rule as _check_eligibility_rule,
     get_subsidy_details as _get_subsidy_details,
@@ -224,6 +225,35 @@ async def get_market_prices(category_name: str = "") -> str:
 
 
 @tool
+async def get_market_prices_for_crop(crop: str) -> str:
+    """특정 작물의 KAMIS 시세를 반환 (재배명 ↔ 유통명 alias 자동 처리).
+
+    `get_market_prices` 와 달리 작물 단위 lookup 에 특화. FarmOS 가 사용하는
+    재배 용어(예: "벼", "콩")가 KAMIS 의 유통 품목명(예: "쌀", "백태")과 다를 때
+    `kamis_aliases` 매핑으로 자동 변환해 매칭한다.
+
+    Args:
+        crop: 사용자 또는 프로필이 사용하는 작물명 (예: "벼", "사과", "마늘").
+
+    Returns:
+        매칭된 KAMIS 행의 JSON 배열. 매칭 0건이면 빈 배열.
+        매칭에 사용한 KAMIS 키워드도 함께 반환해 LLM 이 사용자에게 출처를 안내할 수 있게 함.
+    """
+    crop = (crop or "").strip()
+    if not crop:
+        return json.dumps({"matched_terms": [], "items": []}, ensure_ascii=False)
+
+    matched_terms = resolve_kamis_terms(crop)
+    items = await kamis_service.get_latest_prices()
+    filtered = [it for it in items if matches_kamis_item(crop, it.get("item_name"))]
+    return json.dumps(
+        {"crop": crop, "matched_terms": matched_terms, "items": filtered[:20]},
+        ensure_ascii=False,
+        default=str,
+    )
+
+
+@tool
 async def list_journal_entries(
     days: int = 7,
     crop: str = "",
@@ -332,6 +362,7 @@ FARM_DATA_TOOLS = [
     get_my_farm_profile,
     get_current_weather,
     get_market_prices,
+    get_market_prices_for_crop,
     list_journal_entries,
     get_journal_daily_summary,
     get_recent_iot_decisions,
@@ -350,6 +381,7 @@ ORCHESTRATOR_TOOLS = [
     get_my_farm_profile,
     get_current_weather,
     get_market_prices,
+    get_market_prices_for_crop,
     list_journal_entries,
     get_journal_daily_summary,
     get_recent_iot_decisions,

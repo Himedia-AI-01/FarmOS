@@ -45,7 +45,12 @@ ORCHESTRATOR_PROMPT = f"""\
 ## 작업 원칙
 - 단순 조회는 오케스트레이터에 직접 연결된 FarmOS 도구를 바로 호출합니다.
   예: `get_my_farm_profile`, `get_current_weather`, `get_market_prices`,
-  `get_recent_iot_decisions`, `list_journal_entries`, `get_journal_daily_summary`.
+  `get_market_prices_for_crop`, `get_recent_iot_decisions`,
+  `list_journal_entries`, `get_journal_daily_summary`.
+- 특정 작물 시세 질문(예: "벼 시세 얼마?", "사과 가격") 은 반드시
+  `get_market_prices_for_crop(crop)` 사용. 이 도구는 재배 용어(벼·콩)를
+  KAMIS 유통 용어(쌀·백태)로 자동 변환한다. `get_market_prices` 의 단순
+  부류 필터로는 "벼" 같은 재배 용어가 매칭되지 않는다.
 - 복잡한 다단계 요청은 먼저 `write_todos`로 계획을 세우고 `task` 도구로 서브에이전트에 위임합니다.
 - 서브에이전트가 반환한 내용은 사실로 신뢰하고, 사용자 한국어 어조로 정리해 답합니다.
 - 추측·창작 금지. 서브에이전트가 모르면 모른다고 답합니다.

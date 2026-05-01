@@ -28,6 +28,7 @@ from app.services.farm_agent.tools import (
     get_market_prices,
     get_recent_iot_decisions,
 )
+from app.services.kamis_aliases import matches_kamis_item
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +102,11 @@ async def try_fast_path(question: str, user_id: str) -> str | None:
             data = json.loads(
                 await get_market_prices.ainvoke({"category_name": ""})
             )
+            # FarmOS 재배 용어(예: "벼") ↔ KAMIS 유통 용어(예: "쌀") alias 적용.
+            # 매핑 없는 단어는 원래 단어 그대로 substring 매칭(기존 동작).
             matches = [
                 it for it in data
-                if item_name in (it.get("item_name") or "")
+                if matches_kamis_item(item_name, it.get("item_name"))
             ][:5]
             if not matches:
                 return None  # 매칭 0건 → 에이전트가 더 잘 처리

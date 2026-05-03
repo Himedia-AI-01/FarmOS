@@ -14,7 +14,7 @@ Format per item:
 <!-- Ralph appends new ideas below this line each iteration. -->
 
 ## Crop-aware weather risk advisory tool
-- status: in-progress
+- status: shipped: f6435a7
 - area: backend
 - why: Korean farmers ask "내일 비 와도 괜찮을까?" — turn KMA forecast into actionable, crop-specific risk flags (frost / heatwave / strong wind / heavy rain / fungal humidity window). Deterministic, no LLM, immediately reusable in briefings + Q&A.
 - slice: pure-Python analyzer over existing `get_weather()` payload + a thin `@tool` wrapper exposed to FARM_DATA + ORCHESTRATOR. No new external API. Tests run without DB or network.

@@ -102,7 +102,7 @@ Format per item:
 - risk: low
 
 ## Diurnal swing (일교차) fast-path keyword
-- status: in-progress
+- status: shipped: 1b607e6
 - area: backend
 - why: iter-6 가 temp_swing advisory 임계는 추가했지만 "이번주 일교차 어때?" 같은 단답형 질의는 여전히 LLM 라우팅을 거친다. 이미 검증된 `_GENERAL_RISK_RE` + `_RISK_KEYWORD_TO_KINDS` 인프라에 1개 키워드 + 1개 매핑만 추가하면 즉답 가능.
 - slice: fast_path.py 의 `_GENERAL_RISK_RE` alternation 에 `일교차` 추가 + `_RISK_KEYWORD_TO_KINDS` 에 `(("일교차",), frozenset({"temp_swing"}), "🌡️ 일교차 위험")` 한 줄. "기온차" 는 _WEATHER_RE 의 "기온" prefix 와 충돌하므로 의도적 제외.

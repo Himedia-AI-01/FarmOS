@@ -20,14 +20,17 @@ import re
 from datetime import date
 
 from langchain_core.runnables import RunnableConfig
+from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.weather_client import get_weather
 from app.services.farm_agent.tools import (
     get_current_weather,
     get_journal_daily_summary,
     get_market_prices,
     get_recent_iot_decisions,
 )
+from app.services.farm_agent.weather_alerts import analyze_weather_risks
 from app.services.kamis_aliases import matches_kamis_item
 
 logger = logging.getLogger(__name__)
@@ -58,6 +61,14 @@ _IOT_RE = re.compile(
 
 _JOURNAL_RE = re.compile(
     r"^\s*(어제|오늘|(\d{4}-\d{2}-\d{2}))\s*(영농일지|일지|작업|기록)[가-힣\s.?!]*$"
+)
+
+# 서리/동해 단답형 질의 — "오늘 밤 서리?", "내일 새벽 영하?", "이번주 동해 위험?"
+# weather_alerts 의 frost 어드바이저리만 추려 LLM 없이 결정론적 응답.
+_FROST_RE = re.compile(
+    r"^\s*(오늘|내일|모레|이번\s*주|이번주)?\s*"
+    r"(밤|새벽|아침|저녁)?\s*"
+    r"(서리|동해|영하|결빙)[가-힣\s.?!]*$"
 )
 
 # fast-path 절대 적용 금지 (안전 민감 키워드)
@@ -134,6 +145,13 @@ async def try_fast_path(question: str, user_id: str) -> str | None:
             )
             return data.get("summary_text") or None
 
+        # 5) 서리/동해 — get_weather + analyze_weather_risks → frost-only 추출
+        if _FROST_RE.match(q):
+            main_crop = await _lookup_main_crop(user_id)
+            weather = await get_weather()
+            advisories = analyze_weather_risks(weather, main_crop=main_crop)
+            return _format_frost(advisories, main_crop, weather)
+
     except Exception as exc:  # noqa: BLE001 — fast-path 실패는 정상 흐름으로 위임
         logger.info("fast_path.miss reason=exception err=%s", exc)
         return None
@@ -195,3 +213,74 @@ def _format_iot(data: dict, hours: int) -> str:
         reason = (r.get("reason") or "")[:50]
         parts.append(f"- {ts} · **{ct}** · {reason}")
     return "\n".join(parts)
+
+
+async def _lookup_main_crop(user_id: str | None) -> str | None:
+    """Best-effort User.main_crop lookup. None on missing user or DB error.
+
+    fast-path 답변 정확도를 위해 작물 컨텍스트를 가능하면 첨부하지만,
+    DB 실패가 fast-path 자체를 무너뜨리면 안 되므로 모든 예외는 삼킨다.
+    """
+    if not user_id:
+        return None
+    try:
+        # Lazy imports — fast_path 는 DB 의존성을 모듈 import 시점엔 갖지 않는다.
+        from app.core.database import async_session
+        from app.models.user import User
+
+        async with async_session() as db:
+            row = await db.execute(select(User).where(User.id == user_id))
+            user = row.scalar_one_or_none()
+        return (user.main_crop or None) if user else None
+    except Exception as exc:  # noqa: BLE001
+        logger.info("fast_path.frost.crop_lookup_failed user=%s err=%s", user_id, exc)
+        return None
+
+
+def _format_frost(
+    advisories: list[dict],
+    main_crop: str | None,
+    weather: dict | None,
+) -> str:
+    """Render frost-only advisories. 위험 없을 때도 예보 최저기온을 명시해 투명성 확보."""
+    crop_label = f" · {main_crop}" if main_crop else ""
+    frost = [a for a in (advisories or []) if a.get("kind") == "frost"]
+
+    if frost:
+        icon = {"critical": "🔴", "warning": "🟠"}
+        lines = [f"## 🧊 서리/동해 위험{crop_label}"]
+        for a in frost:
+            bullet = icon.get(a.get("level"), "🟡")
+            lines.append(
+                f"- {bullet} **[{a.get('when', '')}]** {a.get('message', '')}"
+            )
+            hint = a.get("crop_hint")
+            if hint:
+                lines.append(f"  - {hint}")
+        return "\n".join(lines)
+
+    # 위험 없음 — 예보 tmin 을 같이 보여줘 사용자가 임계 판단을 검증 가능하게.
+    daily = (weather or {}).get("daily_forecasts") or []
+    refs: list[str] = []
+    for entry in daily[:3]:
+        if not isinstance(entry, dict):
+            continue
+        tmin = entry.get("temp_min")
+        if tmin is None:
+            continue
+        offset = entry.get("day_offset")
+        if offset == 0:
+            label = "오늘"
+        elif offset == 1:
+            label = "내일"
+        elif offset == 2:
+            label = "모레"
+        else:
+            label = entry.get("date") or "예보"
+        refs.append(f"{label} {tmin}℃")
+    ref_line = " · ".join(refs) if refs else "예보 미확정"
+    return (
+        f"## 🧊 서리/동해 위험{crop_label}\n\n"
+        f"- 향후 24~72h 최저기온 임계(2℃) 미달 — 서리 위험 없음\n"
+        f"- 예보 최저: {ref_line}"
+    )

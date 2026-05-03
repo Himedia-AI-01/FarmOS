@@ -22,7 +22,7 @@ Format per item:
 - risk: low
 
 ## Frost-shield fast-path pattern
-- status: new
+- status: in-progress
 - area: backend
 - why: "오늘 밤 서리?" / "내일 새벽 영하?" 류 단답형 질의를 LLM 없이 확정 응답. 사장님이 야간 작업 결정에 즉시 사용.
 - slice: fast_path.py 에 `_FROST_RE` 패턴 추가 + weather_alerts 호출해 향후 24h temp_min 기반 동해 위험만 단출하게 마크다운 반환.

@@ -71,6 +71,18 @@ _FROST_RE = re.compile(
     r"(서리|동해|영하|결빙)[가-힣\s.?!]*$"
 )
 
+# 일반 극한기상 단답형 질의 — "이번주 폭염?", "내일 폭우?", "오늘 강풍?", "한파?"
+# 동일한 weather_alerts engine 을 호출하고 질의 키워드에 해당하는 advisory kind
+# 만 화이트리스트로 추려 LLM 없이 응답. 키워드가 _WEATHER_RE/_FROST_RE 와 절대
+# 겹치지 않도록 — 폭염/폭우/호우/장마/강풍/돌풍/특보/주의보/한파/혹한/혹서 만 포함
+# (일반어 "비", "기상" 등은 의도적으로 제외).
+_GENERAL_RISK_RE = re.compile(
+    r"^\s*(지금|오늘|내일|모레|이번\s*주|이번주)?\s*"
+    r"(밤|새벽|아침|저녁|오후|오전)?\s*"
+    r"(폭염|폭우|호우|장마|강풍|돌풍|특보|주의보|한파|혹한|혹서)"
+    r"[가-힣\s.?!]*$"
+)
+
 # fast-path 절대 적용 금지 (안전 민감 키워드)
 _BLOCKLIST = re.compile(
     r"(농약|희석|살포|병해|해충|진단|방제|직불|보조금|지원금|자격|시행지침)"
@@ -151,6 +163,13 @@ async def try_fast_path(question: str, user_id: str) -> str | None:
             weather = await get_weather()
             advisories = analyze_weather_risks(weather, main_crop=main_crop)
             return _format_frost(advisories, main_crop, weather)
+
+        # 6) 일반 극한기상 (폭염/호우/강풍/한파) — 같은 engine, kind 화이트리스트만 변경.
+        if _GENERAL_RISK_RE.match(q):
+            main_crop = await _lookup_main_crop(user_id)
+            weather = await get_weather()
+            advisories = analyze_weather_risks(weather, main_crop=main_crop)
+            return _format_general_risks(q, advisories, main_crop)
 
     except Exception as exc:  # noqa: BLE001 — fast-path 실패는 정상 흐름으로 위임
         logger.info("fast_path.miss reason=exception err=%s", exc)
@@ -284,3 +303,75 @@ def _format_frost(
         f"- 향후 24~72h 최저기온 임계(2℃) 미달 — 서리 위험 없음\n"
         f"- 예보 최저: {ref_line}"
     )
+
+
+# ── General extreme-weather risk formatter ─────────────────────────────────
+# 질의 키워드 → analyze_weather_risks 가 만드는 advisory `kind` 화이트리스트 매핑.
+# 사용자가 "폭염?" 만 묻고 있는데 강풍/호우 advisory 까지 섞어 보내면 답변 잡음이
+# 늘어 fast-path 로 얻는 결정성·간결성이 깎인다. 따라서 질의 의도에 맞는 kind
+# 만 추리고, 해당 kind 에 한해 critical/warning/info 모두 그대로 노출한다.
+_RISK_KEYWORD_TO_KINDS: tuple[tuple[tuple[str, ...], frozenset[str], str], ...] = (
+    (("폭염", "혹서"),       frozenset({"heatwave"}),                              "🔥 폭염/고온 위험"),
+    (("폭우", "호우", "장마"), frozenset({"heavy_rain", "rain_likely", "current_rain"}), "🌧️ 호우/폭우 위험"),
+    (("강풍", "돌풍"),        frozenset({"strong_wind"}),                            "💨 강풍/돌풍 위험"),
+    (("한파", "혹한"),        frozenset({"frost"}),                                  "🧊 한파/저온 위험"),
+)
+# fallback (특보/주의보 등) — 모든 critical/warning advisory 노출.
+_RISK_FALLBACK_TITLE = "⚠️ 기상 위험 요약"
+
+
+def _select_risk_kinds(question: str) -> tuple[frozenset[str] | None, str]:
+    """Decide which advisory kinds to surface for this query.
+
+    Returns (kinds_or_None, title). `None` means "no kind filter — show every
+    critical/warning advisory" (특보/주의보 류 광역 질의용).
+    """
+    q = question or ""
+    for keywords, kinds, title in _RISK_KEYWORD_TO_KINDS:
+        if any(k in q for k in keywords):
+            return kinds, title
+    return None, _RISK_FALLBACK_TITLE
+
+
+def _format_general_risks(
+    question: str,
+    advisories: list[dict],
+    main_crop: str | None,
+) -> str:
+    """Render advisories filtered by the user's risk-keyword intent.
+
+    설계 노트:
+      - kind 화이트리스트가 None 이면 (특보/주의보) critical+warning 만 통과시켜
+        info 잡음(예: rain_likely 70%) 을 숨긴다 — "특보?" 질의에 info 까지 답하면
+        오해 소지.
+      - selected 가 비면 "특이사항 없음" 블록을 반환해 호출자가 무조건 비어있지
+        않은 마크다운을 받게 한다 (frost 와 동일한 정책).
+    """
+    kinds, title = _select_risk_kinds(question)
+    crop_label = f" · {main_crop}" if main_crop else ""
+
+    if kinds is None:
+        selected = [
+            a for a in (advisories or [])
+            if a.get("level") in {"critical", "warning"}
+        ]
+    else:
+        selected = [a for a in (advisories or []) if a.get("kind") in kinds]
+
+    if not selected:
+        return (
+            f"## {title}{crop_label}\n\n"
+            f"- 관측·예보 임계 미달 — 해당 위험 없음."
+        )
+
+    icon = {"critical": "🔴", "warning": "🟠", "info": "🟡"}
+    lines = [f"## {title}{crop_label}"]
+    for a in selected:
+        bullet = icon.get(a.get("level"), "•")
+        lines.append(
+            f"- {bullet} **[{a.get('when', '')}]** {a.get('message', '')}"
+        )
+        hint = a.get("crop_hint")
+        if hint:
+            lines.append(f"  - {hint}")
+    return "\n".join(lines)

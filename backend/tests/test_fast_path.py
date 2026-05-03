@@ -10,7 +10,10 @@ from __future__ import annotations
 from app.services.farm_agent.fast_path import (
     _BLOCKLIST,
     _FROST_RE,
+    _GENERAL_RISK_RE,
     _format_frost,
+    _format_general_risks,
+    _select_risk_kinds,
 )
 
 
@@ -119,6 +122,160 @@ def test_format_frost_filters_non_frost_advisories():
     assert "서리" in out
     assert "강풍" not in out  # not in any frost message
     assert "풍속" not in out
+
+
+# ── _GENERAL_RISK_RE matches & rejects ─────────────────────────────────────
+
+
+def test_general_risk_re_matches_typical_queries():
+    samples = [
+        "이번주 폭염?",
+        "내일 폭우 와?",
+        "오늘 호우?",
+        "이번주 장마",
+        "오늘 강풍?",
+        "내일 돌풍?",
+        "오늘 특보?",
+        "내일 주의보?",
+        "이번주 한파",
+        "오늘 혹한?",
+        "이번주 혹서?",
+    ]
+    for q in samples:
+        assert _GENERAL_RISK_RE.match(q), f"expected match for: {q!r}"
+
+
+def test_general_risk_re_rejects_unrelated_queries():
+    samples = [
+        "오늘 비 와?",          # 일반 비 → _WEATHER_RE 영역
+        "오늘 날씨 어때?",       # 일반 날씨
+        "내일 서리?",            # frost — 별도 _FROST_RE
+        "어제 환기 켰어?",       # IoT
+        "농약 폭염 살포",        # blocklist (농약) 가 fast-path 자체 차단
+        "이번 주 시세 어때?",
+    ]
+    for q in samples:
+        # blocklist 류는 dispatcher 에서 막히므로 regex 자체 매칭은 허용될 수
+        # 있다. 따라서 여기서는 "농약 폭염 살포" 는 검사 제외.
+        if "농약" in q:
+            assert _BLOCKLIST.search(q)
+            continue
+        assert not _GENERAL_RISK_RE.match(q), f"expected NO match for: {q!r}"
+
+
+def test_general_risk_re_does_not_collide_with_frost_keywords():
+    for kw in ("서리", "동해", "영하", "결빙"):
+        assert not _GENERAL_RISK_RE.match(kw), (
+            f"general-risk regex unexpectedly catches frost keyword: {kw}"
+        )
+
+
+# ── _select_risk_kinds intent classifier ───────────────────────────────────
+
+
+def test_select_risk_kinds_heatwave():
+    kinds, title = _select_risk_kinds("이번주 폭염?")
+    assert kinds == frozenset({"heatwave"})
+    assert "폭염" in title
+
+
+def test_select_risk_kinds_rain_family():
+    for q in ("내일 폭우?", "오늘 호우?", "이번주 장마"):
+        kinds, _ = _select_risk_kinds(q)
+        assert "heavy_rain" in (kinds or set())
+        assert "rain_likely" in (kinds or set())
+
+
+def test_select_risk_kinds_wind_family():
+    kinds, _ = _select_risk_kinds("오늘 강풍?")
+    assert kinds == frozenset({"strong_wind"})
+
+
+def test_select_risk_kinds_cold_wave_maps_to_frost():
+    # 한파 질의는 frost advisory 와 같은 임계로 충분히 커버 — engine 확장 전까지의 합리적 매핑.
+    kinds, title = _select_risk_kinds("이번주 한파?")
+    assert kinds == frozenset({"frost"})
+    assert "한파" in title or "저온" in title
+
+
+def test_select_risk_kinds_fallback_when_no_specific_keyword():
+    kinds, title = _select_risk_kinds("내일 특보?")
+    assert kinds is None
+    assert "기상" in title
+
+
+# ── _format_general_risks rendering & filtering ────────────────────────────
+
+
+def _adv(kind: str, level: str = "warning", when: str = "내일",
+         msg: str = "...", crop_hint: str | None = None) -> dict:
+    return {
+        "level": level, "kind": kind, "when": when, "message": msg,
+        "value": 0, "crop_hint": crop_hint,
+    }
+
+
+def test_format_general_risks_filters_to_requested_kind():
+    advisories = [
+        _adv("heatwave", "critical", "내일", "내일 최고 36℃ — 고온 스트레스."),
+        _adv("strong_wind", "warning", "내일", "내일 풍속 10m/s — ..."),
+        _adv("frost", "warning", "내일", "내일 최저 1℃ — 서리/동해 가능."),
+    ]
+    out = _format_general_risks("이번주 폭염?", advisories, None)
+    assert "🔥" in out
+    assert "고온" in out
+    # 다른 kind 의 메시지/단어는 빠져야 한다.
+    assert "풍속" not in out
+    assert "서리" not in out
+
+
+def test_format_general_risks_rain_family_includes_rain_likely():
+    advisories = [
+        _adv("rain_likely", "info", "내일", "내일 강수확률 80%"),
+        _adv("heavy_rain", "critical", "내일", "내일 강수 90mm — 호우 특보 수준."),
+    ]
+    out = _format_general_risks("내일 폭우?", advisories, None)
+    assert "강수확률 80%" in out
+    assert "90mm" in out
+
+
+def test_format_general_risks_empty_returns_no_risk_block():
+    out = _format_general_risks("이번주 폭염?", [], "사과")
+    assert "특이사항 없음" in out or "위험 없음" in out
+    # 작물 라벨이 헤더에 붙어야 한다.
+    assert "사과" in out
+
+
+def test_format_general_risks_critical_promotes_red_icon():
+    advisories = [_adv("heatwave", level="critical", msg="내일 최고 36℃ — 고온 스트레스.")]
+    out = _format_general_risks("폭염?", advisories, None)
+    assert "🔴" in out
+
+
+def test_format_general_risks_includes_crop_hint_when_present():
+    advisories = [
+        _adv(
+            "heatwave",
+            level="warning",
+            msg="내일 최고 34℃ — 고온 스트레스.",
+            crop_hint="송이 일소피해, 당도 저하 우려.",
+        )
+    ]
+    out = _format_general_risks("폭염?", advisories, "포도")
+    assert "송이 일소피해" in out
+
+
+def test_format_general_risks_fallback_keeps_only_critical_and_warning():
+    # 특보/주의보 류 fallback 경로 — info advisory 는 잡음으로 간주해 숨긴다.
+    advisories = [
+        _adv("heatwave", "critical", "오늘", "오늘 최고 36℃."),
+        _adv("rain_likely", "info", "내일", "내일 강수확률 70%."),
+        _adv("strong_wind", "warning", "오늘", "오늘 풍속 10m/s."),
+    ]
+    out = _format_general_risks("오늘 특보?", advisories, None)
+    assert "오늘 최고 36℃" in out
+    assert "오늘 풍속 10m/s" in out
+    assert "강수확률 70%" not in out
 
 
 def _run_all_tests() -> None:

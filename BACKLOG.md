@@ -176,7 +176,7 @@ Format per item:
 - risk: low
 
 ## prefers-reduced-motion respect (global)
-- status: new
+- status: shipped: 1bd7bf4
 - area: frontend
 - why: framer-motion + Tailwind animate-* 애니메이션이 다수 페이지에서 자동 재생. 전정·운전 직후 진입 등 멀미 유발 가능성. WCAG 2.1 SC 2.3.3.
 - slice: index.css 에 `@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }` 글로벌 가드 + framer-motion `MotionConfig` 으로 `reducedMotion="user"` 글로벌 설정.

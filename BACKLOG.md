@@ -126,7 +126,7 @@ Format per item:
 - risk: med (데이터 차원 의존)
 
 ## Wind chill (체감온도) advisory for outdoor work scheduling
-- status: new
+- status: shipped: 6a402ee
 - area: backend
 - why: 한국 겨울 농민 야외작업(전정·수확·시설 점검) 안전성은 절대온도가 아닌 풍속 보정 체감온도가 결정. 절대 0℃ + 풍속 10m/s = 체감 -10℃ 수준. 현재 frost/cold_wave 는 절대온도만 본다.
 - slice: weather_alerts.py 에 `_compute_wind_chill(t, v)` (KMA/Environment Canada 공식) + `wind_chill` kind. 임계: 체감 ≤ -10℃ warning, ≤ -20℃ critical. wmax 와 tmin 결합.

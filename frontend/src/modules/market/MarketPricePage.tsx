@@ -7,6 +7,9 @@ import {
   MdSearch,
   MdClose,
   MdSearchOff,
+  MdArrowUpward,
+  MdArrowDownward,
+  MdUnfoldMore,
 } from 'react-icons/md';
 import { useMarketData } from '@/hooks/useMarketData';
 import type { KamisItemPrice, ImportantChange } from '@/types';
@@ -80,11 +83,33 @@ function normalizeQuery(value: string): string {
   return value.replace(/\s+/g, '').toLowerCase();
 }
 
+// ── 정렬 상태 ─────────────────────────────────────────
+type SortKey = 'name' | 'current' | 'change';
+type SortDir = 'asc' | 'desc';
+
+// 헤더 클릭 사이클: 무정렬 → desc → asc → 무정렬 (백엔드 부류 코드 순으로 복귀)
+function nextSortState(
+  current: { key: SortKey; dir: SortDir } | null,
+  clicked: SortKey,
+): { key: SortKey; dir: SortDir } | null {
+  if (!current || current.key !== clicked) return { key: clicked, dir: 'desc' };
+  if (current.dir === 'desc') return { key: clicked, dir: 'asc' };
+  return null;
+}
+
+function changePercent(item: KamisItemPrice): number | null {
+  const cur = parseKamisPrice(item.dpr1);
+  const prev = parseKamisPrice(item.dpr2);
+  if (cur == null || prev == null || prev === 0) return null;
+  return ((cur - prev) / prev) * 100;
+}
+
 export default function MarketPricePage() {
   const { latestPrices, loading, error, fetchLatest } = useMarketData();
   const [productCls, setProductCls] = useState<'' | '01' | '02'>('01');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortState, setSortState] = useState<{ key: SortKey; dir: SortDir } | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => { fetchLatest(productCls); }, [fetchLatest, productCls]);
@@ -116,8 +141,48 @@ export default function MarketPricePage() {
     });
   }, [latestPrices, categoryFilter, searchQuery]);
 
+  // 정렬: 부류 + 검색을 통과한 결과에 사용자가 선택한 키로 안정 정렬을 적용.
+  // null 값(가격 결측)은 항상 맨 뒤로 보내 농민이 "값 없는 줄"에 시선 뺏기지 않게 한다.
+  const sortedPrices = useMemo(() => {
+    if (!sortState) return filteredPrices;
+    const sign = sortState.dir === 'asc' ? 1 : -1;
+    const indexed = filteredPrices.map((item, idx) => ({ item, idx }));
+    indexed.sort((a, b) => {
+      let av: number | string | null = null;
+      let bv: number | string | null = null;
+      if (sortState.key === 'name') {
+        av = a.item.item_name ?? '';
+        bv = b.item.item_name ?? '';
+      } else if (sortState.key === 'current') {
+        av = parseKamisPrice(a.item.dpr1);
+        bv = parseKamisPrice(b.item.dpr1);
+      } else {
+        av = changePercent(a.item);
+        bv = changePercent(b.item);
+      }
+      const aMissing = av == null || av === '';
+      const bMissing = bv == null || bv === '';
+      if (aMissing && bMissing) return a.idx - b.idx;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      if (typeof av === 'string' && typeof bv === 'string') {
+        const cmp = av.localeCompare(bv, 'ko');
+        return cmp !== 0 ? sign * cmp : a.idx - b.idx;
+      }
+      const an = av as number;
+      const bn = bv as number;
+      if (an === bn) return a.idx - b.idx;
+      return sign * (an - bn);
+    });
+    return indexed.map(x => x.item);
+  }, [filteredPrices, sortState]);
+
+  const toggleSort = useCallback((key: SortKey) => {
+    setSortState(prev => nextSortState(prev, key));
+  }, []);
+
   const isSearching = searchQuery.trim().length > 0;
-  const hasNoResults = isSearching && filteredPrices.length === 0;
+  const hasNoResults = isSearching && sortedPrices.length === 0;
   const clearSearch = useCallback(() => {
     setSearchQuery('');
     searchInputRef.current?.blur();
@@ -281,8 +346,8 @@ export default function MarketPricePage() {
         className="-mt-3 text-xs text-gray-500"
       >
         {isSearching
-          ? `검색 결과: ${filteredPrices.length}개 품목`
-          : `전체 ${filteredPrices.length}개 품목${categoryFilter ? ` (부류 필터 적용 중)` : ''}`}
+          ? `검색 결과: ${sortedPrices.length}개 품목`
+          : `전체 ${sortedPrices.length}개 품목${categoryFilter ? ` (부류 필터 적용 중)` : ''}`}
       </p>
 
       {/* ── 부류 필터 ────────────────────────────────── */}
@@ -314,23 +379,53 @@ export default function MarketPricePage() {
           <h3 className="section-title">
             {productCls === '01' ? '소매' : '도매'} 가격 현황
           </h3>
-          <span className="text-xs text-gray-400">{filteredPrices.length}개 품목</span>
+          <div className="flex items-center gap-3">
+            {sortState && (
+              <button
+                type="button"
+                onClick={() => setSortState(null)}
+                className="text-[11px] font-medium text-gray-500 hover:text-gray-700 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded"
+                aria-label="정렬 초기화"
+              >
+                정렬 초기화
+              </button>
+            )}
+            <span className="text-xs text-gray-400">{sortedPrices.length}개 품목</span>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 font-semibold text-gray-600">품목</th>
+                <SortableHeader
+                  label="품목"
+                  align="left"
+                  sortKey="name"
+                  state={sortState}
+                  onToggle={toggleSort}
+                />
                 <th className="text-center py-3 px-4 font-semibold text-gray-600">단위</th>
-                <th className="text-right py-3 px-4 font-semibold text-gray-600">당일</th>
+                <SortableHeader
+                  label="당일"
+                  align="right"
+                  sortKey="current"
+                  state={sortState}
+                  onToggle={toggleSort}
+                />
                 <th className="text-right py-3 px-4 font-semibold text-gray-600">1일전</th>
                 <th className="text-right py-3 px-4 font-semibold text-gray-600">1주전</th>
                 <th className="text-right py-3 px-4 font-semibold text-gray-600">1개월전</th>
-                <th className="text-center py-3 px-4 font-semibold text-gray-600">등락</th>
+                <SortableHeader
+                  label="등락"
+                  align="center"
+                  sortKey="change"
+                  state={sortState}
+                  onToggle={toggleSort}
+                />
               </tr>
             </thead>
             <tbody>
-              {filteredPrices.map((item, idx) => {
+              {sortedPrices.map((item, idx) => {
                 const cur = parseKamisPrice(item.dpr1);
                 const prev = parseKamisPrice(item.dpr2);
                 const diff = cur != null && prev != null && prev !== 0
@@ -367,7 +462,7 @@ export default function MarketPricePage() {
             </tbody>
           </table>
         </div>
-        {filteredPrices.length === 0 && !loading && (
+        {sortedPrices.length === 0 && !loading && (
           hasNoResults ? (
             <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
               <MdSearchOff className="text-4xl text-gray-300" aria-hidden />
@@ -389,5 +484,54 @@ export default function MarketPricePage() {
         )}
       </div>
     </div>
+  );
+}
+
+// ── 정렬 가능한 컬럼 헤더 ─────────────────────────────
+function SortableHeader({
+  label,
+  align,
+  sortKey,
+  state,
+  onToggle,
+}: {
+  label: string;
+  align: 'left' | 'right' | 'center';
+  sortKey: SortKey;
+  state: { key: SortKey; dir: SortDir } | null;
+  onToggle: (key: SortKey) => void;
+}) {
+  const active = state?.key === sortKey;
+  const dir = active ? state!.dir : undefined;
+  const ariaSort: 'ascending' | 'descending' | 'none' =
+    !active ? 'none' : dir === 'asc' ? 'ascending' : 'descending';
+  const alignClass =
+    align === 'left' ? 'text-left' : align === 'right' ? 'text-right' : 'text-center';
+  const justifyClass =
+    align === 'left' ? 'justify-start' : align === 'right' ? 'justify-end' : 'justify-center';
+  const Icon = !active ? MdUnfoldMore : dir === 'asc' ? MdArrowUpward : MdArrowDownward;
+  const dirLabel = !active ? '정렬 안 됨' : dir === 'asc' ? '오름차순' : '내림차순';
+
+  return (
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={`${alignClass} py-3 px-4 font-semibold text-gray-600`}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        aria-label={`${label} 정렬 (현재 ${dirLabel})`}
+        className={`inline-flex w-full items-center gap-1 ${justifyClass} rounded px-1 py-0.5 transition hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+          active ? 'text-primary' : ''
+        }`}
+      >
+        <span>{label}</span>
+        <Icon
+          className={`text-base ${active ? 'opacity-100' : 'opacity-40'}`}
+          aria-hidden
+        />
+      </button>
+    </th>
   );
 }

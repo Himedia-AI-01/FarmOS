@@ -156,3 +156,45 @@ Format per item:
 - slice: fast_path.py 의 `_GENERAL_RISK_RE` alternation 에 `열대야|초열대야` 추가 + `_RISK_KEYWORD_TO_KINDS` 에 `(("열대야", "초열대야"), frozenset({"tropical_night"}), "🌙 열대야 (야간 고온) 위험")` 한 줄. 단독 "야간" 은 야외/실내·작업·온도 등 의미 모호로 의도적 제외. heatwave 와 동시 노출 안 함 (질의 의도가 야간 한정이면 야간 advisory 만).
 - files: backend/app/services/farm_agent/fast_path.py (MODIFY), backend/tests/test_fast_path.py (MODIFY)
 - risk: low
+
+<!-- ── Frontend pivot (iter-13+) — UI/UX must be primary surface ── -->
+
+## Market price quick search + `/` keyboard shortcut
+- status: shipped: 863af7d
+- area: frontend
+- why: 시세 표는 부류 토글만 있어 "오이가 얼마지?" 류를 손가락으로 한참 스크롤해야 한다. 텍스트 검색 + `/` 포커스 단축키 + 검색 결과 카운트(aria-live) 만 더해도 농민이 표를 즉시 찾는다.
+- slice: MarketPricePage.tsx 에 검색 input 추가, item_name/category_name 필터, "/" 키로 input focus, ESC 로 검색 초기화, aria-live 로 결과 N건 음성 안내, 빈 상태 카드.
+- files: frontend/src/modules/market/MarketPricePage.tsx (MODIFY)
+- risk: low
+
+## Sortable column headers in price table
+- status: new
+- area: frontend
+- why: 표 정렬은 현재 백엔드 응답 순서(부류 코드) 만. 농민은 "당일 가격 높은 순", "최근 변동 큰 순" 으로 보고 싶어 한다. 헤더 클릭으로 정렬 토글.
+- slice: MarketPricePage 에 sort key state(name/current/change), 헤더에 ▲▼ 표시 + 클릭 토글, useMemo 비교자 분기.
+- files: frontend/src/modules/market/MarketPricePage.tsx (MODIFY)
+- risk: low
+
+## prefers-reduced-motion respect (global)
+- status: new
+- area: frontend
+- why: framer-motion + Tailwind animate-* 애니메이션이 다수 페이지에서 자동 재생. 전정·운전 직후 진입 등 멀미 유발 가능성. WCAG 2.1 SC 2.3.3.
+- slice: index.css 에 `@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }` 글로벌 가드 + framer-motion `MotionConfig` 으로 `reducedMotion="user"` 글로벌 설정.
+- files: frontend/src/index.css (MODIFY), frontend/src/App.tsx (would touch — but App.tsx is in-progress; SKIP MotionConfig path or use main.tsx instead)
+- risk: low
+
+## Diagnosis page drag-and-drop image upload
+- status: new
+- area: frontend
+- why: 모바일 카메라는 이미 잘 되지만, PC 사용 시(데스크톱 행정 직원) 파일 선택 다이얼로그뿐이라 이질감. react-dropzone 이 의존성에 이미 있고 PROMPT.md 도 명시함. 드롭존 + 멀티이미지 미리보기 + 제거 버튼.
+- slice: DiagnosisPage 또는 모듈 내 신 `DropzoneUploader.tsx` 컴포넌트, useDropzone(accept image/*, multiple), 미리보기 thumbnail grid, 파일 제거.
+- files: frontend/src/modules/diagnosis/DropzoneUploader.tsx (NEW), frontend/src/modules/diagnosis/DiagnosisPage.tsx (MODIFY)
+- risk: med (기존 업로드 플로우와 충돌 가능 — 신규 컴포넌트로 분리 권장)
+
+## Skeleton loaders for Market price table
+- status: new
+- area: frontend
+- why: 현재 시세 페이지 초기 로딩은 회색 스피너 1개("시세 정보를 불러오는 중...") — UX 가 평이. tailwind animate-pulse 로 표/카드 shape skeleton 을 표시하면 인지 지연이 줄어든다.
+- slice: MarketPricePage.tsx 의 loading 분기를 skeleton table(8 rows × 7 cols, animate-pulse bg-gray-100) + 변동 카드 placeholder 3개로 교체.
+- files: frontend/src/modules/market/MarketPricePage.tsx (MODIFY)
+- risk: low

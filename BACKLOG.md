@@ -232,7 +232,7 @@ Format per item:
 - risk: med (이미 dirty 상태인 파일들 — 본 iter 외 수정과 충돌 가능)
 
 ## Journal page skeleton loaders
-- status: in-progress
+- status: shipped: 12d586a
 - area: frontend
 - why: JournalPage 의 초기 로딩은 `<div>불러오는 중...</div>` 단일 회색 텍스트뿐이다. 농민이 매일 영농일지를 확인·작성하는 메인 surface 인 만큼 iter-15(Market)/17(Weather)/19(Subsidy) 의 검증된 shape skeleton 패턴을 동일하게 적용해 인지 지연을 줄인다.
 - slice: 신규 `JournalSkeleton.tsx` — 타임라인 형태(2개 날짜 그룹 × 3 카드 placeholder), 모두 animate-pulse 회색 블록. JournalPage 의 `{loading && ...}` 분기에서 텍스트 한 줄을 컴포넌트로 교체. SR 사용자에겐 sr-only role="status" 안내, 시각 데코는 aria-hidden. 액션 바·DailyJournalPanel·MissingFieldsAlert·필터 pill 은 이미 자체 렌더되므로 timeline 영역만 교체해 깜빡임 최소화.

@@ -148,3 +148,11 @@ Format per item:
 - slice: weather_alerts.py 에 `_TROPICAL_NIGHT_*` 임계 + `tropical_night` kind 추가 — tmin ≥ 25℃ warning, tmin ≥ 27℃ critical (보수적; KMA 초열대야 30℃ 보다 낮춤). heatwave 와 동시 발화 허용. 7~8개 작물 tropical_night crop_hint. fast-path 키워드는 본 iter 범위 밖 (별도 iter).
 - files: backend/app/services/farm_agent/weather_alerts.py (MODIFY), backend/tests/test_weather_alerts.py (MODIFY)
 - risk: low
+
+## Tropical night (열대야) fast-path keyword
+- status: shipped: 2b868f8
+- area: backend
+- why: iter-11 이 tropical_night advisory 임계는 추가했지만 "오늘 열대야?" / "내일 초열대야 와?" 같은 단답형 질의는 여전히 LLM 라우팅을 거친다. 이미 검증된 `_GENERAL_RISK_RE` + `_RISK_KEYWORD_TO_KINDS` 인프라(iter-3,5,7,8) 에 키워드 + 매핑만 추가하면 즉답 가능. 한여름 야간 환기·미스트 의사결정은 시간이 곧 작물 손실이라 LLM 지연을 줄이는 가치가 크다.
+- slice: fast_path.py 의 `_GENERAL_RISK_RE` alternation 에 `열대야|초열대야` 추가 + `_RISK_KEYWORD_TO_KINDS` 에 `(("열대야", "초열대야"), frozenset({"tropical_night"}), "🌙 열대야 (야간 고온) 위험")` 한 줄. 단독 "야간" 은 야외/실내·작업·온도 등 의미 모호로 의도적 제외. heatwave 와 동시 노출 안 함 (질의 의도가 야간 한정이면 야간 advisory 만).
+- files: backend/app/services/farm_agent/fast_path.py (MODIFY), backend/tests/test_fast_path.py (MODIFY)
+- risk: low

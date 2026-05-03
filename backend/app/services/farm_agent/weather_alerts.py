@@ -52,6 +52,15 @@ _DROUGHT_WARNING_DAYS = 5      # 5일 연속 무강수 → 경고
 _DROUGHT_CRITICAL_DAYS = 7     # 7일 연속 무강수 → 심각
 _DROUGHT_SCAN_DAYS = 14        # 가뭄 스캔은 horizon_days 무시하고 별도 한도
 
+# Snow / 폭설 — daily_forecasts.sky 가 눈/진눈깨비/눈날림 류일 때 precipitation
+# (water-equivalent mm) 을 적설 추정 프록시로 사용. 1mm 강수 ≈ 1cm 신적설 근사
+# (실제 비율은 5~15:1 범위로 변동하지만 KMA daily 집계에는 적설 cm 직접값이
+# 없어 보수적으로 1:1 가정). 시설하우스 붕괴 임계는 농촌진흥청 자료상 보통
+# 10cm 누적부터 위험으로 본다.
+_SNOW_PRECIP_MM_WARNING = 5.0    # ≥ 5mm + 눈 sky → warning (≈ 5cm 이상)
+_SNOW_PRECIP_MM_CRITICAL = 10.0  # ≥ 10mm + 눈 sky → critical (≈ 10cm 이상)
+_SNOW_SKY_MARKERS: tuple[str, ...] = ("눈", "진눈깨비", "눈날림", "비/눈")
+
 
 # ── Crop-specific sensitivities ─────────────────────────────────────────────
 # 키 = main_crop 의 prefix substring 매칭 (사용자가 "방울토마토" 라 적어도 매칭).
@@ -64,39 +73,46 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "strong_wind": "낙과 위험 — 방풍망·지주 점검.",
         "heavy_rain": "잎/과실 곰팡이 (탄저·갈색무늬) 주의, 비 그친 직후 약제 살포.",
         "drought":    "비대기 수분 부족 시 과실 비대 정체·열과 — 관수 사이클 단축.",
+        "snow":       "가지 부러짐 위험 — 적설 후 즉시 털어내기, 지주·유인끈 점검.",
     },
     "배": {
         "frost":      "개화기 서리 직격 — 야간 살수 또는 송풍 권장.",
         "strong_wind": "낙과·가지 부러짐 위험.",
         "drought":    "비대기 가뭄 시 과실 발달 저해 — 점적관수 검토.",
+        "snow":       "가지 부러짐 — 적설 직후 털어내고 골절지 처리.",
     },
     "포도": {
         "frost":      "신초 동해 가능 — 비닐멀칭/터널 보온 검토.",
         "heatwave":   "송이 일소피해, 당도 저하 우려.",
         "heavy_rain": "열과·노균병 위험 — 우산식 비가림 점검.",
         "drought":    "착색기 과습/건조 교차로 열과 — 토양수분 균일 유지.",
+        "snow":       "비가림 시설 적설하중 — 측면 비닐 일시 개방·하중 분산.",
     },
     "토마토": {
         "frost":      "10℃ 이하부터 생육정지 — 보온 필수.",
         "heatwave":   "수정 불량(공동과·기형과) — 차광·관수.",
         "fungal_humidity": "잎곰팡이병/노균병 호조 — 환기 강화.",
         "drought":    "비대기 수분 부족 시 배꼽썩음과 급증 — 칼슘+관수 보강.",
+        "snow":       "비닐하우스 적설하중 — 측창 보온재 정리, 야간 난방 가동·환기로 적설 미끄러뜨리기.",
     },
     "오이": {
         "frost":      "냉해에 매우 취약 — 야간 보온 필수.",
         "fungal_humidity": "노균병 폭발 위험 — 즉시 환기.",
         "drought":    "수분 결핍 시 곡과·낙과 — 관수 빈도 상향.",
+        "snow":       "비닐하우스 적설하중 — 난방 가동·물뿌리기로 지붕 적설 차단.",
     },
     "딸기": {
         "frost":      "관부 동해 위험 — 부직포·수막재배 점검.",
         "heatwave":   "꽃눈 분화 저해 — 차광·환기.",
         "fungal_humidity": "잿빛곰팡이병 위험 — 환기·약제 사이클 단축.",
+        "snow":       "하우스 측면 적설 정리, 수막재배 동결 주의 — 야간 가동 점검.",
     },
     "고추": {
         "frost":      "정식 직후 냉해 치명적 — 보온 터널.",
         "strong_wind": "쓰러짐·가지 부러짐 — 지주 보강.",
         "heavy_rain": "역병/탄저 폭발 위험 — 배수로 점검.",
         "drought":    "착과기 가뭄 시 낙화·낙과 — 점적관수 가동.",
+        "snow":       "노지 월동 시 멀칭·부직포 보완. 시설재배는 적설하중 점검.",
     },
     "벼": {
         "strong_wind": "출수기 도복 위험 — 물 빼기·낙수 검토.",
@@ -108,14 +124,17 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "frost":      "결구기 동해 — 부직포 점검.",
         "strong_wind": "잎 찢김·뿌리 흔들림.",
         "drought":    "결구기 가뭄 시 결구 부진·열구 — 관수 보강.",
+        "snow":       "결구기 적설은 결구부 동상해 — 수확 임박 포기는 즉시 수확 검토.",
     },
     "마늘": {
         "frost":      "월동 직후 발아 시 동해 — 멀칭 점검.",
         "drought":    "구비대기 수분 부족 시 인편 발달 저해.",
+        "snow":       "월동기 적설은 보온 효과도 있으나, 융설 시 침수·습해 주의 — 배수로 점검.",
     },
     "양파": {
         "heavy_rain": "수확기 비는 부패·저장성 저하.",
         "drought":    "비대기(4~5월) 가뭄은 구 크기 직격 — 점적관수.",
+        "snow":       "월동기 멀칭·부직포 점검. 융설 후 습해로 인한 무름병 주의.",
     },
 }
 
@@ -199,6 +218,19 @@ def _detect_drought(
         "value": streak,
         "crop_hint": _match_crop_hint(main_crop, "drought"),
     }
+
+
+def _is_snow_sky(sky: Any) -> bool:
+    """Whether a daily forecast `sky` label indicates snow precipitation.
+
+    KMA PTY 코드 2(비/눈)/3(눈)/6(진눈깨비)/7(눈날림) 가 _PTY_MAP 으로 한국어 라벨이
+    되어 daily.sky 에 들어온다. 비-snow 키워드는 절대 매칭되지 않도록 정확
+    토큰만 검사 (substring "눈" 만 보면 "눈비"는 잡지만 "눈높이" 같은 비-기상
+    문자열은 daily.sky 에 들어올 수 없으니 안전).
+    """
+    if not isinstance(sky, str):
+        return False
+    return any(marker in sky for marker in _SNOW_SKY_MARKERS)
 
 
 def analyze_weather_risks(
@@ -342,6 +374,28 @@ def analyze_weather_risks(
                     "message": f"{when} 풍속 {wmax:.1f}m/s 예상 — 방제·드론 작업 보류.",
                     "value": wmax,
                     "crop_hint": _match_crop_hint(main_crop, "strong_wind"),
+                }
+            )
+
+        # Snow / 폭설 — daily.sky 가 눈/진눈깨비/눈날림 류 + 강수량(water-equivalent)
+        # 임계 충족 시. 적설 cm 직접값 부재로 1mm ≈ 1cm 보수적 가정. 시설하우스
+        # 적설하중 위험 (≈10cm+) 을 critical 로 띄워 호출자가 즉시 조치를 권장
+        # 할 수 있게 한다. heavy_rain 과 동시 발화 가능 — 둘 다 유의미한 신호.
+        if precip >= _SNOW_PRECIP_MM_WARNING and _is_snow_sky(entry.get("sky")):
+            level = (
+                "critical" if precip >= _SNOW_PRECIP_MM_CRITICAL else "warning"
+            )
+            advisories.append(
+                {
+                    "level": level,
+                    "kind": "snow",
+                    "when": when,
+                    "message": (
+                        f"{when} 적설 약 {precip:.0f}cm 예상 — "
+                        "시설 적설하중·교통·낙상 위험."
+                    ),
+                    "value": precip,
+                    "crop_hint": _match_crop_hint(main_crop, "snow"),
                 }
             )
 

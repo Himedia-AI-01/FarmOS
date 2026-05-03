@@ -307,6 +307,125 @@ def test_format_markdown_renders_advisories():
     assert "서리" in md or "동해" in md
 
 
+# ── Snow / 폭설 advisory ────────────────────────────────────────────────────
+
+
+def test_snow_warning_at_5mm_with_snow_sky():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-2, tmax=1, precip=6.0, sky="눈"),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    snow = [a for a in out if a["kind"] == "snow"]
+    assert snow, "snow advisory expected for 6mm precip + 눈 sky"
+    assert snow[0]["level"] == "warning"
+    assert snow[0]["value"] == 6.0
+
+
+def test_snow_critical_at_10mm_with_snow_sky():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-3, tmax=0, precip=12.0, sky="눈"),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    snow = [a for a in out if a["kind"] == "snow"]
+    assert snow and snow[0]["level"] == "critical"
+
+
+def test_snow_below_threshold_emits_nothing():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-2, tmax=1, precip=3.0, sky="눈"),  # < 5mm
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "snow"]
+
+
+def test_snow_requires_snow_sky_keyword():
+    # 강수 ≥ 5mm 이지만 sky 가 "비" 면 snow advisory 발생 금지 (heavy_rain
+    # 임계 30mm 미만이라 heavy_rain 도 발생 안 함 — info rain_likely 만 가능).
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=2, tmax=6, precip=8.0, sky="비"),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "snow"]
+
+
+def test_snow_matches_jin_nun_kkae_bi_sky():
+    # "진눈깨비" 도 snow_sky 마커로 매칭되어야 한다.
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-1, tmax=2, precip=7.0, sky="진눈깨비"),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert any(a["kind"] == "snow" for a in out)
+
+
+def test_snow_matches_bi_nun_combined_sky():
+    # KMA PTY 코드 2 → "비/눈" 라벨도 snow 로 인식 (substring "눈" 포함).
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=0, tmax=3, precip=11.0, sky="비/눈"),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    snow = [a for a in out if a["kind"] == "snow"]
+    assert snow and snow[0]["level"] == "critical"
+
+
+def test_snow_attaches_crop_hint_for_greenhouse_crop():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-2, tmax=1, precip=11.0, sky="눈"),
+        ],
+    }
+    out = analyze_weather_risks(weather, main_crop="토마토")
+    snow = next(a for a in out if a["kind"] == "snow")
+    assert snow["crop_hint"] and "비닐하우스" in snow["crop_hint"]
+
+
+def test_snow_unknown_crop_leaves_hint_none():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-2, tmax=1, precip=11.0, sky="눈"),
+        ],
+    }
+    out = analyze_weather_risks(weather, main_crop="이름없는작물")
+    snow = next(a for a in out if a["kind"] == "snow")
+    assert snow["crop_hint"] is None
+
+
+def test_snow_advisory_keeps_severity_sort_order():
+    weather = {
+        "current": {"wind_speed": 1.0, "temperature": -2, "precipitation_type": "없음"},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-2, tmax=1, precip=12.0, sky="눈"),  # critical snow
+            _daily(offset=1, tmin=1.5, tmax=8, precip=0.0),             # warning frost
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    levels = [a["level"] for a in out]
+    rank = {"critical": 0, "warning": 1, "info": 2}
+    assert levels == sorted(levels, key=lambda lv: rank.get(lv, 9))
+
+
+def test_format_markdown_renders_snow_block():
+    advisories = analyze_weather_risks(
+        {"daily_forecasts": [_daily(offset=1, tmin=-2, tmax=1, precip=11, sky="눈")]},
+        main_crop="토마토",
+    )
+    md = format_advisories_markdown(advisories, main_crop="토마토")
+    assert "적설" in md
+    assert "토마토" in md
+    assert "🔴" in md  # critical
+
+
 def _run_all_tests() -> None:
     """Execute every test_* in this module without pytest."""
     import inspect

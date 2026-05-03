@@ -278,6 +278,53 @@ def test_format_general_risks_fallback_keeps_only_critical_and_warning():
     assert "강수확률 70%" not in out
 
 
+# ── Snow keyword routing ──────────────────────────────────────────────────
+
+
+def test_general_risk_re_matches_snow_keywords():
+    samples = [
+        "내일 폭설?",
+        "이번주 대설",
+        "오늘 적설",
+        "내일 폭설 와?",
+    ]
+    for q in samples:
+        assert _GENERAL_RISK_RE.match(q), f"expected match for: {q!r}"
+
+
+def test_general_risk_re_rejects_bare_nun():
+    # 단독 "눈" 은 의미 충돌(눈높이/눈매 등) — fast-path 매칭 금지.
+    samples = ["오늘 눈?", "내일 눈 와?", "눈"]
+    for q in samples:
+        assert not _GENERAL_RISK_RE.match(q), f"expected NO match for: {q!r}"
+
+
+def test_select_risk_kinds_snow_family():
+    for q in ("내일 폭설?", "이번주 대설", "오늘 적설"):
+        kinds, title = _select_risk_kinds(q)
+        assert kinds == frozenset({"snow"}), f"unexpected kinds for {q!r}: {kinds}"
+        assert "폭설" in title or "적설" in title
+
+
+def test_format_general_risks_snow_filters_to_snow_only():
+    advisories = [
+        _adv("snow", "critical", "내일", "내일 적설 약 12cm 예상 — 시설 적설하중 위험."),
+        _adv("strong_wind", "warning", "내일", "내일 풍속 10m/s — 방제 보류."),
+        _adv("frost", "warning", "내일", "내일 최저 -2℃ — 서리 가능."),
+    ]
+    out = _format_general_risks("내일 폭설?", advisories, None)
+    assert "❄️" in out
+    assert "12cm" in out
+    assert "풍속" not in out
+    assert "서리" not in out
+
+
+def test_format_general_risks_snow_empty_returns_no_risk_block():
+    out = _format_general_risks("내일 폭설?", [], "토마토")
+    assert "특이사항 없음" in out or "위험 없음" in out
+    assert "토마토" in out
+
+
 def _run_all_tests() -> None:
     """Run all test_* without pytest (mirrors test_weather_alerts.py pattern)."""
     import inspect

@@ -23,6 +23,10 @@ from app.core.weather_client import get_weather
 from app.models.ai_agent import AiAgentDecision
 from app.models.user import User
 from app.services.diagnosis_agent import run_diagnosis
+from app.services.farm_agent.weather_alerts import (
+    analyze_weather_risks,
+    format_advisories_markdown,
+)
 from app.services.kamis import kamis_service
 from app.services.kamis_aliases import matches_kamis_item, resolve_kamis_terms
 from app.services.subsidy.tools import (
@@ -208,6 +212,41 @@ async def get_current_weather() -> str:
 
 
 @tool
+async def get_weather_risk_advisory(config: RunnableConfig = None) -> str:
+    """앞으로 3일치 기상 위험을 작물 맞춤형으로 결정론적 분석.
+
+    LLM 임계 비교 없이 KMA 예보(`get_weather`) 의 daily_forecasts + current 를
+    그대로 통과시켜 서리·폭염·강풍·호우·곰팡이병 호조 환경을 플래그한다.
+    응답은 마크다운 한 블록 — 답변·브리핑에 그대로 인용 가능.
+
+    사용 시점:
+      - 사용자가 "내일 비 와도 괜찮을까?", "이번 주 작업 가능한 날?", "서리 위험?"
+        같은 risk-aware 질문을 했을 때.
+      - 농약 살포·드론 작업·관수 일정처럼 기상 임계가 결정적인 결정 지원.
+
+    크롭 컨텍스트는 로그인 사용자 프로필의 main_crop 을 자동으로 사용한다 —
+    별도 인자 없음. 비로그인 호출은 작물 무관 일반 advisory.
+    """
+    user_id = _user_id(config)
+    main_crop: str | None = None
+    if user_id:
+        from sqlalchemy import select as _select
+
+        try:
+            async with async_session() as db:
+                row = await db.execute(_select(User).where(User.id == user_id))
+                user = row.scalar_one_or_none()
+            if user is not None:
+                main_crop = user.main_crop or None
+        except Exception as exc:  # noqa: BLE001 — crop hint missing != tool failure
+            logger.info("weather_risk.crop_lookup_failed user=%s err=%s", user_id, exc)
+
+    weather_payload = await get_weather()
+    advisories = analyze_weather_risks(weather_payload, main_crop=main_crop)
+    return format_advisories_markdown(advisories, main_crop=main_crop)
+
+
+@tool
 async def get_market_prices(category_name: str = "") -> str:
     """KAMIS 일별 부류별 도·소매가격 최신 스냅샷.
 
@@ -361,6 +400,7 @@ SUBSIDY_TOOLS = [
 FARM_DATA_TOOLS = [
     get_my_farm_profile,
     get_current_weather,
+    get_weather_risk_advisory,
     get_market_prices,
     get_market_prices_for_crop,
     list_journal_entries,
@@ -380,6 +420,7 @@ FARM_DATA_TOOLS = [
 ORCHESTRATOR_TOOLS = [
     get_my_farm_profile,
     get_current_weather,
+    get_weather_risk_advisory,
     get_market_prices,
     get_market_prices_for_crop,
     list_journal_entries,

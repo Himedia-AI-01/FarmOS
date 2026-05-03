@@ -88,6 +88,20 @@ _WIND_CHILL_CRITICAL_C = -20.0
 _WIND_CHILL_MAX_TEMP_C = 10.0     # T > 10℃ 면 공식 미적용
 _WIND_CHILL_MIN_WIND_MS = 1.34    # V < 4.8 km/h 면 공식 미적용
 
+# Pest pressure (병해충 호조 환경) — 곰팡이성 이외 해충 발생 호조 패턴.
+# fungal_humidity 가 다습+적정온도(곰팡이성 병원균 호조) 시그널이라면, 다음 두
+# kind 는 건조 + 온도 패턴으로 해충 폭발(개체수 1~2주 배가) 시점을 미리 잡는다.
+# 출처: 농촌진흥청 작물보호 일반론(점박이응애·복숭아진딧물 등 발생 환경). 임계는
+# 일별 평균 습도 + 일 최고기온 조합으로 단순화 (예보에 시간별이 없음).
+# 보수적으로 잡았다 — 일상적 봄·가을 날씨로는 점화하지 않게 하고, 진짜 호조
+# 패턴(폭염 직전 / 가뭄 동반)에서만 정보성 advisory(level=info) 를 띄운다.
+_MITES_TEMP_HI_C = 28.0           # tmax ≥ 28℃ + 저습 → 점박이·차응애 호조
+_MITES_HUMIDITY_HI_PCT = 60.0     # humidity_avg ≤ 60%
+_APHID_TEMP_LO_C = 20.0           # 진딧물 호조 온도대 (봄·가을 패턴, 보수적 lo)
+_APHID_TEMP_HI_C = 27.0
+_APHID_HUMIDITY_HI_PCT = 50.0     # humidity_avg ≤ 50% — 다습은 진딧물 곰팡이병으로
+                                  # 자가 억제됨, 50% 이하만 호조 (≥85% 는 fungal 영역).
+
 
 # ── Crop-specific sensitivities ─────────────────────────────────────────────
 # 키 = main_crop 의 prefix substring 매칭 (사용자가 "방울토마토" 라 적어도 매칭).
@@ -104,6 +118,8 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "temp_swing": "큰 일교차는 열과(과실 갈라짐) 직격 — 토양 수분 균일 유지·점적 사이클 안정화.",
         "cold_wave":  "휴면기 동해 한계 (-25℃대) 접근 시 주간지·원줄기 동해 위험 — 백색 도포·바람막이 점검.",
         "wind_chill": "전정·잔가지 정리는 풍속 약한 한낮으로 이동, 보온 장갑·다중 작업복으로 손가락 동상 예방.",
+        "mites_window": "잎 뒷면 점박이응애 예찰 — 흰 점·황화 시 즉시 약제 살포 또는 천적(칠레이리응애) 방사 검토.",
+        "aphid_window": "신초 사과혹진딧물 점검 — 잎말림 발견 시 초기 약제 1회로 차단.",
     },
     "배": {
         "frost":      "개화기 서리 직격 — 야간 살수 또는 송풍 권장.",
@@ -113,6 +129,8 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "temp_swing": "비대 후기 일교차 급증은 과실 비대 불균일·열과 — 관수 안정화.",
         "cold_wave":  "꽃눈 동해 위험 (-20℃대 접근) — 동계 전정 보류·주간지 보호.",
         "wind_chill": "전정 작업 시간대를 풍속 약한 한낮으로 조정, 손가락 동상 위험 — 보온 장갑 필수.",
+        "mites_window": "잎 뒷면 점박이응애 예찰 — 황화 잎 발견 시 즉시 약제 또는 천적 방사.",
+        "aphid_window": "신초·꽃눈 진딧물 발생 가능 — 흑성병 매개 차원에서 조기 점검.",
     },
     "포도": {
         "frost":      "신초 동해 가능 — 비닐멀칭/터널 보온 검토.",
@@ -123,6 +141,8 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "temp_swing": "착색기 큰 일교차는 당도엔 유리하나 열과 동반 — 점적 균일 가동.",
         "cold_wave":  "주간지 동해 위험 — 매몰·짚 피복·백색 도포 점검.",
         "wind_chill": "전정·매몰 작업은 풍속 약한 시간대로 이동, 손·발 보온 강화.",
+        "mites_window": "비가림 내부 차응애 호조 — 잎 뒷면 점검·관수로 잎 표면 습도 보강.",
+        "aphid_window": "신초 진딧물 — 황색 점착 트랩 설치, 발생 초기 약제 1회.",
     },
     "토마토": {
         "frost":      "10℃ 이하부터 생육정지 — 보온 필수.",
@@ -132,6 +152,8 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "비닐하우스 적설하중 — 측창 보온재 정리, 야간 난방 가동·환기로 적설 미끄러뜨리기.",
         "temp_swing": "큰 일교차는 갈라짐·기형과·배꼽썩음 빈발 — 야간 보온·점적 안정화.",
         "cold_wave":  "시설 난방기 풀가동·내장 보온커튼 이중화. 관수 라인 동파 — 야간 미세 흐름 유지.",
+        "mites_window": "시설 내 점박이응애 폭발 위험 — 잎 뒷면 일제 점검, 칠레이리응애 방사 검토.",
+        "aphid_window": "온실가루이·진딧물 동시 호조 — 천적(콜레마니진디벌) 또는 황색 점착 트랩.",
     },
     "오이": {
         "frost":      "냉해에 매우 취약 — 야간 보온 필수.",
@@ -140,6 +162,8 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "비닐하우스 적설하중 — 난방 가동·물뿌리기로 지붕 적설 차단.",
         "temp_swing": "큰 일교차는 곡과·낙화 — 시설 야간 보온 강화.",
         "cold_wave":  "한계온도 8℃ — 시설 난방 풀가동·이중커튼·근권부 보온재 추가.",
+        "mites_window": "차응애·점박이응애 호조 — 잎 뒷면 점검, 시설은 미스트 분무로 습도 보강.",
+        "aphid_window": "목화진딧물 발생 호조 — CMV 바이러스 매개 차원에서 조기 차단 필수.",
     },
     "딸기": {
         "frost":      "관부 동해 위험 — 부직포·수막재배 점검.",
@@ -148,6 +172,8 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "하우스 측면 적설 정리, 수막재배 동결 주의 — 야간 가동 점검.",
         "temp_swing": "큰 일교차는 기형과·열과 — 야간 보온·환기 균형.",
         "cold_wave":  "수막재배 펌프 동결·관 막힘 점검. 비수막은 부직포 다중 피복.",
+        "mites_window": "점박이응애 호조 — 잎 뒷면 흰 점·황화 즉시 점검, 천적 방사 우선 검토.",
+        "aphid_window": "딸기뿌리진딧물·복숭아진딧물 발생 — 새순 점검, 약제는 수정벌 영향 고려.",
     },
     "고추": {
         "frost":      "정식 직후 냉해 치명적 — 보온 터널.",
@@ -158,6 +184,8 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "temp_swing": "착과기 큰 일교차는 낙화·낙과 — 야간 보온, 시설은 변온관리.",
         "cold_wave":  "노지 잔존 포기는 즉시 정리. 시설재배는 난방·이중커튼 풀가동.",
         "wind_chill": "노지 정리·시설 외부 점검 작업은 한낮 풍속 약한 시간대, 보온복·체온 유지.",
+        "mites_window": "차응애·점박이응애 호조 — 잎 뒷면 점검, 차광·미스트로 미기후 보정.",
+        "aphid_window": "총채벌레·진딧물 동시 발생 가능 — 황색·청색 점착 트랩 병행, CMV 매개 차단.",
     },
     "벼": {
         "strong_wind": "출수기 도복 위험 — 물 빼기·낙수 검토.",
@@ -174,6 +202,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "temp_swing": "정식 직후 큰 일교차는 추대(꽃대) 가속 위험 — 보온·정식 시기 검토.",
         "cold_wave":  "잔존 포기 즉시 수확. 저장 배추는 저장고 온도(0~3℃) 안정 확인.",
         "wind_chill": "잔존 포기 수확·정리 작업은 풍속 약한 시간대 우선, 손·발 동상 예방.",
+        "aphid_window": "복숭아진딧물·배추진딧물 발생 호조 — TuMV 모자이크병 매개, 결구 전 조기 차단.",
     },
     "마늘": {
         "frost":      "월동 직후 발아 시 동해 — 멀칭 점검.",
@@ -537,6 +566,50 @@ def analyze_weather_risks(
                     ),
                     "value": humidity,
                     "crop_hint": _match_crop_hint(main_crop, "fungal_humidity"),
+                }
+            )
+
+        # Mites window (점박이·차응애) — 고온 + 저습. fungal_humidity 와 정반대
+        # 시그널이라 동시 발화 불가능. 응애는 잎 뒷면 흡즙으로 잎 색·광합성 직격.
+        if (
+            humidity is not None
+            and humidity <= _MITES_HUMIDITY_HI_PCT
+            and tmax is not None
+            and tmax >= _MITES_TEMP_HI_C
+        ):
+            advisories.append(
+                {
+                    "level": "info",
+                    "kind": "mites_window",
+                    "when": when,
+                    "message": (
+                        f"{when} 기온 {tmax:.0f}℃ / 습도 {int(humidity)}% — "
+                        "응애(점박이·차응애) 발생 호조, 잎 뒷면 점검·예찰 권장."
+                    ),
+                    "value": humidity,
+                    "crop_hint": _match_crop_hint(main_crop, "mites_window"),
+                }
+            )
+
+        # Aphid window (진딧물) — 따뜻 + 건조. 봄·가을 호조 패턴. 진딧물은 다습·
+        # 고온에선 자가 억제(곤충병원성 곰팡이 발병)되므로 좁은 온도대로 한정.
+        if (
+            humidity is not None
+            and humidity <= _APHID_HUMIDITY_HI_PCT
+            and tmax is not None
+            and _APHID_TEMP_LO_C <= tmax <= _APHID_TEMP_HI_C
+        ):
+            advisories.append(
+                {
+                    "level": "info",
+                    "kind": "aphid_window",
+                    "when": when,
+                    "message": (
+                        f"{when} 기온 {tmax:.0f}℃ / 습도 {int(humidity)}% — "
+                        "진딧물 발생 호조, 새순 점검·황색 점착 트랩 설치 검토."
+                    ),
+                    "value": humidity,
+                    "crop_hint": _match_crop_hint(main_crop, "aphid_window"),
                 }
             )
 

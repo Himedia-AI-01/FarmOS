@@ -737,6 +737,130 @@ def test_wind_chill_keeps_severity_sort_order():
     assert wc_levels == ["critical", "warning"]
 
 
+# ── Pest pressure window (응애 / 진딧물) ─────────────────────────────────────
+
+
+def test_mites_window_fires_on_hot_dry_day():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=20, tmax=30, humidity=55),  # ≥28℃ + ≤60%
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    mites = [a for a in out if a["kind"] == "mites_window"]
+    assert mites and mites[0]["level"] == "info"
+    assert mites[0]["value"] == 55
+
+
+def test_mites_window_requires_low_humidity():
+    # tmax=30 (≥28) 이지만 humidity=70 (>60) → mites 발생 금지.
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=20, tmax=30, humidity=70)]}
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "mites_window"]
+
+
+def test_mites_window_requires_high_temp():
+    # humidity=50 (≤60) 이지만 tmax=25 (<28) → mites 발생 금지.
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=12, tmax=25, humidity=50)]}
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "mites_window"]
+
+
+def test_aphid_window_fires_on_warm_dry_day():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=14, tmax=24, humidity=45),  # 20~27℃ + ≤50%
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    aphid = [a for a in out if a["kind"] == "aphid_window"]
+    assert aphid and aphid[0]["level"] == "info"
+
+
+def test_aphid_window_excluded_outside_temp_band():
+    # tmax 가 너무 낮으면(<20) 발생 안 함.
+    weather_lo = {"daily_forecasts": [_daily(offset=0, tmin=10, tmax=18, humidity=40)]}
+    assert not [a for a in analyze_weather_risks(weather_lo) if a["kind"] == "aphid_window"]
+    # tmax 가 너무 높으면(>27) 발생 안 함 — mites 영역으로 빠진다.
+    weather_hi = {"daily_forecasts": [_daily(offset=0, tmin=20, tmax=30, humidity=40)]}
+    out_hi = analyze_weather_risks(weather_hi)
+    assert not [a for a in out_hi if a["kind"] == "aphid_window"]
+    assert any(a["kind"] == "mites_window" for a in out_hi)
+
+
+def test_aphid_window_requires_dry_humidity():
+    # humidity 60 (>50) → 진딧물 호조 아님 (곰팡이병으로 자가 억제 영역).
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=15, tmax=23, humidity=60)]}
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "aphid_window"]
+
+
+def test_pest_windows_do_not_fire_without_humidity():
+    # humidity 결측이면 pest 신호 발생 금지 (보수적).
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=20, tmax=30)]}
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] in {"mites_window", "aphid_window"}]
+
+
+def test_mites_and_fungal_humidity_are_mutually_exclusive():
+    # fungal_humidity 는 ≥85% / 15~25℃, mites 는 ≤60% / ≥28℃ — 한 슬롯에서
+    # 동시 발화 불가능해야 한다 (정반대 시그널).
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=14, tmax=18, humidity=90),  # fungal only
+            _daily(offset=1, tmin=22, tmax=32, humidity=45),  # mites only
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    by_when = {(a["when"], a["kind"]) for a in out}
+    assert ("오늘", "fungal_humidity") in by_when
+    assert ("오늘", "mites_window") not in by_when
+    assert ("내일", "mites_window") in by_when
+    assert ("내일", "fungal_humidity") not in by_when
+
+
+def test_mites_window_attaches_crop_hint_for_known_crop():
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=20, tmax=30, humidity=55)]}
+    out = analyze_weather_risks(weather, main_crop="사과")
+    mites = next(a for a in out if a["kind"] == "mites_window")
+    assert mites["crop_hint"] and "응애" in mites["crop_hint"]
+
+
+def test_aphid_window_attaches_crop_hint_for_napa_cabbage():
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=15, tmax=23, humidity=45)]}
+    out = analyze_weather_risks(weather, main_crop="배추")
+    aphid = next(a for a in out if a["kind"] == "aphid_window")
+    assert aphid["crop_hint"] and "진딧물" in aphid["crop_hint"]
+
+
+def test_pest_windows_unknown_crop_leaves_hint_none():
+    weather_m = {"daily_forecasts": [_daily(offset=0, tmin=20, tmax=30, humidity=55)]}
+    weather_a = {"daily_forecasts": [_daily(offset=0, tmin=15, tmax=23, humidity=45)]}
+    out_m = analyze_weather_risks(weather_m, main_crop="이름없는작물")
+    out_a = analyze_weather_risks(weather_a, main_crop="이름없는작물")
+    mites = next(a for a in out_m if a["kind"] == "mites_window")
+    aphid = next(a for a in out_a if a["kind"] == "aphid_window")
+    assert mites["crop_hint"] is None
+    assert aphid["crop_hint"] is None
+
+
+def test_pest_windows_keep_severity_sort_order():
+    # mites/aphid 는 info 라서 critical/warning 뒤에 와야 한다.
+    weather = {
+        "current": {"wind_speed": 1.0, "temperature": 20, "precipitation_type": "없음"},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=22, tmax=34, humidity=55),  # critical heatwave + mites info
+            _daily(offset=1, tmin=15, tmax=23, humidity=45),  # aphid info only
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    rank = {"critical": 0, "warning": 1, "info": 2}
+    levels = [a["level"] for a in out]
+    assert levels == sorted(levels, key=lambda lv: rank.get(lv, 9))
+    assert any(a["kind"] == "mites_window" for a in out)
+    assert any(a["kind"] == "aphid_window" for a in out)
+
+
 def _run_all_tests() -> None:
     """Execute every test_* in this module without pytest."""
     import inspect

@@ -3,6 +3,7 @@ import { MdWaterDrop, MdThermostat, MdOpacity, MdWbSunny, MdWarning, MdWifiOff, 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from 'recharts';
 import { useSensorData } from '@/hooks/useSensorData';
 import AIAgentPanel from './AIAgentPanel';
+import IoTSkeleton from './IoTSkeleton';
 import ManualControlPanel from './ManualControlPanel';
 import DateRangeFilter, {
   type DateRangeValue,
@@ -389,7 +390,7 @@ function AlertsModal({
 }
 
 export default function IoTDashboardPage() {
-  const { latest, history, alerts, irrigations, connected } = useSensorData();
+  const { latest, history, alerts, irrigations, connected, loading } = useSensorData();
   const hasData = !!latest;
   const inactive = !connected || !hasData;
 
@@ -443,6 +444,13 @@ export default function IoTDashboardPage() {
       humidity: r.humidity,
     })),
   [history]);
+
+  // iter-22 — 첫 fetchAll 응답 전엔 shape skeleton 으로 "연결 시도 중" 을 명시적으로
+  // 표시. 응답 후엔 (성공이든 실패든) 기존 분기(연결됨/대기/끊김)가 의미 있는 상태를
+  // 보여준다. iter-15/17/19/20/21 과 동일한 패턴.
+  if (loading && !latest && !connected) {
+    return <IoTSkeleton />;
+  }
 
   return (
     <div className="space-y-6">

@@ -10,6 +10,7 @@ interface SensorData {
   alerts: SensorAlert[];
   irrigations: IrrigationEvent[];
   connected: boolean;
+  loading: boolean;
 }
 
 // Design Ref: §4.4 — SSE control 이벤트 콜백 지원
@@ -123,6 +124,7 @@ export function useSensorData() {
     alerts: [],
     irrigations: [],
     connected: false,
+    loading: true,
   });
 
   const failCount = useRef(0);
@@ -150,12 +152,15 @@ export function useSensorData() {
         alerts,
         irrigations,
         connected: true,
+        loading: false,
       });
     } catch {
       failCount.current += 1;
-      if (failCount.current >= 5) {
-        setData(prev => ({ ...prev, connected: false }));
-      }
+      setData(prev => ({
+        ...prev,
+        loading: false,
+        connected: failCount.current >= 5 ? false : prev.connected,
+      }));
     }
   }, []);
 

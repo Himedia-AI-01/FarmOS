@@ -246,3 +246,27 @@ Format per item:
 - slice: 신규 `DiagnosisHistorySkeleton.tsx` (~50줄) — 실제 history 카드 모양(체크박스+badge+title+meta+삭제+chat 버튼)을 그대로 모방한 4개 placeholder, animate-pulse 회색 블록. DiagnosisPage 에 `loadingHistory` state(initial true) 추가, fetchHistory 시작/finally 토글, useEffect 의 user 없음 분기에서는 false 세팅. 렌더 분기: `loadingHistory && history.length === 0` → skeleton, `!loadingHistory && length === 0` → 기존 빈 상태, 그 외 → 기존 list. SR 사용자에겐 sr-only role="status" + aria-live=polite 안내, 시각 데코는 컨테이너 aria-hidden. iter-15/17/19/20 패턴 일관 적용.
 - files: frontend/src/modules/diagnosis/DiagnosisPage.tsx (MODIFY), frontend/src/modules/diagnosis/DiagnosisHistorySkeleton.tsx (NEW)
 - risk: low
+
+## IoT dashboard skeleton loader (connecting vs disconnected disambiguation)
+- status: in-progress
+- area: frontend
+- why: IoTDashboardPage 의 첫 진입은 `latest=null` + `connected=false` 인 채로 회색 "백엔드 연결 안 됨" 상태표시 + 4개 회색조 disabled sensor 카드 + "센서 데이터가 아직 없습니다" 빈 상태 차트가 그대로 노출돼 — 농민이 "정말 IoT 가 끊겨있는지 / 아직 SSE 가 첫 패킷을 못 받았는지" 구분 불가. iter-21 과 같은 disambiguation 가치. useSensorData 가 초기 fetchAll 응답을 받기 전 까지 (~수백 ms ~ 수 초) shape skeleton 을 보여주면 첫인상이 압도적으로 개선되고, 이미 검증된 iter-15/17/19/20/21 패턴을 그대로 재사용한다.
+- slice: useSensorData hook 에 `loading: boolean` 추가 — 초기 true, 첫 fetchAll resolve(success or error) 시 false. 신규 `IoTSkeleton.tsx` — 연결 상태 라인 + 4개 sensor 카드 grid + 2개 차트 카드 + 2개 리스트 카드 placeholder, 모두 animate-pulse 회색 블록. IoTDashboardPage 의 `if (loading && !latest && !connected) return <IoTSkeleton />` 첫 분기. SR 안내 + aria-hidden 데코.
+- files: frontend/src/hooks/useSensorData.ts (MODIFY ~5 LOC), frontend/src/modules/iot/IoTSkeleton.tsx (NEW), frontend/src/modules/iot/IoTDashboardPage.tsx (MODIFY ~5 LOC)
+- risk: low
+
+## Profile page skeleton loader
+- status: new
+- area: frontend
+- why: ProfilePage 의 초기 로딩 상태 disambiguation. 농민 정보·필지·리뷰 fetch 가 동시에 진행되는 동안 평이한 텍스트 한 줄. 같은 패턴 일관 적용.
+- slice: 신규 `ProfileSkeleton.tsx` — 프로필 헤더 카드 + 필지 grid 2-3 + 리뷰 list 3 placeholder. ProfilePage 의 첫 로딩 분기에서 사용.
+- files: frontend/src/modules/profile/ProfilePage.tsx (MODIFY), frontend/src/modules/profile/ProfileSkeleton.tsx (NEW)
+- risk: low
+
+## Dashboard page skeleton loader
+- status: new
+- area: frontend
+- why: DashboardPage 도 weather/iot/journal 위젯 동시 로딩 시 텍스트 한 줄. 메인 진입점이라 첫인상 가치 큼.
+- slice: 신규 `DashboardSkeleton.tsx` — 인사 헤더 + 위젯 3-4개 placeholder. DashboardPage 첫 로딩 분기에서 사용.
+- files: frontend/src/pages/DashboardPage.tsx (MODIFY), frontend/src/pages/DashboardSkeleton.tsx (NEW)
+- risk: low

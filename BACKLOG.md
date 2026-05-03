@@ -140,3 +140,11 @@ Format per item:
 - slice: weather_alerts.py 또는 신 `spray_window.py` 에 hourly/3h forecast 스캔, 조건 만족 슬롯 list 반환. 1차는 advisory list 외부에 분리 도구 (briefing 직접 호출).
 - files: backend/app/services/farm_agent/weather_alerts.py 또는 backend/app/services/farm_agent/spray_window.py (NEW), backend/app/services/farm_agent/tools.py (MODIFY)
 - risk: med (예보 시간 해상도 의존)
+
+## Tropical night (열대야) advisory kind
+- status: shipped: e78e375
+- area: backend
+- why: 현재 heatwave 는 일 최고기온(tmax) 만 본다. 일 최저(tmin) ≥ 25℃ 인 열대야는 별개 농업 재해 — 벼 등숙기 야간 호흡 증가로 등숙률·식미 저하, 사과·배 야간저온 부족으로 착색 부진, 토마토·고추 야간고온으로 수정 불량·낙화. 액션도 다름 (낮 차광 vs 야간 환기·관수 사이클 조정). frost vs cold_wave 가 분리됐듯 heatwave vs tropical_night 도 분리되어야 한다.
+- slice: weather_alerts.py 에 `_TROPICAL_NIGHT_*` 임계 + `tropical_night` kind 추가 — tmin ≥ 25℃ warning, tmin ≥ 27℃ critical (보수적; KMA 초열대야 30℃ 보다 낮춤). heatwave 와 동시 발화 허용. 7~8개 작물 tropical_night crop_hint. fast-path 키워드는 본 iter 범위 밖 (별도 iter).
+- files: backend/app/services/farm_agent/weather_alerts.py (MODIFY), backend/tests/test_weather_alerts.py (MODIFY)
+- risk: low

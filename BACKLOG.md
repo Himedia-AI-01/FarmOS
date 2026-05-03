@@ -248,7 +248,7 @@ Format per item:
 - risk: low
 
 ## IoT dashboard skeleton loader (connecting vs disconnected disambiguation)
-- status: in-progress
+- status: shipped: 80785f4
 - area: frontend
 - why: IoTDashboardPage 의 첫 진입은 `latest=null` + `connected=false` 인 채로 회색 "백엔드 연결 안 됨" 상태표시 + 4개 회색조 disabled sensor 카드 + "센서 데이터가 아직 없습니다" 빈 상태 차트가 그대로 노출돼 — 농민이 "정말 IoT 가 끊겨있는지 / 아직 SSE 가 첫 패킷을 못 받았는지" 구분 불가. iter-21 과 같은 disambiguation 가치. useSensorData 가 초기 fetchAll 응답을 받기 전 까지 (~수백 ms ~ 수 초) shape skeleton 을 보여주면 첫인상이 압도적으로 개선되고, 이미 검증된 iter-15/17/19/20/21 패턴을 그대로 재사용한다.
 - slice: useSensorData hook 에 `loading: boolean` 추가 — 초기 true, 첫 fetchAll resolve(success or error) 시 false. 신규 `IoTSkeleton.tsx` — 연결 상태 라인 + 4개 sensor 카드 grid + 2개 차트 카드 + 2개 리스트 카드 placeholder, 모두 animate-pulse 회색 블록. IoTDashboardPage 의 `if (loading && !latest && !connected) return <IoTSkeleton />` 첫 분기. SR 안내 + aria-hidden 데코.

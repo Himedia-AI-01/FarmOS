@@ -76,3 +76,19 @@ Format per item:
 - slice: briefing.py 의 prompt 빌드 직전 `format_advisories_markdown` 결과를 `## 관측 위험` 섹션으로 prepend. 위험 0건이면 섹션 자체 생략.
 - files: backend/app/services/farm_agent/briefing.py (MODIFY)
 - risk: med (briefing prompt 회귀 영향)
+
+## Snow / 폭설 advisory threshold + fast-path
+- status: shipped: a48e513
+- area: backend
+- why: 시설하우스 적설하중 붕괴, 과수 가지 부러짐, 월동작물 동해는 한국 겨울 농업의 실제 재해. 현재 weather_alerts 는 snow 카테고리가 없어 "내일 폭설?" 단답형 fast-path 도 만들 수 없다.
+- slice: weather_alerts.py 에 `_detect_snow` 추가 (daily.sky 가 눈/진눈깨비/눈날림 + precip 임계). snow crop_hint 추가 (시설하우스/사과/배/마늘/양파). fast_path 의 `_GENERAL_RISK_RE` 에 폭설/대설/적설 키워드 + `_RISK_KEYWORD_TO_KINDS` 에 snow 매핑.
+- files: backend/app/services/farm_agent/weather_alerts.py (MODIFY), backend/app/services/farm_agent/fast_path.py (MODIFY), backend/tests/test_weather_alerts.py (MODIFY), backend/tests/test_fast_path.py (MODIFY)
+- risk: low
+
+## Pest pressure window (병해충 발생 호조 환경)
+- status: new
+- area: backend
+- why: 노균/잿빛곰팡이/탄저 외에 진딧물·총채벌레·점박이응애 등은 온도+건조도 패턴이 다르다. 단일 fungal_humidity 임계로는 부족. 병해충 다양화 필요.
+- slice: weather_alerts.py 에 pest 카테고리(`mites_window`, `aphid_window`) 추가 — 고온+저습 (응애), 따뜻+건조 (진딧물). fast-path 키워드는 _BLOCKLIST 에 막혀 있어 brief.py / 도구로만 노출.
+- files: backend/app/services/farm_agent/weather_alerts.py (MODIFY)
+- risk: med (임계 근거 문헌 추가 검증 필요)

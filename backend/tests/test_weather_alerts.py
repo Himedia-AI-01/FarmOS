@@ -426,6 +426,90 @@ def test_format_markdown_renders_snow_block():
     assert "🔴" in md  # critical
 
 
+# ── Diurnal temperature swing (일교차) ──────────────────────────────────────
+
+
+def test_temp_swing_warning_at_16c():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=8, tmax=24),  # swing 16 → warning
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    swing = [a for a in out if a["kind"] == "temp_swing"]
+    assert swing and swing[0]["level"] == "warning"
+    assert swing[0]["value"] == 16
+
+
+def test_temp_swing_critical_at_20c():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=5, tmax=25),  # swing 20 → critical
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    swing = [a for a in out if a["kind"] == "temp_swing"]
+    assert swing and swing[0]["level"] == "critical"
+
+
+def test_temp_swing_below_threshold_emits_nothing():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=10, tmax=25),  # swing 15 < 16 → no advisory
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "temp_swing"]
+
+
+def test_temp_swing_requires_both_tmin_and_tmax():
+    # tmin or tmax 결측이면 advisory 발생 금지 (보수적).
+    weather_a = {"daily_forecasts": [{"day_offset": 0, "temp_max": 30}]}
+    weather_b = {"daily_forecasts": [{"day_offset": 0, "temp_min": 5}]}
+    assert not [a for a in analyze_weather_risks(weather_a) if a["kind"] == "temp_swing"]
+    assert not [a for a in analyze_weather_risks(weather_b) if a["kind"] == "temp_swing"]
+
+
+def test_temp_swing_attaches_crop_hint_for_known_crop():
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=8, tmax=25)]}  # swing 17
+    out = analyze_weather_risks(weather, main_crop="사과")
+    swing = next(a for a in out if a["kind"] == "temp_swing")
+    assert swing["crop_hint"] and "열과" in swing["crop_hint"]
+
+
+def test_temp_swing_unknown_crop_leaves_hint_none():
+    weather = {"daily_forecasts": [_daily(offset=0, tmin=8, tmax=25)]}
+    out = analyze_weather_risks(weather, main_crop="이름없는작물")
+    swing = next(a for a in out if a["kind"] == "temp_swing")
+    assert swing["crop_hint"] is None
+
+
+def test_temp_swing_independent_of_frost_and_heatwave():
+    # 같은 날 frost(tmin≤2) + heatwave(tmax≥33) 가 동시 안 일어나지만,
+    # 일교차는 다른 작물 영향이라 frost 와 동시 발화 가능해야 함.
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-3, tmax=14),  # frost critical + swing 17 warning
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    kinds = {(a["kind"], a["level"]) for a in out}
+    assert ("frost", "critical") in kinds
+    assert ("temp_swing", "warning") in kinds
+
+
+def test_temp_swing_keeps_severity_sort_order():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=5, tmax=26),  # swing 21 → critical
+            _daily(offset=1, tmin=8, tmax=24),  # swing 16 → warning
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    levels = [a["level"] for a in out if a["kind"] == "temp_swing"]
+    assert levels == ["critical", "warning"]
+
+
 def _run_all_tests() -> None:
     """Execute every test_* in this module without pytest."""
     import inspect

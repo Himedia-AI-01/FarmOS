@@ -61,6 +61,11 @@ _SNOW_PRECIP_MM_WARNING = 5.0    # ≥ 5mm + 눈 sky → warning (≈ 5cm 이상
 _SNOW_PRECIP_MM_CRITICAL = 10.0  # ≥ 10mm + 눈 sky → critical (≈ 10cm 이상)
 _SNOW_SKY_MARKERS: tuple[str, ...] = ("눈", "진눈깨비", "눈날림", "비/눈")
 
+# Diurnal swing (일교차) — frost/heatwave 와 독립; 16℃부터 사과·토마토 열과,
+# 배추 추대, 벼 등숙 부진의 직접 신호 (한국 평균 8~12℃, 봄·가을 14~16℃ 정상).
+_DIURNAL_RANGE_WARNING_C = 16.0   # ≥16℃ 경고; ≥20℃ critical (열과·갈라짐 빈발)
+_DIURNAL_RANGE_CRITICAL_C = 20.0
+
 
 # ── Crop-specific sensitivities ─────────────────────────────────────────────
 # 키 = main_crop 의 prefix substring 매칭 (사용자가 "방울토마토" 라 적어도 매칭).
@@ -74,12 +79,14 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "heavy_rain": "잎/과실 곰팡이 (탄저·갈색무늬) 주의, 비 그친 직후 약제 살포.",
         "drought":    "비대기 수분 부족 시 과실 비대 정체·열과 — 관수 사이클 단축.",
         "snow":       "가지 부러짐 위험 — 적설 후 즉시 털어내기, 지주·유인끈 점검.",
+        "temp_swing": "큰 일교차는 열과(과실 갈라짐) 직격 — 토양 수분 균일 유지·점적 사이클 안정화.",
     },
     "배": {
         "frost":      "개화기 서리 직격 — 야간 살수 또는 송풍 권장.",
         "strong_wind": "낙과·가지 부러짐 위험.",
         "drought":    "비대기 가뭄 시 과실 발달 저해 — 점적관수 검토.",
         "snow":       "가지 부러짐 — 적설 직후 털어내고 골절지 처리.",
+        "temp_swing": "비대 후기 일교차 급증은 과실 비대 불균일·열과 — 관수 안정화.",
     },
     "포도": {
         "frost":      "신초 동해 가능 — 비닐멀칭/터널 보온 검토.",
@@ -87,6 +94,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "heavy_rain": "열과·노균병 위험 — 우산식 비가림 점검.",
         "drought":    "착색기 과습/건조 교차로 열과 — 토양수분 균일 유지.",
         "snow":       "비가림 시설 적설하중 — 측면 비닐 일시 개방·하중 분산.",
+        "temp_swing": "착색기 큰 일교차는 당도엔 유리하나 열과 동반 — 점적 균일 가동.",
     },
     "토마토": {
         "frost":      "10℃ 이하부터 생육정지 — 보온 필수.",
@@ -94,18 +102,21 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "fungal_humidity": "잎곰팡이병/노균병 호조 — 환기 강화.",
         "drought":    "비대기 수분 부족 시 배꼽썩음과 급증 — 칼슘+관수 보강.",
         "snow":       "비닐하우스 적설하중 — 측창 보온재 정리, 야간 난방 가동·환기로 적설 미끄러뜨리기.",
+        "temp_swing": "큰 일교차는 갈라짐·기형과·배꼽썩음 빈발 — 야간 보온·점적 안정화.",
     },
     "오이": {
         "frost":      "냉해에 매우 취약 — 야간 보온 필수.",
         "fungal_humidity": "노균병 폭발 위험 — 즉시 환기.",
         "drought":    "수분 결핍 시 곡과·낙과 — 관수 빈도 상향.",
         "snow":       "비닐하우스 적설하중 — 난방 가동·물뿌리기로 지붕 적설 차단.",
+        "temp_swing": "큰 일교차는 곡과·낙화 — 시설 야간 보온 강화.",
     },
     "딸기": {
         "frost":      "관부 동해 위험 — 부직포·수막재배 점검.",
         "heatwave":   "꽃눈 분화 저해 — 차광·환기.",
         "fungal_humidity": "잿빛곰팡이병 위험 — 환기·약제 사이클 단축.",
         "snow":       "하우스 측면 적설 정리, 수막재배 동결 주의 — 야간 가동 점검.",
+        "temp_swing": "큰 일교차는 기형과·열과 — 야간 보온·환기 균형.",
     },
     "고추": {
         "frost":      "정식 직후 냉해 치명적 — 보온 터널.",
@@ -113,18 +124,21 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "heavy_rain": "역병/탄저 폭발 위험 — 배수로 점검.",
         "drought":    "착과기 가뭄 시 낙화·낙과 — 점적관수 가동.",
         "snow":       "노지 월동 시 멀칭·부직포 보완. 시설재배는 적설하중 점검.",
+        "temp_swing": "착과기 큰 일교차는 낙화·낙과 — 야간 보온, 시설은 변온관리.",
     },
     "벼": {
         "strong_wind": "출수기 도복 위험 — 물 빼기·낙수 검토.",
         "cold_stress": "야간 17℃ 이하 지속 시 냉해 가능 (출수~등숙기).",
         "heavy_rain": "도복·관수 피해 — 즉시 배수.",
         "drought":    "이앙·활착기 무강수는 분얼 저해 — 담수 깊이 점검.",
+        "temp_swing": "등숙기 큰 일교차는 야간 저온으로 등숙률 저하 — 담수 깊이로 야간 보온.",
     },
     "배추": {
         "frost":      "결구기 동해 — 부직포 점검.",
         "strong_wind": "잎 찢김·뿌리 흔들림.",
         "drought":    "결구기 가뭄 시 결구 부진·열구 — 관수 보강.",
         "snow":       "결구기 적설은 결구부 동상해 — 수확 임박 포기는 즉시 수확 검토.",
+        "temp_swing": "정식 직후 큰 일교차는 추대(꽃대) 가속 위험 — 보온·정식 시기 검토.",
     },
     "마늘": {
         "frost":      "월동 직후 발아 시 동해 — 멀칭 점검.",
@@ -398,6 +412,19 @@ def analyze_weather_risks(
                     "crop_hint": _match_crop_hint(main_crop, "snow"),
                 }
             )
+
+        # Diurnal swing (일교차) — frost/heatwave 와 독립적 신호.
+        if tmin is not None and tmax is not None and (swing := tmax - tmin) >= _DIURNAL_RANGE_WARNING_C:
+            level = "critical" if swing >= _DIURNAL_RANGE_CRITICAL_C else "warning"
+            advisories.append({
+                "level": level, "kind": "temp_swing", "when": when,
+                "value": swing,
+                "message": (
+                    f"{when} 일교차 {swing:.0f}℃ ({tmin:.0f}~{tmax:.0f}℃) — "
+                    "열과·갈라짐·추대 가속 위험."
+                ),
+                "crop_hint": _match_crop_hint(main_crop, "temp_swing"),
+            })
 
         # Fungal-friendly humidity window
         if (

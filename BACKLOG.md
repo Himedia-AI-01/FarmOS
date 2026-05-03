@@ -54,7 +54,7 @@ Format per item:
 - risk: low
 
 ## General weather-risk fast-path (폭염 / 호우 / 강풍 / 한파)
-- status: in-progress
+- status: shipped: 15c54c7
 - area: backend
 - why: 서리/동해는 이미 fast-path 화 되어 있지만 폭염, 호우/폭우, 강풍/돌풍, 한파/혹한 단답형 질의("이번주 폭염?", "내일 폭우?", "오늘 강풍?")는 여전히 LLM 라우팅 비용을 부담. 동일한 deterministic engine 으로 즉답.
 - slice: fast_path.py 에 `_GENERAL_RISK_RE` + `_format_general_risks` 추가, dispatcher 분기 한 줄. 질의 키워드별 advisory kind 화이트리스트 필터링.

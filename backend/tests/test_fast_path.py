@@ -396,6 +396,70 @@ def test_format_general_risks_diurnal_empty_returns_no_risk_block():
     assert "토마토" in out
 
 
+# ── Tropical night (열대야) keyword routing ───────────────────────────────
+
+
+def test_general_risk_re_matches_tropical_night_keywords():
+    samples = [
+        "오늘 열대야?",
+        "내일 열대야 와?",
+        "이번주 열대야",
+        "오늘 초열대야?",
+        "내일 초열대야 와",
+        "열대야?",
+    ]
+    for q in samples:
+        assert _GENERAL_RISK_RE.match(q), f"expected match for: {q!r}"
+
+
+def test_general_risk_re_rejects_lookalike_tropical_night_terms():
+    # 단독 "야간" 은 야외/실내·작업·온도 등 의미 모호 — fast-path 자체 거부.
+    # "한밤" 은 시점 한정사일 뿐 위험 카테고리가 아니므로 거부.
+    samples = ["오늘 야간?", "내일 한밤 더워?", "오늘 밤 더워?"]
+    for q in samples:
+        assert not _GENERAL_RISK_RE.match(q), f"expected NO match for: {q!r}"
+
+
+def test_select_risk_kinds_tropical_night_family():
+    for q in ("오늘 열대야?", "내일 열대야 와?", "이번주 초열대야"):
+        kinds, title = _select_risk_kinds(q)
+        assert kinds == frozenset({"tropical_night"}), (
+            f"unexpected kinds for {q!r}: {kinds}"
+        )
+        assert "열대야" in title
+
+
+def test_format_general_risks_tropical_night_filters_to_tropical_night_only():
+    advisories = [
+        _adv("tropical_night", "warning", "내일",
+             "내일 야간 최저 26℃ — 열대야: 야간 환기·미스트 사이클 검토."),
+        _adv("heatwave", "warning", "내일", "내일 최고 33℃ — 고온."),
+        _adv("strong_wind", "warning", "내일", "내일 풍속 10m/s — 방제 보류."),
+    ]
+    out = _format_general_risks("내일 열대야?", advisories, None)
+    assert "🌙" in out
+    assert "야간 최저 26" in out
+    # 다른 kind 의 메시지는 빠져야 한다 — 질의 의도가 야간 한정.
+    assert "최고 33" not in out
+    assert "풍속" not in out
+
+
+def test_format_general_risks_tropical_night_critical_promotes_red_icon():
+    advisories = [
+        _adv("tropical_night", "critical", "내일",
+             "내일 야간 최저 28℃ — 초열대야 임계: 화분 활력 저하·낙화 주의."),
+    ]
+    out = _format_general_risks("내일 초열대야?", advisories, "토마토")
+    assert "🔴" in out
+    assert "토마토" in out
+
+
+def test_format_general_risks_tropical_night_empty_returns_no_risk_block():
+    out = _format_general_risks("오늘 열대야?", [], "벼")
+    assert "특이사항 없음" in out or "위험 없음" in out
+    assert "벼" in out
+
+
 def _run_all_tests() -> None:
     """Run all test_* without pytest (mirrors test_weather_alerts.py pattern)."""
     import inspect

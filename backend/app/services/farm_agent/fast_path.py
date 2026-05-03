@@ -75,12 +75,13 @@ _FROST_RE = re.compile(
 # 동일한 weather_alerts engine 을 호출하고 질의 키워드에 해당하는 advisory kind
 # 만 화이트리스트로 추려 LLM 없이 응답. 키워드가 _WEATHER_RE/_FROST_RE 와 절대
 # 겹치지 않도록 — 폭염/폭우/호우/장마/강풍/돌풍/특보/주의보/한파/혹한/혹서/폭설/
-# 대설/적설/일교차 만 포함 (일반어 "비", "기상", "눈" 단독, 그리고 "기온차"
-# (→ _WEATHER_RE 의 "기온" prefix 와 충돌) 등은 의도적으로 제외).
+# 대설/적설/일교차/열대야/초열대야 만 포함 (일반어 "비", "기상", "눈" 단독, 그리고
+# "기온차" (→ _WEATHER_RE 의 "기온" prefix 와 충돌), "야간" 단독 (야외/실내·작업·
+# 온도 등 의미 모호) 등은 의도적으로 제외).
 _GENERAL_RISK_RE = re.compile(
     r"^\s*(지금|오늘|내일|모레|이번\s*주|이번주)?\s*"
     r"(밤|새벽|아침|저녁|오후|오전)?\s*"
-    r"(폭염|폭우|호우|장마|강풍|돌풍|특보|주의보|한파|혹한|혹서|폭설|대설|적설|일교차)"
+    r"(폭염|폭우|호우|장마|강풍|돌풍|특보|주의보|한파|혹한|혹서|폭설|대설|적설|일교차|열대야|초열대야)"
     r"[가-힣\s.?!]*$"
 )
 
@@ -318,6 +319,10 @@ _RISK_KEYWORD_TO_KINDS: tuple[tuple[tuple[str, ...], frozenset[str], str], ...] 
     (("한파", "혹한"),        frozenset({"frost", "cold_wave"}),                     "🧊 한파/저온 위험"),
     (("폭설", "대설", "적설"), frozenset({"snow"}),                                  "❄️ 폭설/적설 위험"),
     (("일교차",),             frozenset({"temp_swing"}),                            "🌡️ 일교차 (큰 기온차) 위험"),
+    # "초열대야" 가 "열대야" substring 보다 먼저 평가되어야 한다 — 동일 kind 라
+    # 결과는 같지만 가독성 차원에서 longest-first 컨벤션을 유지하지 않아도 문제
+    # 없음. 매핑은 동일한 tropical_night 로 수렴.
+    (("열대야", "초열대야"),  frozenset({"tropical_night"}),                        "🌙 열대야 (야간 고온) 위험"),
 )
 # fallback (특보/주의보 등) — 모든 critical/warning advisory 노출.
 _RISK_FALLBACK_TITLE = "⚠️ 기상 위험 요약"

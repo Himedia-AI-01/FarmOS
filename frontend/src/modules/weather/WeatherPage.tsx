@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MdAccessTime,
   MdBlock,
@@ -68,6 +68,19 @@ const formatDateTime = (value?: string) => {
     hour: '2-digit',
     minute: '2-digit',
   });
+};
+
+// generated_at(서버 응답 생성 시각) 또는 마지막 새로고침 시각을 상대 시간으로 표현.
+// 60초 미만: "방금 전", 60분 미만: "N분 전", 24시간 미만: "N시간 전", 그 외엔 빈 문자열.
+const formatRelativeTime = (value: string | number | undefined, now: number): string => {
+  if (value == null) return '';
+  const ts = typeof value === 'number' ? value : new Date(value).getTime();
+  if (!Number.isFinite(ts)) return '';
+  const diff = Math.max(0, now - ts);
+  if (diff < 60_000) return '방금 전';
+  if (diff < 60 * 60_000) return `${Math.floor(diff / 60_000)}분 전`;
+  if (diff < 24 * 60 * 60_000) return `${Math.floor(diff / (60 * 60_000))}시간 전`;
+  return '';
 };
 
 const formatDay = (item: ForecastItem) => {
@@ -147,6 +160,9 @@ export default function WeatherPage() {
   const [weather, setWeather] = useState<WeatherPayload | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  // 30초마다 갱신해 "N분 전" 라벨이 살아 움직이게 한다.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const refreshButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const loadWeather = useCallback(async (signal?: AbortSignal) => {
     setIsLoading(true);
@@ -177,9 +193,41 @@ export default function WeatherPage() {
     return () => controller.abort();
   }, [loadWeather]);
 
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // `r` 단축키로 새로고침 — 입력 요소·IME 조합 중에는 무시. modifier 동반 시 브라우저 기본동작에 양보.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key !== 'r' && event.key !== 'R') return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isTyping =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable === true;
+      if (isTyping) return;
+      event.preventDefault();
+      if (!isLoading) {
+        void loadWeather();
+        refreshButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isLoading, loadWeather]);
+
   const forecasts = weather?.forecasts ?? [];
   const dailyForecasts = weather?.daily_forecasts ?? [];
   const current = weather?.current;
+
+  const observedRel = formatRelativeTime(current?.observed_at ?? weather?.generated_at, nowTick);
+  const generatedRel = formatRelativeTime(weather?.generated_at, nowTick);
 
   const alerts = useMemo(() => {
     const firstRain = forecasts.find((item) => (item.precipitation ?? 0) > 0);
@@ -242,16 +290,27 @@ export default function WeatherPage() {
             </h3>
             <p className="mt-1 text-sm text-gray-500">
               기준 {formatDateTime(current?.observed_at ?? weather?.generated_at)} · KST
+              {observedRel && (
+                <span className="ml-2 text-xs font-medium text-gray-400" aria-live="polite">
+                  ({observedRel})
+                </span>
+              )}
             </p>
           </div>
           <button
+            ref={refreshButtonRef}
             type="button"
             className="btn-secondary inline-flex items-center gap-2 self-start"
             onClick={() => void loadWeather()}
             disabled={isLoading}
+            title="새로고침 (R)"
+            aria-keyshortcuts="R"
           >
             <MdRefresh className={isLoading ? 'animate-spin' : ''} />
             새로고침
+            <kbd className="ml-1 hidden rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 sm:inline-block">
+              R
+            </kbd>
           </button>
         </div>
 
@@ -360,6 +419,7 @@ export default function WeatherPage() {
           <h3 className="section-title">오늘 시간별 예보</h3>
           <span className="text-xs font-semibold text-gray-500">
             갱신 {formatDateTime(weather?.generated_at)}
+            {generatedRel && <span className="ml-1 text-gray-400">({generatedRel})</span>}
           </span>
         </div>
         <div className="overflow-x-auto -mx-1 px-1">

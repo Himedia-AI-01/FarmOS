@@ -208,7 +208,7 @@ Format per item:
 - risk: low
 
 ## Weather page refresh — keyboard shortcut + relative timestamp
-- status: new
+- status: shipped: c66bda8
 - area: frontend
 - why: 농민이 외부에서 돌아와 페이지 리프레시할 때 우상단 버튼을 손가락으로 찾아야 한다. R 단축키 + "방금 전 / 3분 전" 상대 시간 표시는 작은 변경으로 큰 가독성 개선.
 - slice: WeatherPage 에 keydown 리스너로 `r` 키(IME / 입력 요소 가드) 매핑, generated_at 을 1분 인터벌로 상대 시간(`방금 전`/`N분 전`/`N시간 전`) 변환해 헤더에 표기.

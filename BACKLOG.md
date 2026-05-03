@@ -216,7 +216,7 @@ Format per item:
 - risk: low
 
 ## Subsidy page initial loader → skeleton card
-- status: new
+- status: shipped: 98527c4
 - area: frontend
 - why: SubsidyPage 의 초기 로딩이 평이한 회색 텍스트 한 줄. 농민이 직불사업 자격 확인을 시작하는 첫인상 — shape skeleton 으로 헤더/요약 타일/결과 카드 3-5개 placeholder 보여주면 체감 로딩 절반.
 - slice: 신규 `SubsidySkeleton.tsx` 또는 인라인 — 헤더 카드 + 3 SummaryTile + 결과 그리드 4 카드 placeholder. animate-pulse + aria-hidden + sr-only status.

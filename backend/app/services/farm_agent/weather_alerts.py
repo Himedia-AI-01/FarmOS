@@ -75,6 +75,19 @@ _DIURNAL_RANGE_CRITICAL_C = 20.0
 _COLD_WAVE_WARNING_C = -10.0      # tmin ≤ -10℃ → warning
 _COLD_WAVE_CRITICAL_C = -15.0     # tmin ≤ -15℃ → critical (한파특보 강화 수준)
 
+# Wind chill (체감온도) — frost/cold_wave 의 절대온도 임계와 별개로 야외 작업 안전을
+# 결정하는 신호. 같은 -5℃ 라도 무풍 vs 풍속 10m/s 는 손가락·귀 동상 위험이 자릿수
+# 차이. Environment Canada 공식 (KMA 도 동일 모델 사용):
+#     WC = 13.12 + 0.6215·T - 11.37·V^0.16 + 0.3965·T·V^0.16
+#   T: 기온(℃),  V: 풍속(km/h),  공식 유효구간: T ≤ 10℃, V ≥ 4.8km/h (≈1.34m/s).
+# 임계는 동상 의학 가이드라인:
+#   ≤ -10℃ : 장시간 노출 시 동상 위험 → warning
+#   ≤ -20℃ : 노출 피부 30분 이내 동상 → critical
+_WIND_CHILL_WARNING_C = -10.0
+_WIND_CHILL_CRITICAL_C = -20.0
+_WIND_CHILL_MAX_TEMP_C = 10.0     # T > 10℃ 면 공식 미적용
+_WIND_CHILL_MIN_WIND_MS = 1.34    # V < 4.8 km/h 면 공식 미적용
+
 
 # ── Crop-specific sensitivities ─────────────────────────────────────────────
 # 키 = main_crop 의 prefix substring 매칭 (사용자가 "방울토마토" 라 적어도 매칭).
@@ -90,6 +103,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "가지 부러짐 위험 — 적설 후 즉시 털어내기, 지주·유인끈 점검.",
         "temp_swing": "큰 일교차는 열과(과실 갈라짐) 직격 — 토양 수분 균일 유지·점적 사이클 안정화.",
         "cold_wave":  "휴면기 동해 한계 (-25℃대) 접근 시 주간지·원줄기 동해 위험 — 백색 도포·바람막이 점검.",
+        "wind_chill": "전정·잔가지 정리는 풍속 약한 한낮으로 이동, 보온 장갑·다중 작업복으로 손가락 동상 예방.",
     },
     "배": {
         "frost":      "개화기 서리 직격 — 야간 살수 또는 송풍 권장.",
@@ -98,6 +112,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "가지 부러짐 — 적설 직후 털어내고 골절지 처리.",
         "temp_swing": "비대 후기 일교차 급증은 과실 비대 불균일·열과 — 관수 안정화.",
         "cold_wave":  "꽃눈 동해 위험 (-20℃대 접근) — 동계 전정 보류·주간지 보호.",
+        "wind_chill": "전정 작업 시간대를 풍속 약한 한낮으로 조정, 손가락 동상 위험 — 보온 장갑 필수.",
     },
     "포도": {
         "frost":      "신초 동해 가능 — 비닐멀칭/터널 보온 검토.",
@@ -107,6 +122,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "비가림 시설 적설하중 — 측면 비닐 일시 개방·하중 분산.",
         "temp_swing": "착색기 큰 일교차는 당도엔 유리하나 열과 동반 — 점적 균일 가동.",
         "cold_wave":  "주간지 동해 위험 — 매몰·짚 피복·백색 도포 점검.",
+        "wind_chill": "전정·매몰 작업은 풍속 약한 시간대로 이동, 손·발 보온 강화.",
     },
     "토마토": {
         "frost":      "10℃ 이하부터 생육정지 — 보온 필수.",
@@ -141,6 +157,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "노지 월동 시 멀칭·부직포 보완. 시설재배는 적설하중 점검.",
         "temp_swing": "착과기 큰 일교차는 낙화·낙과 — 야간 보온, 시설은 변온관리.",
         "cold_wave":  "노지 잔존 포기는 즉시 정리. 시설재배는 난방·이중커튼 풀가동.",
+        "wind_chill": "노지 정리·시설 외부 점검 작업은 한낮 풍속 약한 시간대, 보온복·체온 유지.",
     },
     "벼": {
         "strong_wind": "출수기 도복 위험 — 물 빼기·낙수 검토.",
@@ -156,18 +173,21 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "snow":       "결구기 적설은 결구부 동상해 — 수확 임박 포기는 즉시 수확 검토.",
         "temp_swing": "정식 직후 큰 일교차는 추대(꽃대) 가속 위험 — 보온·정식 시기 검토.",
         "cold_wave":  "잔존 포기 즉시 수확. 저장 배추는 저장고 온도(0~3℃) 안정 확인.",
+        "wind_chill": "잔존 포기 수확·정리 작업은 풍속 약한 시간대 우선, 손·발 동상 예방.",
     },
     "마늘": {
         "frost":      "월동 직후 발아 시 동해 — 멀칭 점검.",
         "drought":    "구비대기 수분 부족 시 인편 발달 저해.",
         "snow":       "월동기 적설은 보온 효과도 있으나, 융설 시 침수·습해 주의 — 배수로 점검.",
         "cold_wave":  "월동기 한계온도 (-8℃) 초과 — 부직포·왕겨 보온 강화, 배수로 동결 점검.",
+        "wind_chill": "월동 점검·배수로 정비는 한낮 시간대로, 보온·동상 예방.",
     },
     "양파": {
         "heavy_rain": "수확기 비는 부패·저장성 저하.",
         "drought":    "비대기(4~5월) 가뭄은 구 크기 직격 — 점적관수.",
         "snow":       "월동기 멀칭·부직포 점검. 융설 후 습해로 인한 무름병 주의.",
         "cold_wave":  "월동기 동해 — 부직포 다중 피복, 노출 묘는 멀칭 추가.",
+        "wind_chill": "월동 점검·멀칭 보강 작업은 풍속 약한 시간대, 손가락 동상 주의.",
     },
 }
 
@@ -251,6 +271,19 @@ def _detect_drought(
         "value": streak,
         "crop_hint": _match_crop_hint(main_crop, "drought"),
     }
+
+
+def _compute_wind_chill(t_c: float, v_ms: float) -> float | None:
+    """Return Environment Canada wind chill in °C, or None if formula invalid.
+
+    공식은 T ≤ 10℃ AND V ≥ 4.8km/h 에서만 검증됨. 검증범위 밖에서는 None
+    반환 (호출자가 advisory 발생을 건너뛰게 한다 — 외삽 금지).
+    """
+    if t_c > _WIND_CHILL_MAX_TEMP_C or v_ms < _WIND_CHILL_MIN_WIND_MS:
+        return None
+    v_kmh = v_ms * 3.6
+    v_pow = v_kmh ** 0.16
+    return 13.12 + 0.6215 * t_c - 11.37 * v_pow + 0.3965 * t_c * v_pow
 
 
 def _is_snow_sky(sky: Any) -> bool:
@@ -375,6 +408,28 @@ def analyze_weather_risks(
                     "crop_hint": _match_crop_hint(main_crop, "cold_wave"),
                 }
             )
+
+        # Wind chill (체감온도) — frost/cold_wave 와 독립. tmin + wmax 조합으로
+        # 보수적 worst-case (이른 새벽 + 강풍) 추정. 공식 유효구간 밖이면 None →
+        # advisory 발생 안 함 (외삽 금지).
+        if tmin is not None and wmax is not None:
+            wc = _compute_wind_chill(tmin, wmax)
+            if wc is not None and wc <= _WIND_CHILL_WARNING_C:
+                level = "critical" if wc <= _WIND_CHILL_CRITICAL_C else "warning"
+                advisories.append(
+                    {
+                        "level": level,
+                        "kind": "wind_chill",
+                        "when": when,
+                        "message": (
+                            f"{when} 체감 약 {wc:.0f}℃ "
+                            f"(기온 {tmin:.0f}℃·풍속 {wmax:.0f}m/s) — "
+                            "야외 작업 시간 단축·보온복 착용·동상 예방."
+                        ),
+                        "value": round(wc, 1),
+                        "crop_hint": _match_crop_hint(main_crop, "wind_chill"),
+                    }
+                )
 
         # Heatwave
         if tmax is not None and tmax >= _HEATWAVE_C:

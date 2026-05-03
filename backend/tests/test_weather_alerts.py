@@ -610,6 +610,133 @@ def test_cold_wave_missing_tmin_emits_nothing():
     assert not [a for a in out if a["kind"] == "cold_wave"]
 
 
+# ── Wind chill (체감온도) advisory ──────────────────────────────────────────
+# Environment Canada 공식 (단위 검증):
+#   T = -10℃, V = 5 m/s = 18 km/h → V^0.16 ≈ 1.588
+#     WC = 13.12 + 0.6215·(-10) - 11.37·1.588 + 0.3965·(-10)·1.588 ≈ -17.4℃
+#   T = -15℃, V = 10 m/s = 36 km/h → V^0.16 ≈ 1.774
+#     WC ≈ 13.12 - 9.32 - 20.17 - 10.55 ≈ -26.9℃ (critical)
+
+
+def test_wind_chill_warning_at_minus_10c_with_moderate_wind():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-10.0, tmax=-2, wmax=5.0),  # WC ≈ -17 → warning
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    wc = [a for a in out if a["kind"] == "wind_chill"]
+    assert wc, "wind_chill advisory expected at tmin=-10, wmax=5m/s"
+    assert wc[0]["level"] == "warning"
+    assert -20 <= wc[0]["value"] <= -10
+
+
+def test_wind_chill_critical_at_low_temp_high_wind():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-15.0, tmax=-5, wmax=10.0),  # WC ≈ -27 → critical
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    wc = [a for a in out if a["kind"] == "wind_chill"]
+    assert wc and wc[0]["level"] == "critical"
+    assert wc[0]["value"] <= -20
+
+
+def test_wind_chill_no_advisory_at_warm_temp_with_strong_wind():
+    # T = 8℃ + V = 10 m/s → WC ≈ +3℃ (체감 양수) → 동상 위험 없음.
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=8.0, tmax=12, wmax=10.0),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "wind_chill"]
+
+
+def test_wind_chill_no_advisory_at_calm_cold_temp():
+    # 풍속 < 1.34 m/s 면 공식 유효구간 밖 → advisory 발생 안 함.
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-12.0, tmax=-3, wmax=0.5),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "wind_chill"]
+
+
+def test_wind_chill_no_advisory_above_max_temp():
+    # T > 10℃ 도 공식 유효구간 밖.
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=12.0, tmax=18, wmax=12.0),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "wind_chill"]
+
+
+def test_wind_chill_requires_both_tmin_and_wmax():
+    weather_a = {"daily_forecasts": [{"day_offset": 0, "temp_max": -2, "wind_speed_max": 5.0}]}
+    weather_b = {"daily_forecasts": [{"day_offset": 0, "temp_min": -10, "temp_max": -2}]}
+    assert not [a for a in analyze_weather_risks(weather_a) if a["kind"] == "wind_chill"]
+    assert not [a for a in analyze_weather_risks(weather_b) if a["kind"] == "wind_chill"]
+
+
+def test_wind_chill_attaches_crop_hint_for_outdoor_crop():
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=-12.0, tmax=-3, wmax=6.0)],
+    }
+    out = analyze_weather_risks(weather, main_crop="사과")
+    wc = next(a for a in out if a["kind"] == "wind_chill")
+    assert wc["crop_hint"] and ("전정" in wc["crop_hint"] or "보온" in wc["crop_hint"])
+
+
+def test_wind_chill_indoor_only_crop_leaves_hint_none():
+    # 토마토 작물은 wind_chill crop_hint 미정의 (시설 내부 작업) → None.
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=-12.0, tmax=-3, wmax=6.0)],
+    }
+    out = analyze_weather_risks(weather, main_crop="토마토")
+    wc = next(a for a in out if a["kind"] == "wind_chill")
+    assert wc["crop_hint"] is None
+
+
+def test_wind_chill_unknown_crop_leaves_hint_none():
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=-12.0, tmax=-3, wmax=6.0)],
+    }
+    out = analyze_weather_risks(weather, main_crop="이름없는작물")
+    wc = next(a for a in out if a["kind"] == "wind_chill")
+    assert wc["crop_hint"] is None
+
+
+def test_wind_chill_fires_independently_with_frost_and_cold_wave():
+    # tmin=-15, wmax=8 → frost critical + cold_wave critical + wind_chill critical
+    # 세 advisory 가 동시 발화해야 한다 (서로 다른 액션 셋).
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=-15.0, tmax=-5, wmax=8.0)],
+    }
+    out = analyze_weather_risks(weather)
+    kinds_levels = {(a["kind"], a["level"]) for a in out}
+    assert ("frost", "critical") in kinds_levels
+    assert ("cold_wave", "critical") in kinds_levels
+    assert ("wind_chill", "critical") in kinds_levels
+
+
+def test_wind_chill_keeps_severity_sort_order():
+    weather = {
+        "current": {"wind_speed": 1.0, "temperature": -5, "precipitation_type": "없음"},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-15, tmax=-5, wmax=10.0),  # critical wind_chill
+            _daily(offset=1, tmin=-10, tmax=-2, wmax=5.0),   # warning wind_chill
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    wc_levels = [a["level"] for a in out if a["kind"] == "wind_chill"]
+    assert wc_levels == ["critical", "warning"]
+
+
 def _run_all_tests() -> None:
     """Execute every test_* in this module without pytest."""
     import inspect

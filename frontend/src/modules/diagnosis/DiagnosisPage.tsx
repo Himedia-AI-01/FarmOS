@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import DaumPostcode from 'react-daum-postcode';
 import { formatDaumAddress, type DaumPostcodeData } from '@/utils/daumAddress';
+import DiagnosisHistorySkeleton from './DiagnosisHistorySkeleton';
 
 const CROPS = [
   "감자", "고추", "들깨", "무", "배추", "벼", "양배추", "오이", "옥수수", "콩", "토마토", "파"
@@ -61,6 +62,9 @@ export default function DiagnosisPage() {
   const [randomTip, setRandomTip] = useState(TIPS[0]);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
   const [history, setHistory] = useState<any[]>([]);
+  // 첫 진입에는 fetch 가 끝나기 전까지 skeleton 을 보여주기 위해 true 로 시작.
+  // user 가 없는 경우 useEffect 에서 false 로 내려준다 (fetch 자체가 안 일어나므로).
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   
   // 페이징 관련 상태
@@ -106,6 +110,7 @@ export default function DiagnosisPage() {
   }, [isAnalyzing]);
 
   const fetchHistory = async () => {
+    setLoadingHistory(true);
     try {
       const response = await fetch(`${API_BASE}/history`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch');
@@ -114,6 +119,8 @@ export default function DiagnosisPage() {
     } catch (error) {
       console.error("Failed to fetch history:", error);
       toast.error("진단 기록을 불러오는데 실패했습니다. 서버 연결을 확인해주세요.");
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -126,6 +133,9 @@ export default function DiagnosisPage() {
       setSelectedRegion(displayRegion);
       setSelectedCrop(user.main_crop || "배추");
       fetchHistory();
+    } else {
+      // user 없으면 fetch 자체를 안 하므로 skeleton 무한 표시 방지.
+      setLoadingHistory(false);
     }
   }, [user]);
 
@@ -548,7 +558,9 @@ export default function DiagnosisPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-3">
-          {history.length === 0 ? (
+          {loadingHistory && history.length === 0 ? (
+            <DiagnosisHistorySkeleton />
+          ) : history.length === 0 ? (
             <div className="py-20 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
               <p className="text-gray-400 text-sm">최근 진단 내역이 없습니다.</p>
             </div>

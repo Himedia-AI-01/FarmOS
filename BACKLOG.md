@@ -238,3 +238,11 @@ Format per item:
 - slice: 신규 `JournalSkeleton.tsx` — 타임라인 형태(2개 날짜 그룹 × 3 카드 placeholder), 모두 animate-pulse 회색 블록. JournalPage 의 `{loading && ...}` 분기에서 텍스트 한 줄을 컴포넌트로 교체. SR 사용자에겐 sr-only role="status" 안내, 시각 데코는 aria-hidden. 액션 바·DailyJournalPanel·MissingFieldsAlert·필터 pill 은 이미 자체 렌더되므로 timeline 영역만 교체해 깜빡임 최소화.
 - files: frontend/src/modules/journal/JournalPage.tsx (MODIFY), frontend/src/modules/journal/JournalSkeleton.tsx (NEW)
 - risk: low
+
+## Diagnosis page recent-history skeleton loader (load vs empty disambiguation)
+- status: in-progress
+- area: frontend
+- why: DiagnosisPage 의 "최근 진단 기록" 섹션은 `history.length === 0` 일 때 곧바로 "최근 진단 내역이 없습니다." 빈 상태 카드를 보여준다 — 그러나 fetchHistory 가 아직 응답을 받지 못한 초기 진입 시에도 동일 문구가 노출돼 농민이 "정말 기록이 없는지 / 아직 로딩 중인지" 구분 불가. 단순한 skeleton 추가로 (a) 인지 지연 감소 (b) 빈 상태 의미 정확화 두 효과 동시 확보.
+- slice: 신규 `DiagnosisHistorySkeleton.tsx` (~50줄) — 실제 history 카드 모양(체크박스+badge+title+meta+삭제+chat 버튼)을 그대로 모방한 4개 placeholder, animate-pulse 회색 블록. DiagnosisPage 에 `loadingHistory` state(initial true) 추가, fetchHistory 시작/finally 토글, useEffect 의 user 없음 분기에서는 false 세팅. 렌더 분기: `loadingHistory && history.length === 0` → skeleton, `!loadingHistory && length === 0` → 기존 빈 상태, 그 외 → 기존 list. SR 사용자에겐 sr-only role="status" + aria-live=polite 안내, 시각 데코는 컨테이너 aria-hidden. iter-15/17/19/20 패턴 일관 적용.
+- files: frontend/src/modules/diagnosis/DiagnosisPage.tsx (MODIFY), frontend/src/modules/diagnosis/DiagnosisHistorySkeleton.tsx (NEW)
+- risk: low

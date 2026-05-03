@@ -94,7 +94,7 @@ Format per item:
 - risk: med (임계 근거 문헌 추가 검증 필요)
 
 ## Diurnal temperature swing (일교차) advisory threshold
-- status: in-progress
+- status: shipped: e672968
 - area: backend
 - why: 한국 봄·가을 전이기 일교차 16℃ 초과는 사과·배·포도 열과, 토마토·딸기 갈라짐, 배추 추대 가속, 벼 등숙기 야간저온 등 작물별 직격 신호. 현재 weather_alerts 는 절댓값 임계만 보고 일교차 카테고리가 없어 작은 모델이 직접 (tmax - tmin) 비교를 해야 한다.
 - slice: weather_alerts.py 에 `_DIURNAL_RANGE_*` 임계 + 일별 (tmax - tmin) 검사 인라인 추가, ≥16℃ warning / ≥20℃ critical advisory 생성. 8개 작물 temp_swing crop_hint 추가. fast-path 노출은 별도 iter (regex 신영역 위험).

@@ -16,6 +16,7 @@ import JournalEntryForm, {
 import STTInput, { type STTInputHandle } from "./STTInput";
 import MissingFieldsAlert from "./MissingFieldsAlert";
 import DailyJournalPanel from "./DailyJournalPanel";
+import JournalSkeleton from "./JournalSkeleton";
 import type { JournalEntryAPI, STTParseResult } from "@/types";
 import { toLocalDateString } from "@/utils/date";
 
@@ -413,10 +414,9 @@ export default function JournalPage() {
         ))}
       </div>
 
-      {/* 로딩 */}
-      {loading && (
-        <div className="text-center py-10 text-gray-400">불러오는 중...</div>
-      )}
+      {/* 로딩 — 첫 진입에만 shape skeleton (entries 캐시가 비어있을 때).
+          필터 토글로 인한 재조회는 기존 timeline 을 유지해 깜빡임 최소화. */}
+      {loading && entries.length === 0 && <JournalSkeleton />}
 
       {/* 빈 상태 */}
       {!loading && entries.length === 0 && (

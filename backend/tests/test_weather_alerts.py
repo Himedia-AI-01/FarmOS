@@ -510,6 +510,106 @@ def test_temp_swing_keeps_severity_sort_order():
     assert levels == ["critical", "warning"]
 
 
+# ── Cold wave (한파/혹한) advisory ────────────────────────────────────────────
+
+
+def test_cold_wave_warning_at_minus_10c():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-10.0, tmax=-2),  # exactly at warning threshold
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    cw = [a for a in out if a["kind"] == "cold_wave"]
+    assert cw, "cold_wave advisory expected at tmin=-10"
+    assert cw[0]["level"] == "warning"
+    assert cw[0]["value"] == -10.0
+
+
+def test_cold_wave_critical_at_minus_15c():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-16.0, tmax=-5),  # below critical threshold
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    cw = [a for a in out if a["kind"] == "cold_wave"]
+    assert cw and cw[0]["level"] == "critical"
+
+
+def test_cold_wave_below_threshold_emits_nothing():
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=1, tmin=-8.0, tmax=2),  # > -10 → no cold_wave
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "cold_wave"]
+
+
+def test_cold_wave_fires_independently_with_frost():
+    # tmin = -12℃ → frost critical AND cold_wave warning both fire (서로 다른 액션 셋).
+    weather = {
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-12.0, tmax=-3),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    kinds_levels = {(a["kind"], a["level"]) for a in out}
+    assert ("frost", "critical") in kinds_levels  # ≤ -2 → critical frost
+    assert ("cold_wave", "warning") in kinds_levels  # ≤ -10 but > -15 → warning cold_wave
+
+
+def test_cold_wave_attaches_crop_hint_for_known_crop():
+    weather = {
+        "daily_forecasts": [_daily(offset=1, tmin=-11.0, tmax=-4)],
+    }
+    out = analyze_weather_risks(weather, main_crop="토마토")
+    cw = next(a for a in out if a["kind"] == "cold_wave")
+    assert cw["crop_hint"] and "난방" in cw["crop_hint"]
+
+
+def test_cold_wave_unknown_crop_leaves_hint_none():
+    weather = {
+        "daily_forecasts": [_daily(offset=1, tmin=-11.0, tmax=-4)],
+    }
+    out = analyze_weather_risks(weather, main_crop="이름없는작물")
+    cw = next(a for a in out if a["kind"] == "cold_wave")
+    assert cw["crop_hint"] is None
+
+
+def test_cold_wave_message_distinguishes_from_frost_advice():
+    # 한파 메시지는 frost 의 "보온·살수" 가 아닌 "시설 난방·동파 방지" 액션을 가져야 한다
+    # — 이게 본 카테고리 분리의 본질적 가치.
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=-13.0, tmax=-3)],
+    }
+    out = analyze_weather_risks(weather)
+    cw = next(a for a in out if a["kind"] == "cold_wave")
+    assert "난방" in cw["message"] or "동파" in cw["message"]
+    assert "살수" not in cw["message"]
+
+
+def test_cold_wave_keeps_severity_sort_order():
+    weather = {
+        "current": {"wind_speed": 1.0, "temperature": -10, "precipitation_type": "없음"},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=-16, tmax=-5),  # critical cold_wave + critical frost
+            _daily(offset=1, tmin=-10, tmax=-2),  # warning cold_wave + critical frost (≤-2)
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    levels = [a["level"] for a in out]
+    rank = {"critical": 0, "warning": 1, "info": 2}
+    assert levels == sorted(levels, key=lambda lv: rank.get(lv, 9))
+
+
+def test_cold_wave_missing_tmin_emits_nothing():
+    weather = {"daily_forecasts": [{"day_offset": 0, "temp_max": -5}]}
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "cold_wave"]
+
+
 def _run_all_tests() -> None:
     """Execute every test_* in this module without pytest."""
     import inspect

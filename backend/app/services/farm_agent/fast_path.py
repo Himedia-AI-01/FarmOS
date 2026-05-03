@@ -315,7 +315,7 @@ _RISK_KEYWORD_TO_KINDS: tuple[tuple[tuple[str, ...], frozenset[str], str], ...] 
     (("폭염", "혹서"),       frozenset({"heatwave"}),                              "🔥 폭염/고온 위험"),
     (("폭우", "호우", "장마"), frozenset({"heavy_rain", "rain_likely", "current_rain"}), "🌧️ 호우/폭우 위험"),
     (("강풍", "돌풍"),        frozenset({"strong_wind"}),                            "💨 강풍/돌풍 위험"),
-    (("한파", "혹한"),        frozenset({"frost"}),                                  "🧊 한파/저온 위험"),
+    (("한파", "혹한"),        frozenset({"frost", "cold_wave"}),                     "🧊 한파/저온 위험"),
     (("폭설", "대설", "적설"), frozenset({"snow"}),                                  "❄️ 폭설/적설 위험"),
     (("일교차",),             frozenset({"temp_swing"}),                            "🌡️ 일교차 (큰 기온차) 위험"),
 )

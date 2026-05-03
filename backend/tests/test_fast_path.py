@@ -191,11 +191,18 @@ def test_select_risk_kinds_wind_family():
     assert kinds == frozenset({"strong_wind"})
 
 
-def test_select_risk_kinds_cold_wave_maps_to_frost():
-    # 한파 질의는 frost advisory 와 같은 임계로 충분히 커버 — engine 확장 전까지의 합리적 매핑.
+def test_select_risk_kinds_cold_wave_maps_to_frost_and_cold_wave():
+    # 한파 질의는 frost (≤2℃ 서리) 와 cold_wave (≤-10℃ 한파) 두 카테고리를 함께 노출.
+    # 두 kind 의 권장 액션이 다르므로 (살수 vs 시설 난방·동파 방지) 분리해 보여준다.
     kinds, title = _select_risk_kinds("이번주 한파?")
-    assert kinds == frozenset({"frost"})
+    assert kinds == frozenset({"frost", "cold_wave"})
     assert "한파" in title or "저온" in title
+
+
+def test_select_risk_kinds_hokhan_also_maps_to_cold_wave():
+    # "혹한" 키워드도 동일하게 frost+cold_wave 두 카테고리에 매핑.
+    kinds, _ = _select_risk_kinds("내일 혹한?")
+    assert kinds == frozenset({"frost", "cold_wave"})
 
 
 def test_select_risk_kinds_fallback_when_no_specific_keyword():

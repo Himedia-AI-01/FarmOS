@@ -192,7 +192,7 @@ Format per item:
 - risk: med (기존 업로드 플로우와 충돌 가능 — 신규 컴포넌트로 분리 권장)
 
 ## Skeleton loaders for Market price table
-- status: in-progress
+- status: shipped: cd8612b
 - area: frontend
 - why: 현재 시세 페이지 초기 로딩은 회색 스피너 1개("시세 정보를 불러오는 중...") — UX 가 평이. tailwind animate-pulse 로 표/카드 shape skeleton 을 표시하면 인지 지연이 줄어든다.
 - slice: MarketPricePage.tsx 의 loading 분기를 skeleton table(8 rows × 7 cols, animate-pulse bg-gray-100) + 변동 카드 placeholder 3개로 교체.

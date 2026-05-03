@@ -108,3 +108,35 @@ Format per item:
 - slice: fast_path.py 의 `_GENERAL_RISK_RE` alternation 에 `일교차` 추가 + `_RISK_KEYWORD_TO_KINDS` 에 `(("일교차",), frozenset({"temp_swing"}), "🌡️ 일교차 위험")` 한 줄. "기온차" 는 _WEATHER_RE 의 "기온" prefix 와 충돌하므로 의도적 제외.
 - files: backend/app/services/farm_agent/fast_path.py (MODIFY), backend/tests/test_fast_path.py (MODIFY)
 - risk: low
+
+## Cold wave (한파/혹한) explicit advisory kind
+- status: shipped: 996353a
+- area: backend
+- why: 현재 한파/혹한 fast-path 질의는 frost kind 만 반환 → tmin = -10℃ 도 "🔴 서리/동해 가능, 보온·살수 검토" 라는 메시지를 받는다. 강한 한파일 때 "살수" 는 즉시 동결로 역효과 — 농민에게 잘못된 조언. 한파는 frost 와 별개로 "시설 난방·동파·월동 보온재" 가 핵심 액션.
+- slice: weather_alerts.py 에 `_COLD_WAVE_*` 임계 + `cold_wave` kind 추가 (tmin ≤ -10℃ warning, ≤ -15℃ critical, KMA 한파특보 -12℃ 기준 보수적 채택). frost 와 동시 발화 허용(서로 다른 액션). 8개 작물 cold_wave crop_hint. fast_path `_RISK_KEYWORD_TO_KINDS` 의 한파/혹한 매핑에 cold_wave 1개 항목만 추가 (frost 유지 — backward compat).
+- files: backend/app/services/farm_agent/weather_alerts.py (MODIFY), backend/app/services/farm_agent/fast_path.py (MODIFY), backend/tests/test_weather_alerts.py (MODIFY)
+- risk: low
+
+## Hail / 우박 advisory (data-dependent)
+- status: new
+- area: backend
+- why: 우박은 사과·배·포도·시설토마토 한 번에 전손 가능한 재해. KMA 단기예보 sky/PTY 코드는 우박 직접 표기 없음 — derived signal (강한 대류성 호우 + 30℃ 상한 후 급강하 + 풍속 급증) 또는 별도 KMA 우박특보 API 필요. 데이터 가용성 검증 필수.
+- slice: 1단계는 weather_client.py 에 우박특보 필드가 있는지 검증 → 있으면 weather_alerts.py 에 hail kind, 없으면 데이터 차원 제안서로 grades.
+- files: backend/app/core/weather_client.py (READ), backend/app/services/farm_agent/weather_alerts.py (MODIFY if data exists)
+- risk: med (데이터 차원 의존)
+
+## Wind chill (체감온도) advisory for outdoor work scheduling
+- status: new
+- area: backend
+- why: 한국 겨울 농민 야외작업(전정·수확·시설 점검) 안전성은 절대온도가 아닌 풍속 보정 체감온도가 결정. 절대 0℃ + 풍속 10m/s = 체감 -10℃ 수준. 현재 frost/cold_wave 는 절대온도만 본다.
+- slice: weather_alerts.py 에 `_compute_wind_chill(t, v)` (KMA/Environment Canada 공식) + `wind_chill` kind. 임계: 체감 ≤ -10℃ warning, ≤ -20℃ critical. wmax 와 tmin 결합.
+- files: backend/app/services/farm_agent/weather_alerts.py (MODIFY)
+- risk: low
+
+## Calm spray window (방제 호조 시간대)
+- status: new
+- area: backend
+- why: 현재 모든 advisory 는 "위험 신호". 농민이 정말 필요한 정보는 종종 "내일 약 칠 수 있나?" — 풍속 < 3m/s + 강수확률 < 30% + 기온 15-28℃ 인 시간대 affirmative 추천. 약제 살포 효율과 안전성에 직결.
+- slice: weather_alerts.py 또는 신 `spray_window.py` 에 hourly/3h forecast 스캔, 조건 만족 슬롯 list 반환. 1차는 advisory list 외부에 분리 도구 (briefing 직접 호출).
+- files: backend/app/services/farm_agent/weather_alerts.py 또는 backend/app/services/farm_agent/spray_window.py (NEW), backend/app/services/farm_agent/tools.py (MODIFY)
+- risk: med (예보 시간 해상도 의존)

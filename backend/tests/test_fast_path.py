@@ -325,6 +325,70 @@ def test_format_general_risks_snow_empty_returns_no_risk_block():
     assert "토마토" in out
 
 
+# ── Diurnal swing (일교차) keyword routing ────────────────────────────────
+
+
+def test_general_risk_re_matches_diurnal_keywords():
+    samples = [
+        "오늘 일교차?",
+        "내일 일교차 어때",
+        "이번주 일교차",
+        "모레 일교차 클까",
+        "일교차?",
+    ]
+    for q in samples:
+        assert _GENERAL_RISK_RE.match(q), f"expected match for: {q!r}"
+
+
+def test_general_risk_re_rejects_lookalike_diurnal_terms():
+    # "기온차" 는 _WEATHER_RE 의 "기온" prefix 와 충돌하므로 의도적으로
+    # _GENERAL_RISK_RE 에서 매칭 금지(일반 날씨 흐름으로 위임).
+    # "온도차" 는 실내/구역간 의미로도 쓰여 모호 — fast-path 자체 거부.
+    samples = ["오늘 기온차?", "내일 온도차?"]
+    for q in samples:
+        assert not _GENERAL_RISK_RE.match(q), f"expected NO match for: {q!r}"
+
+
+def test_select_risk_kinds_diurnal_family():
+    for q in ("오늘 일교차?", "내일 일교차 클까", "이번주 일교차"):
+        kinds, title = _select_risk_kinds(q)
+        assert kinds == frozenset({"temp_swing"}), (
+            f"unexpected kinds for {q!r}: {kinds}"
+        )
+        assert "일교차" in title
+
+
+def test_format_general_risks_diurnal_filters_to_temp_swing_only():
+    advisories = [
+        _adv("temp_swing", "warning", "내일",
+             "내일 일교차 17℃ (5~22℃) — 전이기 큰 기온차 주의."),
+        _adv("frost", "warning", "내일", "내일 최저 1℃ — 서리 가능."),
+        _adv("heatwave", "warning", "내일", "내일 최고 33℃ — 고온."),
+    ]
+    out = _format_general_risks("내일 일교차?", advisories, None)
+    assert "🌡️" in out
+    assert "일교차 17" in out
+    # 다른 kind 의 메시지는 빠져야 한다.
+    assert "서리" not in out
+    assert "고온" not in out
+
+
+def test_format_general_risks_diurnal_critical_promotes_red_icon():
+    advisories = [
+        _adv("temp_swing", "critical", "내일",
+             "내일 일교차 21℃ (3~24℃) — 열과·갈라짐 빈발 임계."),
+    ]
+    out = _format_general_risks("내일 일교차?", advisories, "사과")
+    assert "🔴" in out
+    assert "사과" in out
+
+
+def test_format_general_risks_diurnal_empty_returns_no_risk_block():
+    out = _format_general_risks("이번주 일교차?", [], "토마토")
+    assert "특이사항 없음" in out or "위험 없음" in out
+    assert "토마토" in out
+
+
 def _run_all_tests() -> None:
     """Run all test_* without pytest (mirrors test_weather_alerts.py pattern)."""
     import inspect

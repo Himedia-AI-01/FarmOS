@@ -100,3 +100,11 @@ Format per item:
 - slice: weather_alerts.py 에 `_DIURNAL_RANGE_*` 임계 + 일별 (tmax - tmin) 검사 인라인 추가, ≥16℃ warning / ≥20℃ critical advisory 생성. 8개 작물 temp_swing crop_hint 추가. fast-path 노출은 별도 iter (regex 신영역 위험).
 - files: backend/app/services/farm_agent/weather_alerts.py (MODIFY), backend/tests/test_weather_alerts.py (MODIFY)
 - risk: low
+
+## Diurnal swing (일교차) fast-path keyword
+- status: in-progress
+- area: backend
+- why: iter-6 가 temp_swing advisory 임계는 추가했지만 "이번주 일교차 어때?" 같은 단답형 질의는 여전히 LLM 라우팅을 거친다. 이미 검증된 `_GENERAL_RISK_RE` + `_RISK_KEYWORD_TO_KINDS` 인프라에 1개 키워드 + 1개 매핑만 추가하면 즉답 가능.
+- slice: fast_path.py 의 `_GENERAL_RISK_RE` alternation 에 `일교차` 추가 + `_RISK_KEYWORD_TO_KINDS` 에 `(("일교차",), frozenset({"temp_swing"}), "🌡️ 일교차 위험")` 한 줄. "기온차" 는 _WEATHER_RE 의 "기온" prefix 와 충돌하므로 의도적 제외.
+- files: backend/app/services/farm_agent/fast_path.py (MODIFY), backend/tests/test_fast_path.py (MODIFY)
+- risk: low

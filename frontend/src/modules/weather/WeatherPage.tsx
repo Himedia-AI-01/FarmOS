@@ -9,6 +9,7 @@ import {
   MdWarning,
 } from 'react-icons/md';
 import { FARMOS_API_BASE } from '@/lib/api';
+import WeatherSkeleton from './WeatherSkeleton';
 
 interface CurrentWeather {
   temperature?: number;
@@ -219,6 +220,13 @@ export default function WeatherPage() {
       };
     });
   }, [forecasts]);
+
+  // 첫 로딩(아직 페이로드 도착 전) 에서는 shape skeleton 으로 인지 지연을 줄인다.
+  // 새로고침(이미 데이터 있음)은 헤더 spin 아이콘 + 제자리 업데이트로 처리하므로 skeleton 미사용.
+  // 모든 hook 호출 후에 분기해 rules-of-hooks 준수.
+  if (!weather && isLoading && !error) {
+    return <WeatherSkeleton />;
+  }
 
   return (
     <div className="space-y-5">

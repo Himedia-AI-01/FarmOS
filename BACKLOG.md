@@ -62,7 +62,7 @@ Format per item:
 - risk: low
 
 ## Drought / 가뭄 advisory threshold
-- status: new
+- status: in-progress
 - area: backend
 - why: 현재 weather_alerts 는 가뭄(연속 무강수일, 토양 수분) 카테고리가 없다. 가뭄 관련 fast-path 가 추가되더라도 advisory 를 만들 수 없으면 항상 빈 응답.
 - slice: weather_alerts.py 에 `_DROUGHT_DRY_DAYS` 추가, daily_forecasts 의 강수 < 1mm 연속 일수를 세어 advisory 생성. 작물별 가뭄 hint.

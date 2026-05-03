@@ -178,6 +178,124 @@ def test_format_markdown_empty_input_has_safe_placeholder():
     assert out.startswith("## ⚠️")
 
 
+def test_drought_warning_at_5_consecutive_dry_days():
+    weather = {
+        "current": {"precipitation_type": "없음", "precipitation": 0},
+        "daily_forecasts": [
+            _daily(offset=i, tmin=14, tmax=24, precip=0.0, humidity=55)
+            for i in range(5)
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    drought = [a for a in out if a["kind"] == "drought"]
+    assert drought, "drought advisory expected"
+    assert drought[0]["level"] == "warning"
+    assert drought[0]["value"] == 5
+
+
+def test_drought_critical_at_7_consecutive_dry_days():
+    weather = {
+        "current": {"precipitation_type": "없음", "precipitation": 0},
+        "daily_forecasts": [
+            _daily(offset=i, tmin=14, tmax=24, precip=0.0, humidity=55)
+            for i in range(7)
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    drought = [a for a in out if a["kind"] == "drought"]
+    assert drought and drought[0]["level"] == "critical"
+    assert drought[0]["value"] == 7
+
+
+def test_drought_below_threshold_emits_nothing():
+    weather = {
+        "current": {"precipitation_type": "없음", "precipitation": 0},
+        "daily_forecasts": [
+            _daily(offset=i, tmin=14, tmax=24, precip=0.0, humidity=55)
+            for i in range(4)  # only 4 days dry
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "drought"]
+
+
+def test_drought_streak_breaks_on_rainy_day():
+    weather = {
+        "current": {"precipitation_type": "없음", "precipitation": 0},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=1, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=2, tmin=14, tmax=24, precip=8.0),  # rain breaks streak
+            _daily(offset=3, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=4, tmin=14, tmax=24, precip=0.0),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "drought"]
+
+
+def test_drought_suppressed_when_currently_raining():
+    weather = {
+        "current": {"precipitation_type": "비", "precipitation": 5.0},
+        "daily_forecasts": [
+            _daily(offset=i, tmin=14, tmax=24, precip=0.0) for i in range(7)
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "drought"]
+
+
+def test_drought_missing_precip_stops_count_conservatively():
+    # 결측 항목을 "건조" 로 카운트하지 않는다 — 4일 건조 + 결측 → no advisory.
+    weather = {
+        "current": {"precipitation_type": "없음", "precipitation": 0},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=1, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=2, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=3, tmin=14, tmax=24, precip=0.0),
+            {"day_offset": 4, "temp_min": 14, "temp_max": 24},  # precip missing
+            _daily(offset=5, tmin=14, tmax=24, precip=0.0),
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "drought"]
+
+
+def test_drought_attaches_crop_hint_for_known_crop():
+    weather = {
+        "current": {"precipitation_type": "없음", "precipitation": 0},
+        "daily_forecasts": [
+            _daily(offset=i, tmin=14, tmax=24, precip=0.0) for i in range(6)
+        ],
+    }
+    out = analyze_weather_risks(weather, main_crop="토마토")
+    drought = next(a for a in out if a["kind"] == "drought")
+    assert drought["crop_hint"] and "배꼽썩음" in drought["crop_hint"]
+
+
+def test_drought_advisory_keeps_severity_sort_order():
+    # critical drought 는 warning frost 보다 앞에, info 보다 뒤에 위치.
+    weather = {
+        "current": {"precipitation_type": "없음", "precipitation": 0},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=1.5, tmax=20, precip=0.0),  # warning frost (critical 아님)
+            _daily(offset=1, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=2, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=3, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=4, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=5, tmin=14, tmax=24, precip=0.0),
+            _daily(offset=6, tmin=14, tmax=24, precip=0.0),  # 7-day dry → critical drought
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    levels = [a["level"] for a in out]
+    rank = {"critical": 0, "warning": 1, "info": 2}
+    assert levels == sorted(levels, key=lambda lv: rank.get(lv, 9))
+    # critical drought present
+    assert any(a["kind"] == "drought" and a["level"] == "critical" for a in out)
+
+
 def test_format_markdown_renders_advisories():
     advisories = analyze_weather_risks(
         {"daily_forecasts": [_daily(offset=0, tmin=-3, tmax=10)]},

@@ -45,6 +45,13 @@ _FUNGAL_HUMIDITY_PCT = 85    # 일 평균 습도 ≥ 85% AND 적정 온도대 �
 _FUNGAL_TEMP_LO = 15.0
 _FUNGAL_TEMP_HI = 25.0
 
+# Drought (forecast-driven) — 연속 무강수일 임계.
+# KMA 단기예보는 보통 3일, 중기예보까지 합쳐 7~10일 가능. 임계는 보수적.
+_DRY_DAY_PRECIP_MM = 1.0       # 일강수 < 1mm 이면 "건조일" 로 카운트
+_DROUGHT_WARNING_DAYS = 5      # 5일 연속 무강수 → 경고
+_DROUGHT_CRITICAL_DAYS = 7     # 7일 연속 무강수 → 심각
+_DROUGHT_SCAN_DAYS = 14        # 가뭄 스캔은 horizon_days 무시하고 별도 한도
+
 
 # ── Crop-specific sensitivities ─────────────────────────────────────────────
 # 키 = main_crop 의 prefix substring 매칭 (사용자가 "방울토마토" 라 적어도 매칭).
@@ -56,24 +63,29 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "heatwave":   "고온은 일소피해(과실 화상) 위험 — 차광망/관수 보강.",
         "strong_wind": "낙과 위험 — 방풍망·지주 점검.",
         "heavy_rain": "잎/과실 곰팡이 (탄저·갈색무늬) 주의, 비 그친 직후 약제 살포.",
+        "drought":    "비대기 수분 부족 시 과실 비대 정체·열과 — 관수 사이클 단축.",
     },
     "배": {
         "frost":      "개화기 서리 직격 — 야간 살수 또는 송풍 권장.",
         "strong_wind": "낙과·가지 부러짐 위험.",
+        "drought":    "비대기 가뭄 시 과실 발달 저해 — 점적관수 검토.",
     },
     "포도": {
         "frost":      "신초 동해 가능 — 비닐멀칭/터널 보온 검토.",
         "heatwave":   "송이 일소피해, 당도 저하 우려.",
         "heavy_rain": "열과·노균병 위험 — 우산식 비가림 점검.",
+        "drought":    "착색기 과습/건조 교차로 열과 — 토양수분 균일 유지.",
     },
     "토마토": {
         "frost":      "10℃ 이하부터 생육정지 — 보온 필수.",
         "heatwave":   "수정 불량(공동과·기형과) — 차광·관수.",
         "fungal_humidity": "잎곰팡이병/노균병 호조 — 환기 강화.",
+        "drought":    "비대기 수분 부족 시 배꼽썩음과 급증 — 칼슘+관수 보강.",
     },
     "오이": {
         "frost":      "냉해에 매우 취약 — 야간 보온 필수.",
         "fungal_humidity": "노균병 폭발 위험 — 즉시 환기.",
+        "drought":    "수분 결핍 시 곡과·낙과 — 관수 빈도 상향.",
     },
     "딸기": {
         "frost":      "관부 동해 위험 — 부직포·수막재배 점검.",
@@ -84,21 +96,26 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "frost":      "정식 직후 냉해 치명적 — 보온 터널.",
         "strong_wind": "쓰러짐·가지 부러짐 — 지주 보강.",
         "heavy_rain": "역병/탄저 폭발 위험 — 배수로 점검.",
+        "drought":    "착과기 가뭄 시 낙화·낙과 — 점적관수 가동.",
     },
     "벼": {
         "strong_wind": "출수기 도복 위험 — 물 빼기·낙수 검토.",
         "cold_stress": "야간 17℃ 이하 지속 시 냉해 가능 (출수~등숙기).",
         "heavy_rain": "도복·관수 피해 — 즉시 배수.",
+        "drought":    "이앙·활착기 무강수는 분얼 저해 — 담수 깊이 점검.",
     },
     "배추": {
         "frost":      "결구기 동해 — 부직포 점검.",
         "strong_wind": "잎 찢김·뿌리 흔들림.",
+        "drought":    "결구기 가뭄 시 결구 부진·열구 — 관수 보강.",
     },
     "마늘": {
         "frost":      "월동 직후 발아 시 동해 — 멀칭 점검.",
+        "drought":    "구비대기 수분 부족 시 인편 발달 저해.",
     },
     "양파": {
         "heavy_rain": "수확기 비는 부패·저장성 저하.",
+        "drought":    "비대기(4~5월) 가뭄은 구 크기 직격 — 점적관수.",
     },
 }
 
@@ -132,6 +149,56 @@ def _safe_num(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _detect_drought(
+    daily: list[Any],
+    current: dict[str, Any],
+    main_crop: str | None,
+) -> dict[str, Any] | None:
+    """Count leading consecutive 무강수 days; return advisory or None.
+
+    규칙:
+      - 현재 강수 중이면 (precipitation_type ∈ {비/눈/...} AND precip ≥ 1mm)
+        가뭄 신호 무력화 — None.
+      - daily_forecasts 첫 항목부터 순서대로 강수<1mm 인 날을 카운트.
+      - 강수>=1mm 또는 precip 누락(_safe_num=None)을 만나면 즉시 중단
+        (예보 결측을 "건조"로 오인하지 않게).
+      - streak < 5 일이면 advisory 없음.
+      - 5~6일 → warning, 7일 이상 → critical.
+    """
+    cur_pty = (current.get("precipitation_type") or "").strip()
+    cur_precip = _safe_num(current.get("precipitation")) or 0.0
+    if cur_pty and cur_pty not in {"없음", "0"} and cur_precip >= _DRY_DAY_PRECIP_MM:
+        return None
+
+    streak = 0
+    for entry in daily[:_DROUGHT_SCAN_DAYS]:
+        if not isinstance(entry, dict):
+            break
+        precip = _safe_num(entry.get("precipitation"))
+        if precip is None:
+            break  # 결측은 가뭄 카운트 중단 (보수적)
+        if precip < _DRY_DAY_PRECIP_MM:
+            streak += 1
+        else:
+            break
+
+    if streak < _DROUGHT_WARNING_DAYS:
+        return None
+
+    level = "critical" if streak >= _DROUGHT_CRITICAL_DAYS else "warning"
+    return {
+        "level": level,
+        "kind": "drought",
+        "when": f"향후 {streak}일",
+        "message": (
+            f"향후 {streak}일 연속 무강수(<1mm) 예보 — "
+            "토양 건조·관수 계획 점검."
+        ),
+        "value": streak,
+        "crop_hint": _match_crop_hint(main_crop, "drought"),
+    }
 
 
 def analyze_weather_risks(
@@ -299,13 +366,28 @@ def analyze_weather_risks(
                 }
             )
 
+    # Drought — separate scan over the full daily list (ignores horizon_days).
+    # 의도적으로 horizon_days 와 분리: frost/heatwave 는 단일 일자 신호고
+    # 가뭄은 다중 일자에 걸친 누적 신호이므로 같은 윈도우에 묶지 않는다.
+    drought = _detect_drought(daily, current, main_crop)
+    if drought is not None:
+        advisories.append(drought)
+
     # Sort: critical → warning → info, then by when (지금 < 오늘 < 내일 < ...)
+    # Drought ("향후 Nd") 는 다중 일자 신호이므로 같은 severity 안에서 단일-일자
+    # advisory 뒤에 오도록 큰 rank(60) 를 부여.
     severity_rank = {"critical": 0, "warning": 1, "info": 2}
     when_rank = {"지금": 0, "오늘": 1, "오늘밤": 2, "내일": 3, "모레": 4}
+
+    def _when_key(when_str: str) -> int:
+        if when_str.startswith("향후"):
+            return 60
+        return when_rank.get(when_str, 50)
+
     advisories.sort(
         key=lambda a: (
             severity_rank.get(a.get("level", "info"), 99),
-            when_rank.get(a.get("when", ""), 50),
+            _when_key(a.get("when", "")),
             a.get("when", ""),
         )
     )

@@ -198,3 +198,35 @@ Format per item:
 - slice: MarketPricePage.tsx 의 loading 분기를 skeleton table(8 rows × 7 cols, animate-pulse bg-gray-100) + 변동 카드 placeholder 3개로 교체.
 - files: frontend/src/modules/market/MarketPricePage.tsx (MODIFY), frontend/src/modules/market/MarketPriceSkeleton.tsx (NEW)
 - risk: low
+
+## Weather page skeleton loaders
+- status: shipped: 394793f
+- area: frontend
+- why: WeatherPage 의 첫 진입은 헤더 카드 안에 `-°C` / `-%` 등 마이너스 자리 표시만 떠 있어 인지 지연 + UX 빈약. 5일 예보·시간별 예보 그리드는 isLoading 분기에서 빈 카드 5/4 개를 렌더만 한다. animate-pulse shape skeleton 으로 교체 — iter-15 의 MarketPriceSkeleton 패턴을 그대로 재사용. 농민이 매일 가장 많이 보는 페이지인 만큼 우선순위 높다.
+- slice: 신규 `WeatherSkeleton.tsx` — 헤더 카드(현재 기온 + 4 메트릭 grid) + 5일 예보 grid + 시간별 4 카드 + 작업 판단 3 카드 placeholder, 모두 animate-pulse bg-gray-100. WeatherPage 의 첫 로딩(`!weather && isLoading`) 분기에서 사용. 데이터 도착 후 부분 갱신은 skeleton 이 아닌 기존 인플레이스 분기 유지. SR 용 "불러오는 중" status + 시각 데코는 aria-hidden.
+- files: frontend/src/modules/weather/WeatherPage.tsx (MODIFY), frontend/src/modules/weather/WeatherSkeleton.tsx (NEW)
+- risk: low
+
+## Weather page refresh — keyboard shortcut + relative timestamp
+- status: new
+- area: frontend
+- why: 농민이 외부에서 돌아와 페이지 리프레시할 때 우상단 버튼을 손가락으로 찾아야 한다. R 단축키 + "방금 전 / 3분 전" 상대 시간 표시는 작은 변경으로 큰 가독성 개선.
+- slice: WeatherPage 에 keydown 리스너로 `r` 키(IME / 입력 요소 가드) 매핑, generated_at 을 1분 인터벌로 상대 시간(`방금 전`/`N분 전`/`N시간 전`) 변환해 헤더에 표기.
+- files: frontend/src/modules/weather/WeatherPage.tsx (MODIFY)
+- risk: low
+
+## Subsidy page initial loader → skeleton card
+- status: new
+- area: frontend
+- why: SubsidyPage 의 초기 로딩이 평이한 회색 텍스트 한 줄. 농민이 직불사업 자격 확인을 시작하는 첫인상 — shape skeleton 으로 헤더/요약 타일/결과 카드 3-5개 placeholder 보여주면 체감 로딩 절반.
+- slice: 신규 `SubsidySkeleton.tsx` 또는 인라인 — 헤더 카드 + 3 SummaryTile + 결과 그리드 4 카드 placeholder. animate-pulse + aria-hidden + sr-only status.
+- files: frontend/src/modules/subsidy/SubsidyPage.tsx (MODIFY), frontend/src/modules/subsidy/SubsidySkeleton.tsx (NEW)
+- risk: low
+
+## Agent console "copy to clipboard" on agent messages
+- status: new
+- area: frontend
+- why: 농민이 농업기술센터/조합 직원에게 농약·시세 응답을 복사해 보내고 싶을 때 마우스 드래그 + Ctrl+C 가 모바일에서 어렵다. 메시지 카드 호버 / 모바일 길게 누름 시 노출되는 1-tap 복사 버튼.
+- slice: AgentMarkdown.tsx 또는 FarmAgentConsole.tsx 의 어시스턴트 메시지 wrapper 우상단에 MdContentCopy 버튼, navigator.clipboard.writeText, 성공 시 react-hot-toast 알림.
+- files: frontend/src/components/agent/FarmAgentConsole.tsx (MODIFY) 또는 frontend/src/components/agent/AgentMarkdown.tsx (MODIFY)
+- risk: med (이미 dirty 상태인 파일들 — 본 iter 외 수정과 충돌 가능)

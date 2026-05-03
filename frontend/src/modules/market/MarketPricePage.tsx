@@ -1,5 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
-import { MdTrendingUp, MdTrendingDown, MdShowChart, MdWarningAmber } from 'react-icons/md';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import {
+  MdTrendingUp,
+  MdTrendingDown,
+  MdShowChart,
+  MdWarningAmber,
+  MdSearch,
+  MdClose,
+  MdSearchOff,
+} from 'react-icons/md';
 import { useMarketData } from '@/hooks/useMarketData';
 import type { KamisItemPrice, ImportantChange } from '@/types';
 
@@ -67,10 +75,17 @@ function detectImportantChanges(items: KamisItemPrice[]): ImportantChange[] {
   return changes.sort((a, b) => Math.abs(b.changePercent) - Math.abs(a.changePercent));
 }
 
+// "오이" / "오 이" / "OI" 등 가벼운 정규화 — 공백 제거 + 소문자
+function normalizeQuery(value: string): string {
+  return value.replace(/\s+/g, '').toLowerCase();
+}
+
 export default function MarketPricePage() {
   const { latestPrices, loading, error, fetchLatest } = useMarketData();
   const [productCls, setProductCls] = useState<'' | '01' | '02'>('01');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => { fetchLatest(productCls); }, [fetchLatest, productCls]);
 
@@ -87,11 +102,58 @@ export default function MarketPricePage() {
     return Array.from(map.entries());
   }, [latestPrices]);
 
-  // 필터링된 가격 목록
+  // 필터링된 가격 목록 (부류 + 텍스트 검색)
   const filteredPrices = useMemo(() => {
-    if (!categoryFilter) return latestPrices;
-    return latestPrices.filter(item => item.category_code === categoryFilter);
-  }, [latestPrices, categoryFilter]);
+    const byCategory = !categoryFilter
+      ? latestPrices
+      : latestPrices.filter(item => item.category_code === categoryFilter);
+    const q = normalizeQuery(searchQuery);
+    if (!q) return byCategory;
+    return byCategory.filter(item => {
+      const name = normalizeQuery(item.item_name ?? '');
+      const cat = normalizeQuery(item.category_name ?? '');
+      return name.includes(q) || cat.includes(q);
+    });
+  }, [latestPrices, categoryFilter, searchQuery]);
+
+  const isSearching = searchQuery.trim().length > 0;
+  const hasNoResults = isSearching && filteredPrices.length === 0;
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    searchInputRef.current?.blur();
+  }, []);
+
+  // "/" 단축키로 검색 포커스 (다른 입력 요소에 포커스가 있으면 무시).
+  // ESC 로 검색 초기화. 한국어 IME 조합 중에는 isComposing 으로 보호.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isTyping =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable === true;
+
+      if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (isTyping && target !== searchInputRef.current) return;
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === 'Escape' && document.activeElement === searchInputRef.current) {
+        if (searchQuery !== '') {
+          event.preventDefault();
+          clearSearch();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [searchQuery, clearSearch]);
 
   // ── 로딩 / 에러 ────────────────────────────────────────
   if (loading && latestPrices.length === 0) {
@@ -178,6 +240,51 @@ export default function MarketPricePage() {
         )}
       </div>
 
+      {/* ── 검색 바 ──────────────────────────────────── */}
+      <div className="relative">
+        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+          <MdSearch className="text-xl" aria-hidden />
+        </span>
+        <input
+          ref={searchInputRef}
+          type="search"
+          inputMode="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="품목 또는 부류 검색 — 예: 오이, 채소"
+          aria-label="품목 검색"
+          className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-24 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+        {isSearching ? (
+          <button
+            type="button"
+            onClick={clearSearch}
+            aria-label="검색 초기화"
+            className="absolute inset-y-1 right-2 inline-flex items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <MdClose className="text-base" aria-hidden />
+            <span className="hidden sm:inline">초기화</span>
+            <kbd className="hidden rounded border border-gray-200 bg-gray-50 px-1 text-[10px] font-mono text-gray-500 sm:inline">Esc</kbd>
+          </button>
+        ) : (
+          <kbd
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-3 my-auto h-6 select-none items-center rounded border border-gray-200 bg-gray-50 px-1.5 font-mono text-[11px] text-gray-500 hidden sm:inline-flex"
+          >
+            /
+          </kbd>
+        )}
+      </div>
+      <p
+        role="status"
+        aria-live="polite"
+        className="-mt-3 text-xs text-gray-500"
+      >
+        {isSearching
+          ? `검색 결과: ${filteredPrices.length}개 품목`
+          : `전체 ${filteredPrices.length}개 품목${categoryFilter ? ` (부류 필터 적용 중)` : ''}`}
+      </p>
+
       {/* ── 부류 필터 ────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -261,7 +368,24 @@ export default function MarketPricePage() {
           </table>
         </div>
         {filteredPrices.length === 0 && !loading && (
-          <p className="text-sm text-gray-400 text-center py-8">가격 데이터가 없습니다.</p>
+          hasNoResults ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+              <MdSearchOff className="text-4xl text-gray-300" aria-hidden />
+              <div>
+                <p className="text-sm font-medium text-gray-700">"{searchQuery.trim()}" 와 일치하는 품목이 없습니다.</p>
+                <p className="mt-1 text-xs text-gray-400">부류 필터를 해제하거나 다른 키워드로 검색해보세요.</p>
+              </div>
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                검색 초기화
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-8">가격 데이터가 없습니다.</p>
+          )
         )}
       </div>
     </div>

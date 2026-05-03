@@ -86,7 +86,7 @@ Format per item:
 - risk: low
 
 ## Pest pressure window (병해충 발생 호조 환경)
-- status: in-progress
+- status: shipped: 9a50473
 - area: backend
 - why: 노균/잿빛곰팡이/탄저 외에 진딧물·총채벌레·점박이응애 등은 온도+건조도 패턴이 다르다. 단일 fungal_humidity 임계로는 부족. 병해충 다양화 필요.
 - slice: weather_alerts.py 에 pest 카테고리(`mites_window`, `aphid_window`) 추가 — 고온+저습 (응애), 따뜻+건조 (진딧물). fast-path 키워드는 _BLOCKLIST 에 막혀 있어 brief.py / 도구로만 노출.

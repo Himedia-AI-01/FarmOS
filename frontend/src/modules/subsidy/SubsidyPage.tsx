@@ -24,6 +24,7 @@ import {
   fetchClauseSnippets,
   fetchMatch,
 } from './api';
+import SubsidySkeleton from './SubsidySkeleton';
 
 const STATUS_CONFIG = {
   eligible: {
@@ -70,11 +71,7 @@ export default function SubsidyPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="text-center py-20 text-gray-500">
-        공익직불사업 자격을 확인하는 중...
-      </div>
-    );
+    return <SubsidySkeleton />;
   }
 
   if (!match) {

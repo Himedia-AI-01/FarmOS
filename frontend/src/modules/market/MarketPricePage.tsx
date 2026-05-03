@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   MdTrendingUp,
   MdTrendingDown,
-  MdShowChart,
   MdWarningAmber,
   MdSearch,
   MdClose,
@@ -13,6 +12,7 @@ import {
 } from 'react-icons/md';
 import { useMarketData } from '@/hooks/useMarketData';
 import type { KamisItemPrice, ImportantChange } from '@/types';
+import MarketPriceSkeleton from './MarketPriceSkeleton';
 
 // ── 가격 문자열 파싱 ───────────────────────────────────
 function parseKamisPrice(raw: unknown): number | null {
@@ -222,16 +222,7 @@ export default function MarketPricePage() {
 
   // ── 로딩 / 에러 ────────────────────────────────────────
   if (loading && latestPrices.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary text-2xl mb-3 animate-pulse">
-            <MdShowChart />
-          </div>
-          <p className="text-gray-500">시세 정보를 불러오는 중...</p>
-        </div>
-      </div>
-    );
+    return <MarketPriceSkeleton />;
   }
 
   if (error && latestPrices.length === 0) {

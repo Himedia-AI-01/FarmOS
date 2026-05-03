@@ -34,6 +34,14 @@ _FROST_TEMP_C = 2.0          # 야간 최저 ≤ 2℃ → 서리/동해 위험
 _HARD_FROST_C = -2.0         # ≤ -2℃ → 강한 동해
 _HEATWAVE_C = 33.0           # 일 최고 ≥ 33℃ → 고온 스트레스
 _EXTREME_HEAT_C = 35.0       # ≥ 35℃ → 폭염 특보 수준
+# Tropical night (열대야) — heatwave 가 일 최고(tmax) 신호라면, 열대야는 일 최저
+# (tmin) 기반 별개 카테고리. 야간 25℃ 이상이 지속되면 작물 호흡량 증가로
+# 광합성 동화산물이 밤 사이 소모 → 벼 등숙률·식미 저하, 사과·배 야간저온 부족
+# 으로 착색 부진, 토마토·고추 수정·결실 장애. 액션도 다름 (낮 차광 vs 야간
+# 환기·미스트 가동·관수 사이클 조정). KMA 열대야 기준 25℃ 채택, 초열대야
+# (30℃) 보다 보수적인 27℃ 를 critical 로 두어 농업 임계로 재해석.
+_TROPICAL_NIGHT_WARNING_C = 25.0
+_TROPICAL_NIGHT_CRITICAL_C = 27.0
 _HEAVY_RAIN_MM = 30.0        # 일강수량 ≥ 30mm → 침수/도복
 _TORRENTIAL_RAIN_MM = 80.0   # ≥ 80mm → 호우 특보
 _HIGH_PRECIP_PROB = 70       # 강수확률 ≥ 70% (정량값 없을 때 fallback)
@@ -111,6 +119,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
     "사과": {
         "frost":      "개화기 서리 시 결실률 급락. 살수·송풍기 가동 검토.",
         "heatwave":   "고온은 일소피해(과실 화상) 위험 — 차광망/관수 보강.",
+        "tropical_night": "야간 최저 25℃ 지속 시 착색·당도 부진 — 야간 관수·통기, 봉지·반사필름 검토.",
         "strong_wind": "낙과 위험 — 방풍망·지주 점검.",
         "heavy_rain": "잎/과실 곰팡이 (탄저·갈색무늬) 주의, 비 그친 직후 약제 살포.",
         "drought":    "비대기 수분 부족 시 과실 비대 정체·열과 — 관수 사이클 단축.",
@@ -124,6 +133,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
     "배": {
         "frost":      "개화기 서리 직격 — 야간 살수 또는 송풍 권장.",
         "strong_wind": "낙과·가지 부러짐 위험.",
+        "tropical_night": "야간고온은 과실 호흡 증가로 당도 정체·과피 색택 부진 — 야간 관수·통풍 강화.",
         "drought":    "비대기 가뭄 시 과실 발달 저해 — 점적관수 검토.",
         "snow":       "가지 부러짐 — 적설 직후 털어내고 골절지 처리.",
         "temp_swing": "비대 후기 일교차 급증은 과실 비대 불균일·열과 — 관수 안정화.",
@@ -135,6 +145,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
     "포도": {
         "frost":      "신초 동해 가능 — 비닐멀칭/터널 보온 검토.",
         "heatwave":   "송이 일소피해, 당도 저하 우려.",
+        "tropical_night": "야간고온은 호흡으로 당분 소모 → 당도 정체·착색 부진. 야간 비가림 환기 풀가동.",
         "heavy_rain": "열과·노균병 위험 — 우산식 비가림 점검.",
         "drought":    "착색기 과습/건조 교차로 열과 — 토양수분 균일 유지.",
         "snow":       "비가림 시설 적설하중 — 측면 비닐 일시 개방·하중 분산.",
@@ -147,6 +158,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
     "토마토": {
         "frost":      "10℃ 이하부터 생육정지 — 보온 필수.",
         "heatwave":   "수정 불량(공동과·기형과) — 차광·관수.",
+        "tropical_night": "야간 25℃ 초과 지속 시 화분 활력 저하·착과 불량 — 시설 야간 환기팬·외기 도입·미스트로 25℃ 이하 유지.",
         "fungal_humidity": "잎곰팡이병/노균병 호조 — 환기 강화.",
         "drought":    "비대기 수분 부족 시 배꼽썩음과 급증 — 칼슘+관수 보강.",
         "snow":       "비닐하우스 적설하중 — 측창 보온재 정리, 야간 난방 가동·환기로 적설 미끄러뜨리기.",
@@ -158,6 +170,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
     "오이": {
         "frost":      "냉해에 매우 취약 — 야간 보온 필수.",
         "fungal_humidity": "노균병 폭발 위험 — 즉시 환기.",
+        "tropical_night": "야간 호흡 증가로 곡과·낙화·품질 저하 — 시설 천창·측창 야간 개방, 미스트로 온도·습도 보정.",
         "drought":    "수분 결핍 시 곡과·낙과 — 관수 빈도 상향.",
         "snow":       "비닐하우스 적설하중 — 난방 가동·물뿌리기로 지붕 적설 차단.",
         "temp_swing": "큰 일교차는 곡과·낙화 — 시설 야간 보온 강화.",
@@ -168,6 +181,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
     "딸기": {
         "frost":      "관부 동해 위험 — 부직포·수막재배 점검.",
         "heatwave":   "꽃눈 분화 저해 — 차광·환기.",
+        "tropical_night": "야간 25℃ 이상은 꽃눈 분화·휴면 타파에 결정적 악영향 — 야간 환기·차광·근권부 냉수 관수 검토.",
         "fungal_humidity": "잿빛곰팡이병 위험 — 환기·약제 사이클 단축.",
         "snow":       "하우스 측면 적설 정리, 수막재배 동결 주의 — 야간 가동 점검.",
         "temp_swing": "큰 일교차는 기형과·열과 — 야간 보온·환기 균형.",
@@ -178,6 +192,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
     "고추": {
         "frost":      "정식 직후 냉해 치명적 — 보온 터널.",
         "strong_wind": "쓰러짐·가지 부러짐 — 지주 보강.",
+        "tropical_night": "야간고온은 화분 활력 저하·낙화·낙과 가속 — 시설은 야간 환기·외기 도입, 노지는 관수로 근권부 온도 완화.",
         "heavy_rain": "역병/탄저 폭발 위험 — 배수로 점검.",
         "drought":    "착과기 가뭄 시 낙화·낙과 — 점적관수 가동.",
         "snow":       "노지 월동 시 멀칭·부직포 보완. 시설재배는 적설하중 점검.",
@@ -193,6 +208,7 @@ _CROP_HINTS: dict[str, dict[str, str]] = {
         "heavy_rain": "도복·관수 피해 — 즉시 배수.",
         "drought":    "이앙·활착기 무강수는 분얼 저해 — 담수 깊이 점검.",
         "temp_swing": "등숙기 큰 일교차는 야간 저온으로 등숙률 저하 — 담수 깊이로 야간 보온.",
+        "tropical_night": "출수·등숙기 야간 25℃ 초과는 호흡 증가로 등숙률·식미 저하·단백질 함량 상승 — 담수 깊이 깊게 유지하여 야간 수온 완충.",
     },
     "배추": {
         "frost":      "결구기 동해 — 부직포 점검.",
@@ -471,6 +487,29 @@ def analyze_weather_risks(
                     "message": f"{when} 최고 {tmax:.1f}℃ — 고온 스트레스, 관수·차광 보강.",
                     "value": tmax,
                     "crop_hint": _match_crop_hint(main_crop, "heatwave"),
+                }
+            )
+
+        # Tropical night (열대야) — heatwave 와 별개 임계·별개 액션 셋.
+        # tmin ≥ 25℃ 부터 작물 야간 호흡 증가로 광합성 동화산물 손실 → 벼
+        # 등숙률·식미 저하, 사과·배 착색 부진, 토마토·고추 수정 불량. 낮 차광
+        # 만으로는 해결 안 됨 — "야간 환기·미스트·관수 사이클" 권고. heatwave
+        # 와 동시 발화 가능 (의사결정 분리 의도).
+        if tmin is not None and tmin >= _TROPICAL_NIGHT_WARNING_C:
+            level = (
+                "critical" if tmin >= _TROPICAL_NIGHT_CRITICAL_C else "warning"
+            )
+            advisories.append(
+                {
+                    "level": level,
+                    "kind": "tropical_night",
+                    "when": when,
+                    "message": (
+                        f"{when} 야간 최저 {tmin:.1f}℃ — 열대야, 야간 환기·"
+                        "미스트 가동·관수 사이클 조정으로 작물 호흡 부담 완화."
+                    ),
+                    "value": tmin,
+                    "crop_hint": _match_crop_hint(main_crop, "tropical_night"),
                 }
             )
 

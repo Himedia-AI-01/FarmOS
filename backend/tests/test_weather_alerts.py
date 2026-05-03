@@ -861,6 +861,100 @@ def test_pest_windows_keep_severity_sort_order():
     assert any(a["kind"] == "aphid_window" for a in out)
 
 
+# ── Tropical night (열대야) advisory ────────────────────────────────────────
+
+
+def test_tropical_night_warning_at_25c():
+    # tmin = 25.0 → warning (정확히 임계). tmax 는 33 미만이라 heatwave 미발화.
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=25.0, tmax=31, humidity=70)],
+    }
+    out = analyze_weather_risks(weather)
+    tn = [a for a in out if a["kind"] == "tropical_night"]
+    assert tn, "tropical_night advisory expected at tmin=25"
+    assert tn[0]["level"] == "warning"
+    assert tn[0]["value"] == 25.0
+
+
+def test_tropical_night_critical_at_27c():
+    weather = {
+        "daily_forecasts": [_daily(offset=1, tmin=27.5, tmax=32, humidity=75)],
+    }
+    out = analyze_weather_risks(weather)
+    tn = [a for a in out if a["kind"] == "tropical_night"]
+    assert tn and tn[0]["level"] == "critical"
+
+
+def test_tropical_night_below_threshold_emits_nothing():
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=24.5, tmax=30, humidity=70)],
+    }
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "tropical_night"]
+
+
+def test_tropical_night_fires_independently_with_heatwave():
+    # tmax=35 → heatwave critical AND tmin=26 → tropical_night warning 동시 발화.
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=26.0, tmax=35.0, humidity=75)],
+    }
+    out = analyze_weather_risks(weather)
+    kinds_levels = {(a["kind"], a["level"]) for a in out}
+    assert ("heatwave", "critical") in kinds_levels
+    assert ("tropical_night", "warning") in kinds_levels
+
+
+def test_tropical_night_attaches_crop_hint_for_rice():
+    # 벼 등숙기 야간고온은 본 advisory 의 핵심 활용 사례.
+    weather = {
+        "daily_forecasts": [_daily(offset=1, tmin=26.0, tmax=32, humidity=70)],
+    }
+    out = analyze_weather_risks(weather, main_crop="벼")
+    tn = next(a for a in out if a["kind"] == "tropical_night")
+    assert tn["crop_hint"] and "등숙" in tn["crop_hint"]
+
+
+def test_tropical_night_message_distinguishes_from_heatwave_advice():
+    # 열대야 메시지는 heatwave 의 "차광·관수" 가 아닌 "야간 환기·미스트" 액션을 가져야 한다
+    # — 이게 본 카테고리 분리의 본질적 가치.
+    weather = {
+        "daily_forecasts": [_daily(offset=0, tmin=27.5, tmax=31, humidity=72)],
+    }
+    out = analyze_weather_risks(weather)
+    tn = next(a for a in out if a["kind"] == "tropical_night")
+    assert "야간" in tn["message"]
+    assert "환기" in tn["message"] or "미스트" in tn["message"]
+
+
+def test_tropical_night_unknown_crop_leaves_hint_none():
+    weather = {
+        "daily_forecasts": [_daily(offset=1, tmin=26.0, tmax=32, humidity=70)],
+    }
+    out = analyze_weather_risks(weather, main_crop="이름없는작물")
+    tn = next(a for a in out if a["kind"] == "tropical_night")
+    assert tn["crop_hint"] is None
+
+
+def test_tropical_night_missing_tmin_emits_nothing():
+    # tmin 결측이면 advisory 발생 금지 (보수적).
+    weather = {"daily_forecasts": [{"day_offset": 0, "temp_max": 33}]}
+    out = analyze_weather_risks(weather)
+    assert not [a for a in out if a["kind"] == "tropical_night"]
+
+
+def test_tropical_night_keeps_severity_sort_order():
+    weather = {
+        "current": {"wind_speed": 1.0, "temperature": 28, "precipitation_type": "없음"},
+        "daily_forecasts": [
+            _daily(offset=0, tmin=27.5, tmax=31, humidity=70),  # critical tropical_night
+            _daily(offset=1, tmin=25.0, tmax=30, humidity=68),  # warning tropical_night
+        ],
+    }
+    out = analyze_weather_risks(weather)
+    tn_levels = [a["level"] for a in out if a["kind"] == "tropical_night"]
+    assert tn_levels == ["critical", "warning"]
+
+
 def _run_all_tests() -> None:
     """Execute every test_* in this module without pytest."""
     import inspect

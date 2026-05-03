@@ -168,7 +168,7 @@ Format per item:
 - risk: low
 
 ## Sortable column headers in price table
-- status: in-progress
+- status: shipped: e26d61b
 - area: frontend
 - why: 표 정렬은 현재 백엔드 응답 순서(부류 코드) 만. 농민은 "당일 가격 높은 순", "최근 변동 큰 순" 으로 보고 싶어 한다. 헤더 클릭으로 정렬 토글.
 - slice: MarketPricePage 에 sort key state(name/current/change), 헤더에 ▲▼ 표시 + 클릭 토글, useMemo 비교자 분기.

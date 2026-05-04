@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { MdAutoAwesome, MdLogout, MdMenuOpen } from 'react-icons/md';
+import { MdAutoAwesome, MdLogout } from 'react-icons/md';
 import { useAuth } from '@/context/AuthContext';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
+import { cn } from '@/lib/cn';
 
 interface TopBarProps {
   title: string;
@@ -9,6 +11,7 @@ interface TopBarProps {
 
 export default function TopBar({ title, onOpenAgent }: TopBarProps) {
   const { user, logout } = useAuth();
+  const { busy, messages } = useFarmAgentContext();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -16,44 +19,66 @@ export default function TopBar({ title, onOpenAgent }: TopBarProps) {
     navigate('/login');
   };
 
+  const unread = messages.filter((m) => m.role === 'assistant').length;
+
   return (
-    <header className="sticky top-0 z-30 flex h-[68px] items-center justify-between border-b border-gray-200 bg-white/95 px-3 backdrop-blur sm:px-5 lg:px-7">
-      <div className="min-w-0">
-        <div className="flex items-center gap-2 lg:hidden">
-          <MdMenuOpen className="text-xl text-primary" />
-          <span className="text-xs font-black uppercase tracking-wide text-primary">FarmOS</span>
-        </div>
-        <h1 className="truncate text-xl font-black tracking-tight text-gray-950">{title}</h1>
-      </div>
+    <header className="sticky top-0 z-30 h-16 border-b border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)]/88 backdrop-blur-md sm:h-[68px]">
+      <div className="flex h-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        <h1 className="min-w-0 truncate text-[1.25rem] font-bold leading-none tracking-[-0.024em] text-[color:var(--color-ink)] sm:text-[1.4375rem]">
+          {title}
+        </h1>
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onOpenAgent}
-          className="inline-flex h-10 items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 text-sm font-bold text-primary transition hover:bg-primary hover:text-white 2xl:hidden"
-        >
-          <MdAutoAwesome className="text-lg" />
-          <span className="hidden sm:inline">Agent</span>
-        </button>
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            type="button"
+            onClick={onOpenAgent}
+            aria-label={busy ? 'Farm Agent — 분석 중' : 'Farm Agent 열기'}
+            aria-haspopup="dialog"
+            aria-live={busy ? 'polite' : undefined}
+            className={cn(
+              'relative inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-[14px] font-semibold transition-all duration-200 ease-out 2xl:hidden',
+              busy
+                ? 'border-transparent bg-[color:var(--color-primary)] text-white shadow-[var(--shadow-sm)]'
+                : 'border-[color:var(--color-line)] bg-[color:var(--color-card)] text-[color:var(--color-ink)] hover:border-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-soft)] hover:text-[color:var(--color-primary-dark)]',
+            )}
+          >
+            <MdAutoAwesome
+              aria-hidden
+              className={cn(
+                'text-[18px]',
+                busy ? 'motion-safe:animate-pulse' : 'text-[color:var(--color-primary)]',
+              )}
+            />
+            <span className="hidden sm:inline">{busy ? '분석 중' : 'Agent'}</span>
+            {unread > 0 && !busy && (
+              <span
+                aria-label={`읽지 않은 응답 ${unread}건`}
+                className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-[color:var(--color-surface)] bg-[color:var(--color-primary)] px-1 text-[10.5px] font-bold leading-none text-white"
+              >
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+          </button>
 
-        {user && (
-          <div className="hidden items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 md:flex">
-            <div className="text-right leading-tight">
-              <p className="text-sm font-bold text-gray-900">{user.name}님</p>
-              <p className="max-w-[180px] truncate text-xs text-gray-500">
-                {user.farmname || user.main_crop || user.user_id}
-              </p>
+          {user && (
+            <div className="flex items-center gap-1.5 sm:gap-2.5">
+              <div className="hidden text-right leading-tight md:block">
+                <p className="text-[14px] font-bold text-[color:var(--color-ink)]">{user.name}님</p>
+                <p className="mt-0.5 max-w-[200px] truncate text-[12px] text-[color:var(--color-ink-mute)]">
+                  {user.farmname || user.main_crop || user.user_id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="icon-btn icon-btn--danger"
+                aria-label="로그아웃"
+              >
+                <MdLogout aria-hidden className="text-[19px]" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-white hover:text-red-600"
-              aria-label="로그아웃"
-            >
-              <MdLogout className="text-lg" />
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   );

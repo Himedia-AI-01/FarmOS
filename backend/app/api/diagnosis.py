@@ -320,13 +320,8 @@ async def add_chat_message(
                         base_url=settings.LITELLM_URL,
                         temperature=0.0,
                         http_async_client=custom_async_client,
-                        model_kwargs={
-                            "extra_body": {
-                                "reasoning": {
-                                    "effort": "minimal",
-                                    "exclude": True
-                                }
-                            }
+                        extra_body={
+                            "reasoning": {"effort": "minimal", "exclude": True}
                         }
                     )
                     

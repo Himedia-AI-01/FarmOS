@@ -130,9 +130,12 @@ export function useManualControl() {
 
     const newActive = !controlState[controlType].active;
 
+    // controlState[controlType] 는 union 이라 비공통 필드 직접 접근 시 TS2339.
+    // case 안에서 리터럴 키로 다시 접근해 narrowing.
     let toggleState: Record<string, unknown>;
     switch (controlType) {
-      case 'ventilation':
+      case 'ventilation': {
+        const current = controlState.ventilation;
         // Design Ref: §5.2 — 시뮬 OFF 시 현재값 저장 → 수동 ON 토글 시 복원 가능
         if (!newActive) {
           const current = controlState.ventilation;
@@ -147,13 +150,15 @@ export function useManualControl() {
           on: newActive,
         };
         break;
+      }
       case 'irrigation':
         toggleState = { valve_open: newActive };
         break;
       case 'lighting':
         toggleState = { on: newActive, brightness_pct: newActive ? 60 : 0 };
         break;
-      case 'shading':
+      case 'shading': {
+        const current = controlState.shading;
         // Design Ref: §5.2 — 시뮬 OFF 시 현재값 저장
         if (!newActive) {
           const current = controlState.shading;
@@ -168,6 +173,7 @@ export function useManualControl() {
           on: newActive,
         };
         break;
+      }
     }
 
     // 낙관적 업데이트

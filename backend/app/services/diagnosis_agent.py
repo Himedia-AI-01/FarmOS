@@ -588,11 +588,7 @@ async def generate_diagnosis(state: DiagnosisState) -> dict:
             llm_standard = ChatOpenAI(
                 model=model_name, api_key=api_key, base_url=settings.LITELLM_URL, temperature=0.0,
                 http_async_client=custom_async_client,
-                model_kwargs={
-                    "extra_body": {
-                        "reasoning": {"effort": "minimal", "exclude": True}
-                    }
-                }
+                extra_body={"reasoning": {"effort": "minimal", "exclude": True}}
             )
 
             chain = prompt | llm_standard | StrOutputParser()

@@ -11,6 +11,7 @@ dependencies = [
     "deepagents>=0.5.3",
     "fastapi>=0.135.2",
     "fastapi-mcp>=0.4.0",
+    "fastmcp>=3.2.0",
     "fpdf2>=2.8.0",
     "httpx>=0.28.0",
     "kiwipiepy>=0.18.0",

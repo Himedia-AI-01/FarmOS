@@ -2,6 +2,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, HTTPException, Path as _PathParam
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 
 from app.services.ai_agent_bridge import AiAgentBridge
+from app.mcp import build_review_mcp
 
 from app.api import (
     ai_agent,
@@ -89,6 +91,22 @@ async def seed_users():
 async def lifespan(app: FastAPI):
     await init_db()
     await seed_users()
+
+    # journal-entry-photos: 24h 경과 entry_id=null 인 사진 정리 (boot-time)
+    try:
+        from app.core.photo_storage import cleanup_orphans
+
+        async with async_session() as db:
+            removed = await cleanup_orphans(db, older_than_hours=24)
+            if removed:
+                logging.getLogger(__name__).info(
+                    "journal_photo_orphans.cleaned count=%d", removed
+                )
+    except Exception:  # noqa: BLE001 — cleanup 실패가 기동 막지 않음
+        # exception() 사용 → traceback 포함 자동 기록. 운영자가 즉시 원인 추적 가능.
+        logging.getLogger(__name__).exception(
+            "journal_photo_orphans.cleanup_failed"
+        )
 
     # AI Agent Bridge (agent-action-history) — Relay patch 적용 시 활성화.
     # IOT_RELAY_API_KEY 가 비어 있으면 (env 미주입) 플래그가 켜져도 안전 비활성화한다.
@@ -359,7 +377,45 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+# ---------------------------------------------------------------------------
+# FastMCP 서버 — iot-review-mcp Design §6.1, §6.2
+# ---------------------------------------------------------------------------
+# review 분석/검색/리포트 함수들을 MCP tool 로 노출하는 sub-app.
+# 같은 프로세스에 mount 하므로 core 싱글턴(_rag, _analyzer 등) 을 공유하고,
+# 기존 JWT 검증 로직(core.security.decode_access_token) 도 그대로 재사용한다.
+# Lifespan 통합은 fastmcp.utilities.lifespan.combine_lifespans 사용.
+#
+# Graceful fallback: MCP 빌드/http_app 실패 시 _review_mcp_app=None 으로 폴백.
+# Bridge·RAG·사진 정리와 동일 패턴 — MCP 만 비활성화되고 REST 본체는 정상 기동.
+# stateless_http=True: 단발 HTTP 호출도 세션 핸드셰이크 없이 동작 (T4 progress SSE 영향 없음).
+_review_mcp_app = None
+try:
+    _review_mcp = build_review_mcp()
+    _review_mcp_app = _review_mcp.http_app(path="/", stateless_http=True)
+except Exception as _mcp_exc:  # noqa: BLE001 — MCP 실패가 BE 기동 막지 않음
+    logging.getLogger(__name__).exception(
+        "review_mcp.build_failed — /mcp 비활성, REST 본체는 정상 기동 (err=%s)",
+        _mcp_exc,
+    )
+
+if _review_mcp_app is not None:
+    try:
+        from fastmcp.utilities.lifespan import combine_lifespans
+        _combined_lifespan = combine_lifespans(lifespan, _review_mcp_app.lifespan)
+    except ImportError:
+        # combine_lifespans 가 없는 fastmcp 버전일 때의 폴백.
+        # 두 lifespan 을 단일 async with 로 합성 (PEP 617 multi-context — enter A→B, exit B→A).
+        @asynccontextmanager
+        async def _combined_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # type: ignore[no-redef]
+            async with lifespan(app), _review_mcp_app.lifespan(app):
+                yield
+else:
+    _combined_lifespan = lifespan
+
+
+app = FastAPI(title=settings.PROJECT_NAME, lifespan=_combined_lifespan)
+# /health 등에서 MCP 가용성 확인용 플래그 (관찰성).
+app.state.review_mcp_available = _review_mcp_app is not None
 
 app.add_middleware(
     CORSMiddleware,
@@ -418,5 +474,9 @@ app.include_router(ai_agent.router, prefix=settings.API_V1_PREFIX)
 app.include_router(subsidy.router, prefix=settings.API_V1_PREFIX)
 app.include_router(farm_agent.router, prefix=settings.API_V1_PREFIX)
 
-# Note: MCP 서버 마운트는 lifespan 내부 (farm_agent 초기화 직후) 에서 처리한다.
+# MCP sub-app mount (Design §6.1) — POST /mcp/ 에 streamable-http endpoint 노출.
+# 빌드 실패 시 (_review_mcp_app=None) mount 생략 — REST 본체는 그대로 동작.
+# Note: FastApiMCP 서버 마운트는 lifespan 내부 (farm_agent 초기화 직후) 에서 처리한다.
 # 과거 모듈 import 타임 마운트는 lifespan 시작 전에 동작해 race condition 의 원인이었다.
+if _review_mcp_app is not None:
+    app.mount("/mcp", _review_mcp_app)

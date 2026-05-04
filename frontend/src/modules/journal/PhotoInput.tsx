@@ -200,7 +200,7 @@ const PhotoInput = forwardRef<PhotoInputHandle, Props>(function PhotoInput(
       {status === "idle" && (
         <button
           onClick={openPicker}
-          className="fixed bottom-[152px] right-4 lg:bottom-[96px] lg:right-8 z-30
+          className="fixed bottom-[152px] right-4 lg:bottom-[96px] lg:right-8 2xl:right-[436px] z-30
             h-12 px-5 rounded-full shadow-lg flex items-center justify-center gap-2
             bg-primary hover:bg-primary/90 active:scale-95 cursor-pointer
             transition-colors duration-200"

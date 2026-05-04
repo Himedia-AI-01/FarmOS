@@ -183,7 +183,7 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
                 type="button"
                 onClick={openHistory}
                 aria-label="이전 기록"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[color:var(--color-primary-dark)] hover:bg-[color:var(--color-primary-soft)] cursor-pointer"
               >
                 <MdHistory className="text-base" />
                 <span className="hidden sm:inline">이전 기록</span>
@@ -245,7 +245,7 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
               onChange={(e) => setNarrative(e.target.value)}
               readOnly={locked}
               spellCheck={false}
-              className="flex-1 resize-none border border-[color:var(--color-line)] rounded-lg p-3 font-sans text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-[color:var(--color-surface)]"
+              className="flex-1 resize-none border border-[color:var(--color-line)] rounded-lg p-3 font-sans text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-soft)] disabled:bg-[color:var(--color-surface)]"
               placeholder="영농일지 본문을 편집하세요..."
             />
             <div className="flex items-center justify-between mt-2 text-xs text-[color:var(--color-ink-faint)]">
@@ -278,13 +278,13 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
                     type="button"
                     onClick={() => restoreFromRevision(rev)}
                     disabled={locked}
-                    className="w-full text-left p-4 bg-white border border-[color:var(--color-line)] rounded-xl shadow-sm hover:border-indigo-400 hover:shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[color:var(--color-line)] disabled:hover:shadow-sm disabled:active:scale-100"
+                    className="w-full text-left p-4 bg-white border border-[color:var(--color-line)] rounded-xl shadow-sm hover:border-[color:var(--color-primary-light)] hover:shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[color:var(--color-line)] disabled:hover:shadow-sm disabled:active:scale-100"
                   >
                     <div className="flex items-center gap-2 text-xs mb-2">
                       <span className="text-[color:var(--color-ink-mute)]">
                         {new Date(rev.created_at).toLocaleString("ko-KR")}
                       </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-medium">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)] font-medium">
                         {rev.narrative_source}
                       </span>
                     </div>

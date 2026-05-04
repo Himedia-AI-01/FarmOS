@@ -33,6 +33,7 @@ from app.core.stt import transcribe_audio
 from app.models.user import User
 from app.services.farm_agent.briefing import get_or_generate_briefing
 from app.services.farm_agent.fast_path import try_fast_path
+from app.services.farm_agent import langcache
 from app.services.farm_agent.verifier_candidates import record_verifier_verdict
 from app.services.pest_classifier import (
     ClassifierError,
@@ -325,13 +326,35 @@ _SUBSIDY_ANSWER_HINTS = (
 )
 
 
+# Meta / capability questions about the agent itself. Answers to these list
+# multiple domains (including 직불금) by design — without this exemption the
+# citation guardrail false-fires on a perfectly correct help response.
+_META_QUESTION_HINTS = (
+    "기능", "뭐 할 수 있", "뭘 할 수 있", "뭐가 있", "뭐가있",
+    "도움말", "사용법", "넌 누구", "너 누구", "당신은 누구",
+    "어떤 일", "어떤 걸", "어떻게 사용", "what can you", "help",
+)
+
+
+def _is_meta_question(question: str) -> bool:
+    """True if the question is about the agent's own capabilities/identity."""
+    q = (question or "").lower()
+    return any(hint in q for hint in _META_QUESTION_HINTS)
+
+
 def _is_subsidy_domain_answer(question: str, answer: str) -> bool:
     """True if either the question routed to subsidy or the answer reads as subsidy.
 
     The guardrail must be insensitive to whether the routing-hint fired — an
     answer that introduces 직불/시행지침 content needs citations regardless of
     how the orchestrator got there.
+
+    Exemption: meta/capability questions list multiple domains (including
+    "직불금") as part of describing what the agent does. Such answers don't
+    need 시행지침 citations.
     """
+    if _is_meta_question(question or ""):
+        return False
     if _detect_single_domain(question or "") == "subsidy-agent":
         return True
     text = answer or ""
@@ -613,7 +636,14 @@ async def ask(
             logger.info("fast_path.hit user=%s session=%s", user.id, session_id)
             return AskOut(answer=fast_answer, session_id=session_id, fast_path=True)
 
-    # 2) 정상 Deep Agent 흐름
+    # 2) LangCache 의미 캐시 조회 — hit 시 LLM 호출 우회.
+    #    fast_path 다음, 에이전트 호출 전 — 비용·지연 모두 큰 LLM 호출만 절약.
+    cached_answer = await langcache.lookup(payload.question, user_id=user.id)
+    if cached_answer:
+        logger.info("langcache.ask_hit user=%s session=%s", user.id, session_id)
+        return AskOut(answer=cached_answer, session_id=session_id)
+
+    # 3) 정상 Deep Agent 흐름
     agent = _agent(request)
     config = _runtime_config(user.id, session_id)
 
@@ -640,6 +670,8 @@ async def ask(
             user_id=user.id,
             session_id=session_id,
         )
+        # 최종 답변(citation 재프롬프트 후 보정본 포함) 캐시 적재.
+        await langcache.store(payload.question, answer, user_id=user.id)
     return AskOut(answer=answer or "응답을 생성하지 못했습니다.", session_id=session_id)
 
 
@@ -675,6 +707,28 @@ async def stream(
                 yield {"event": "done", "data": ""}
             return EventSourceResponse(fast_gen())
 
+    # LangCache 의미 캐시 조회 — hit 시 LLM 호출 우회하고 단일 token 으로 흘려보낸다.
+    cached_answer = await langcache.lookup(payload.question, user_id=user.id)
+    if cached_answer:
+        logger.info("langcache.stream_hit user=%s session=%s", user.id, session_id)
+
+        async def cached_gen():
+            yield {"event": "session", "data": session_id}
+            yield {"event": "cache", "data": "hit"}
+            yield {"event": "token", "data": cached_answer}
+            # citation chip 도 캐시된 답변에서 재추출 — 프론트엔드 UX 일관성 유지.
+            try:
+                citations = _extract_citations(cached_answer)
+                if citations:
+                    yield {
+                        "event": "citations",
+                        "data": _json.dumps(citations, ensure_ascii=False),
+                    }
+            except Exception:  # noqa: BLE001
+                pass
+            yield {"event": "done", "data": ""}
+        return EventSourceResponse(cached_gen())
+
     agent = _agent(request)
     config = _runtime_config(user.id, session_id)
 
@@ -705,6 +759,42 @@ async def stream(
         # a ToolMessage and would otherwise be dropped by the assistant filter.
         # Buffer the most recent one and emit it at end-of-stream as fallback.
         delegation_fallback_text = ""
+        # Resume-replay guard: when LangGraph resumes a checkpointed thread for
+        # turn N (N>1), `stream_mode="updates"` can include prior turn's
+        # AIMessages and delegation ToolMessages in the initial replay payload.
+        # Without seeding the dedup sets, those re-emit as if they were new
+        # tokens — and worse, the prior delegation ToolMessage flips
+        # `suppress_orchestrator_synthesis` to True, which then suppresses
+        # this turn's REAL answer. User reports: "previous answer shows up
+        # and nothing happens". Seed the dedup sets from checkpointer state
+        # so prior turns are filtered before they reach the wire.
+        seen_delegation_keys: set[str] = set()
+        try:
+            _prior_state = await agent.aget_state(config)
+            _prior_msgs = (
+                getattr(_prior_state, "values", {}) or {}
+            ).get("messages", [])
+            for _m in _prior_msgs:
+                if _is_assistant_message(_m):
+                    _mid = getattr(_m, "id", None)
+                    if _mid:
+                        emitted_message_ids.add(_mid)
+                    _content = _content_to_text(getattr(_m, "content", None))
+                    if _content:
+                        emitted_message_ids.add(
+                            f"hash:{hash(_content)}:{len(_content)}"
+                        )
+                if _is_subagent_delegation_tool_message(_m):
+                    _tcid = getattr(_m, "tool_call_id", "") or ""
+                    _ttext = _content_to_text(getattr(_m, "content", None)).strip()
+                    if _tcid:
+                        seen_delegation_keys.add(f"tcid:{_tcid}")
+                    if _ttext:
+                        seen_delegation_keys.add(
+                            f"hash:{hash(_ttext)}:{len(_ttext)}"
+                        )
+        except Exception:  # noqa: BLE001 — first turn / no prior state
+            pass
         stream_failed = False
         stream_failure_detail = ""
         routed_question = _wrap_with_routing_hint(payload.question)
@@ -804,6 +894,29 @@ async def stream(
                             tool_text = _content_to_text(
                                 getattr(message, "content", None)
                             ).strip()
+                            # Resume-replay guard: skip delegation ToolMessages
+                            # that already exist in the prior thread state. They
+                            # would otherwise mask THIS turn's real delegation
+                            # by flipping suppress_orchestrator_synthesis early.
+                            _tcid = getattr(message, "tool_call_id", "") or ""
+                            _replay_keys = []
+                            if _tcid:
+                                _replay_keys.append(f"tcid:{_tcid}")
+                            if tool_text:
+                                _replay_keys.append(
+                                    f"hash:{hash(tool_text)}:{len(tool_text)}"
+                                )
+                            if any(k in seen_delegation_keys for k in _replay_keys):
+                                logger.debug(
+                                    "farm_agent.replay_skip user=%s session=%s "
+                                    "kind=delegation tcid=%s len=%d",
+                                    user.id, session_id, _tcid, len(tool_text),
+                                )
+                                continue
+                            # Track this turn's delegation as well so subsequent
+                            # update payloads in the SAME stream don't duplicate.
+                            for _k in _replay_keys:
+                                seen_delegation_keys.add(_k)
                             if tool_text:
                                 # Verifier-agent FAIL/UNKNOWN mining (iter 19).
                                 # No-op on PASS, on non-verifier delegations
@@ -1092,6 +1205,11 @@ async def stream(
                         }
                 except Exception:  # noqa: BLE001
                     pass
+
+                # LangCache 적재 — citation 재프롬프트 후의 최종(보정) 답변만 저장.
+                # IoT 제어 제안은 HITL 승인 단계가 별도이므로 캐시 적재 대상에서 제외.
+                if not _looks_like_iot_action_proposal(final_text):
+                    await langcache.store(payload.question, final_text, user_id=user.id)
         finally:
             # 클라이언트가 done 이벤트를 기다리고 있으므로 예외 여부와 무관하게 반드시 종료 신호 emit.
             yield {"event": "done", "data": ""}

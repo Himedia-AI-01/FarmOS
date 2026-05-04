@@ -87,7 +87,7 @@ export default function SubsidyPage() {
   return (
     <div className="space-y-6">
       {/* 안내 헤더 */}
-      <div className="card bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+      <div className="card bg-[color:var(--color-primary-soft)] border-[color:var(--color-primary-soft)]">
         <div className="flex items-start gap-3">
           <div className="text-4xl">🌾</div>
           <div>
@@ -102,24 +102,30 @@ export default function SubsidyPage() {
         </div>
       </div>
 
-      {/* 결과 요약 */}
-      <div className="grid grid-cols-3 gap-3">
-        <SummaryTile
-          count={match.eligible.length}
-          label="신청 가능"
-          tone="green"
-        />
-        <SummaryTile
-          count={match.needs_review.length}
-          label="추가 확인"
-          tone="amber"
-        />
-        <SummaryTile
-          count={match.ineligible.length}
-          label="해당 없음"
-          tone="gray"
-        />
-      </div>
+      {/* 결과 요약 — 수평 KPI 스트립 */}
+      <dl className="grid grid-cols-3 divide-x divide-[color:var(--color-line-soft)] overflow-hidden rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)]">
+        <div className="px-4 py-3.5">
+          <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">신청 가능</dt>
+          <dd className="mt-1 inline-flex items-baseline gap-1.5">
+            <span className="num text-[1.75rem] font-bold leading-none text-[color:var(--color-primary-dark)]">{match.eligible.length}</span>
+            <span className="text-[12px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
+          </dd>
+        </div>
+        <div className="px-4 py-3.5">
+          <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">추가 확인</dt>
+          <dd className="mt-1 inline-flex items-baseline gap-1.5">
+            <span className="num text-[1.75rem] font-bold leading-none text-[color:var(--color-accent-dark)]">{match.needs_review.length}</span>
+            <span className="text-[12px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
+          </dd>
+        </div>
+        <div className="px-4 py-3.5">
+          <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">해당 없음</dt>
+          <dd className="mt-1 inline-flex items-baseline gap-1.5">
+            <span className="num text-[1.75rem] font-bold leading-none text-[color:var(--color-ink-mute)]">{match.ineligible.length}</span>
+            <span className="text-[12px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
+          </dd>
+        </div>
+      </dl>
 
       {/* 지원금 카드 목록 */}
       <div className="space-y-3">

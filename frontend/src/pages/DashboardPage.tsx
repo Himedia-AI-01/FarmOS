@@ -31,7 +31,7 @@ interface CommandLink {
 const COMMAND_LINKS: CommandLink[] = [
   { to: '/iot', label: '시설 제어', detail: '센서·자동화 판단', illust: '/illustrations/module-iot.png' },
   { to: '/diagnosis', label: '진단 워크벤치', detail: '이미지 진단·처방', illust: '/illustrations/module-diagnosis.png' },
-  { to: '/journal', label: '영농 기록', detail: '음성 기록·통합일지', illust: '/illustrations/module-journal.png' },
+  { to: '/journal', label: '영농일지', detail: '음성 기록·통합일지', illust: '/illustrations/module-journal.png' },
   { to: '/weather', label: '기상', detail: '예보 기반 작업 계획', illust: '/illustrations/module-weather.png' },
   { to: '/market', label: '시세', detail: 'KAMIS 가격 변동', illust: '/illustrations/module-market.png' },
   { to: '/subsidy', label: '공익직불', detail: '자격·근거 조항', illust: '/illustrations/module-subsidy.png' },
@@ -332,6 +332,8 @@ export default function DashboardPage() {
             {COMMAND_LINKS.map(({ to, label, detail, illust }, index) => (
               <motion.li
                 key={to}
+                // Last (orphan) card spans 2 cols on xl so 7 items lay as 3+3+(2 wide) — no lonely card
+                className={index === COMMAND_LINKS.length - 1 ? 'sm:col-span-2 xl:col-span-2' : ''}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.04 + index * 0.04, duration: 0.25 }}

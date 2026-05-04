@@ -30,8 +30,8 @@ const PR_LABELS: Record<string, { label: string; cls: string }> = {
 
 const SRC_LABELS: Record<string, { label: string; cls: string }> = {
   rule: { label: '규칙', cls: 'bg-yellow-100 text-yellow-700' },
-  llm: { label: 'AI', cls: 'bg-purple-100 text-purple-700' },
-  tool: { label: 'AI Tool', cls: 'bg-indigo-100 text-indigo-700' },
+  llm: { label: 'AI', cls: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]' },
+  tool: { label: 'AI Tool', cls: 'bg-[color:var(--tint-info)] text-[color:var(--color-info)]' },
   manual: { label: '수동', cls: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]' },
 };
 
@@ -141,7 +141,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
   return (
     <button
       onClick={onCopy}
-      className="inline-flex items-center gap-1 text-xs text-[color:var(--color-ink-mute)] hover:text-indigo-600 transition-colors"
+      className="inline-flex items-center gap-1 text-xs text-[color:var(--color-ink-mute)] hover:text-[color:var(--color-info)] transition-colors"
       aria-label={label ?? 'Copy'}
     >
       {copied ? <MdCheck className="text-green-500" /> : <MdContentCopy />}
@@ -297,7 +297,7 @@ export default function AIDecisionDetailModal({
                 <div
                   className={
                     isLlmOrigin
-                      ? 'bg-emerald-50 border border-emerald-200 rounded-lg p-3'
+                      ? 'bg-[color:var(--color-primary-soft)] border border-[color:var(--color-primary-light)] rounded-lg p-3'
                       : ''
                   }
                 >

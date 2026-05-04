@@ -302,7 +302,7 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
       {status === "idle" && (
         <button
           onClick={handleFABClick}
-          className="fixed bottom-[88px] right-4 lg:bottom-8 lg:right-8 z-30
+          className="fixed bottom-[88px] right-4 lg:bottom-8 lg:right-8 2xl:right-[436px] z-30
             h-12 px-5 rounded-full shadow-lg flex items-center justify-center gap-2
             bg-red-500 hover:bg-red-600 active:scale-95 cursor-pointer
             transition-colors duration-200"

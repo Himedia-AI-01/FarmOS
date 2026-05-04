@@ -96,6 +96,13 @@ _BRIEFING_PROMPT = """\
 - 직불금·자격 판정 (별도 챗봇 안내로 유도)
 - "곧", "조만간" 같은 모호 표현 (구체 시간 또는 "정보 없음")
 - 도구가 반환하지 않은 정보 추가
+
+## 출력 형식 (매우 중요)
+- **메타 사고 과정 / 자기 대화 / 계획 설명을 절대 출력에 포함하지 마세요.**
+  ("We have all data", "Let's count", "Need to produce", "We'll produce" 등 영어 메모,
+   "포함할지 결정하자", "글자 수 세자" 같은 한국어 자기 대화 모두 금지.)
+- 응답은 위 5섹션 마크다운 그 자체로 시작합니다. `## 🌅` 가 첫 글자가 되어야 합니다.
+- 주석·설명·서론 없이 곧장 브리핑만.
 """
 
 
@@ -152,6 +159,12 @@ async def get_or_generate_briefing(
     content = ""
     if messages:
         content = getattr(messages[-1], "content", "") or ""
+
+    # Strip any leaked meta-reasoning before caching. Gemma occasionally writes
+    # a self-monologue ("We have all data. Need to produce…") above the actual
+    # markdown despite the prompt forbidding it. The sanitizer trims everything
+    # before the first real briefing heading.
+    content = _strip_meta_reasoning(content)
 
     # 실패 응답은 캐시하지 않음 — 다음 호출에서 재시도 가능
     if not content or len(content.strip()) < _MIN_VALID_CONTENT_LEN:
@@ -227,6 +240,70 @@ def _greeting(d: date, name: str) -> str:
     """요일 기반 한국어 인사."""
     weekday = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"][d.weekday()]
     return f"{name} 사장님, {weekday}입니다"
+
+
+# Meta-reasoning leak markers. Gemma surfaces these phrases when its "thinking"
+# bleeds into the final answer. Detection is conservative — only strips text
+# BEFORE the first real briefing heading (## 🌅 / ## or ###), so legitimate
+# briefing content is never touched.
+_META_REASONING_MARKERS = (
+    "We have all data",
+    "Need to produce",
+    "Let's craft",
+    "Let's count",
+    "We'll produce",
+    "Let me think",
+    "I'll produce",
+    "I need to",
+    "First, ",
+    "글자 수",
+    "포함할지",
+    "We have ",
+    "approximate",
+    "Let's ",
+)
+
+
+def _strip_meta_reasoning(text: str) -> str:
+    """Remove any meta-reasoning preamble before the first markdown heading.
+
+    Strategy:
+      1. If the text starts with markdown heading (`##`, `# `, `### `) it's
+         already clean — return as-is.
+      2. Otherwise, find the first occurrence of `## ` or a line starting with
+         a clear briefing emoji marker and slice from there.
+      3. As a last resort, if any meta-reasoning marker appears before the
+         first heading, drop everything up to that heading.
+
+    Returns the sanitized string, or the original if no sanitization fits.
+    """
+    if not text:
+        return text
+    stripped = text.lstrip()
+    if stripped.startswith(("## ", "# ", "### ")):
+        return stripped
+
+    # Find first heading anywhere in the text.
+    heading_idx = -1
+    for marker in ("\n## ", "\n# ", "\n### "):
+        idx = text.find(marker)
+        if idx >= 0 and (heading_idx == -1 or idx < heading_idx):
+            heading_idx = idx
+    if heading_idx == -1:
+        # No heading found — try to detect a briefing-shaped section start.
+        for emoji in ("🌅", "🌤️", "⚠️", "🚜", "📋", "💰"):
+            idx = text.find(emoji)
+            if idx >= 0 and (heading_idx == -1 or idx < heading_idx):
+                heading_idx = max(0, text.rfind("\n", 0, idx))
+
+    if heading_idx <= 0:
+        return text  # nothing to strip
+
+    preamble = text[:heading_idx]
+    if any(marker in preamble for marker in _META_REASONING_MARKERS):
+        logger.info("briefing.meta_reasoning_stripped removed_chars=%d", heading_idx)
+        return text[heading_idx:].lstrip()
+    return text
 
 
 # ── 테이블 생성 헬퍼 (lifespan 호환성 유지) ──────────────────────────────────

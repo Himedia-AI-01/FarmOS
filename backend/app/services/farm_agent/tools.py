@@ -5,12 +5,18 @@
   - DB·user_id 같은 런타임 의존성은 RunnableConfig.configurable 로 주입.
     (서브에이전트가 LLM 인자로 user_id를 다루지 않게 해 PII 누출 방지)
   - 도구는 항상 짧은 문자열·JSON을 반환. 거대한 dict 반환은 컨텍스트 오염.
+
+안전 게이트 (verifier hard-gate):
+  - `diagnose_pest` 출력에 농약·방제 정보가 포함되면 도구 내부에서 결정론적
+    검증을 수행한다. LLM 검증자(verifier-agent)에 의존하지 않음 — 작은
+    오케스트레이터 모델이 'verifier 호출 의무'를 무시해도 안전이 보장됨.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import date, datetime, timedelta, timezone
 
 from langchain_core.runnables import RunnableConfig
@@ -22,6 +28,7 @@ from app.core.journal_store import get_daily_summary, list_entries
 from app.core.weather_client import get_weather
 from app.models.ai_agent import AiAgentDecision
 from app.models.user import User
+from app.schemas.subsidy import Citation
 from app.services.diagnosis_agent import run_diagnosis
 from app.services.farm_agent.weather_alerts import (
     analyze_weather_risks,
@@ -35,6 +42,7 @@ from app.services.subsidy.tools import (
     get_user_profile as _get_user_profile,
     list_eligible_subsidies as _list_eligible_subsidies,
     search_subsidy_regulations as _search_subsidy_regulations,
+    search_subsidy_regulations_fast as _search_subsidy_regulations_fast,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,6 +94,181 @@ async def get_my_farm_profile(config: RunnableConfig) -> str:
 # ── 1. 진단 ────────────────────────────────────────────────────────────────
 
 
+# ── 검증 게이트: 농약·방제 콘텐츠 결정론적 검사 ─────────────────────────────
+#
+# 설계: diagnose_pest 의 generate_diagnosis 노드는 LLM 으로 마크다운을 만든다.
+# 작은 모델은 환각·반올림·생략을 일으킬 수 있다. 우리는 동일 파이프라인에서
+# 흘러나온 원본 pesticide_data(JSON, fetch_pesticide 노드 출력)를 'authoritative
+# truth' 로 사용해, LLM 출력의 모든 농약 주장(브랜드·희석·살포·시기)이 원본에
+# 그대로 존재하는지 확인한다.
+#
+# 결과:
+#   PASS    → 그대로 반환
+#   FAIL    → 농약 섹션을 안전 폴백으로 대체 (RDA 페이지로 유도)
+#   UNKNOWN → pesticide_data 가 비어있음 → 농약 추천 자체를 차단
+
+_PESTICIDE_KEYWORDS_RE = re.compile(
+    r"(농약|약제|방제\s*약|희석|희석배수|배\s*희석|살포|엽면|토양\s*혼화|경엽|"
+    r"수화제|유제|액제|입제|성분|상표|제조사|수확\s*\d+\s*일\s*전)"
+)
+_DILUTION_RE = re.compile(r"\b\d{2,5}\s*배\b")
+_HARVEST_INTERVAL_RE = re.compile(r"수확\s*\d+\s*일\s*전")
+
+
+def _should_verify(text: str) -> bool:
+    """LLM 출력에 검증이 필요한 농약·방제 콘텐츠가 들어있는지 판단.
+
+    TODO(도메인 전문가): 한국 농약 표현·구어체에 맞게 본 함수를 정밀화하세요.
+    현재 기준 (보수적):
+      - 농약/방제 키워드 1개 이상 존재 OR
+      - 희석 배수(예: "1000배") 패턴 OR
+      - 수확 N일 전 안전사용기준 패턴
+    고려할 추가 신호:
+      - 특정 제품명 화이트리스트(스미치온, 다이센, 코퍼하이드록사이드 등)
+      - "방제법", "약제 추천" 같은 사용자 의도 키워드
+      - 일반 방제(예방·환기·물 빠짐)만 있는 경우는 검증 면제할지 여부
+    """
+    if not text:
+        return False
+    return bool(
+        _PESTICIDE_KEYWORDS_RE.search(text)
+        or _DILUTION_RE.search(text)
+        or _HARVEST_INTERVAL_RE.search(text)
+    )
+
+
+def _extract_authoritative_strings(pesticide_data_json: str) -> dict[str, set[str]]:
+    """fetch_pesticide 노드의 JSON 을 검증용 문자열 집합으로 변환.
+
+    Returns:
+        {
+          "brand_names":  {"스미치온", ...},
+          "ingredients":  {"페니트로치온", ...},
+          "dilutions":    {"1000배", "500배", ...},  # 정규화된 형태
+          "timings":      {"수확 7일 전까지", ...},
+          "corporations": {"경농", ...},
+        }
+        파싱 실패 또는 빈 데이터면 모든 집합이 비어있는 dict 반환.
+    """
+    truth: dict[str, set[str]] = {
+        "brand_names": set(),
+        "ingredients": set(),
+        "dilutions": set(),
+        "timings": set(),
+        "corporations": set(),
+    }
+    try:
+        groups = json.loads(pesticide_data_json or "[]")
+    except (json.JSONDecodeError, TypeError):
+        return truth
+    for g in groups or []:
+        if not isinstance(g, dict):
+            continue
+        ing = (g.get("ingredient_name") or "").strip()
+        if ing and ing != "성분정보없음":
+            truth["ingredients"].add(ing)
+        for p in g.get("products") or []:
+            if not isinstance(p, dict):
+                continue
+            brand = (p.get("brand_name") or "").strip()
+            if brand and brand != "상표명없음":
+                truth["brand_names"].add(brand)
+            corp = (p.get("corporation_name") or "").strip()
+            if corp and corp != "제조사없음":
+                truth["corporations"].add(corp)
+            dilution = (p.get("dilution_text") or "").strip()
+            if dilution and dilution != "정보없음":
+                truth["dilutions"].add(dilution)
+                # "1000배 희석" 류의 부분 매칭을 위해 숫자+배 패턴도 등록
+                for m in _DILUTION_RE.findall(dilution):
+                    truth["dilutions"].add(m.replace(" ", ""))
+            timing = (p.get("application_timing") or "").strip()
+            if timing and timing != "정보없음":
+                truth["timings"].add(timing)
+    return truth
+
+
+def _verify_against_truth(
+    text: str, truth: dict[str, set[str]]
+) -> tuple[str, list[str]]:
+    """LLM 출력의 농약 주장이 authoritative truth 에 포함되는지 검사.
+
+    Returns:
+        (status, mismatches)
+          - status: "PASS" | "FAIL" | "UNKNOWN"
+          - mismatches: FAIL 시 일치하지 않는 항목 목록 (로깅·디버깅용)
+    """
+    has_any_truth = any(truth[k] for k in truth)
+    if not has_any_truth:
+        return ("UNKNOWN", ["pesticide_data 비어있음 — 검증 불가"])
+
+    mismatches: list[str] = []
+
+    # 1) 희석배수: 텍스트의 모든 "Nxxx배" 가 truth.dilutions 에 존재해야 함
+    for m in _DILUTION_RE.findall(text):
+        normalized = m.replace(" ", "")
+        if not any(normalized in d.replace(" ", "") for d in truth["dilutions"]):
+            mismatches.append(f"희석배수 '{m}' 원본에 없음")
+
+    # 2) 수확 N일 전: 텍스트의 모든 timing 패턴이 truth.timings 에 존재해야 함
+    for m in _HARVEST_INTERVAL_RE.findall(text):
+        if not any(m.replace(" ", "") in t.replace(" ", "") for t in truth["timings"]):
+            mismatches.append(f"안전사용기준 '{m}' 원본에 없음")
+
+    # 3) 브랜드명·성분명: 텍스트가 truth 외 새로운 제품을 도입했는지 확인하는 건
+    #    어휘적으로 어렵다(고유명사 인식). 대신 'brand_names ∪ ingredients' 집합
+    #    중 텍스트에 등장하는 게 하나라도 있는지 = 진짜 데이터 기반인지 sanity check.
+    if truth["brand_names"] or truth["ingredients"]:
+        cited = (truth["brand_names"] | truth["ingredients"])
+        if not any(name in text for name in cited):
+            mismatches.append("원본 브랜드/성분명이 본문에 인용되지 않음 — 환각 의심")
+
+    return ("FAIL" if mismatches else "PASS", mismatches)
+
+
+_FAIL_FALLBACK_NOTICE = (
+    "\n\n---\n"
+    "⚠️ **농약 정보 안전 검증 실패** — 위 일반 방제법까지만 안내드리며, "
+    "구체적 약제·희석배수·살포 시기는 안전을 위해 본 답변에서 제외했습니다. "
+    "정확한 약제 정보는 농촌진흥청 농약안전정보시스템(psis.rda.go.kr)에서 "
+    "확인해주세요."
+)
+
+_UNKNOWN_FALLBACK_NOTICE = (
+    "\n\n---\n"
+    "ℹ️ 등록된 약제 데이터가 없어 농약 추천을 제공하지 못했습니다. "
+    "지역 농업기술센터 또는 농촌진흥청 농약안전정보시스템(psis.rda.go.kr)에 "
+    "문의해주세요."
+)
+
+
+def _strip_pesticide_sections(text: str) -> str:
+    """검증 실패 시 농약·약제 섹션을 제거. 일반 방제·예방 정보는 유지.
+
+    마크다운 헤더(##/###/####) 단위로 자르고, 헤더에 농약 키워드가 있는
+    섹션은 통째로 드롭한다. 보수적: 헤더 없는 본문은 줄 단위로 농약 키워드
+    포함 줄을 제거.
+    """
+    lines = text.splitlines()
+    out: list[str] = []
+    skip_section = False
+    for line in lines:
+        is_header = line.lstrip().startswith("#")
+        if is_header:
+            skip_section = bool(_PESTICIDE_KEYWORDS_RE.search(line))
+            if not skip_section:
+                out.append(line)
+            continue
+        if skip_section:
+            continue
+        # 헤더 없는 본문에서도 농약/희석 라인은 제거
+        if _DILUTION_RE.search(line) or _HARVEST_INTERVAL_RE.search(line):
+            continue
+        out.append(line)
+    cleaned = "\n".join(out).strip()
+    return cleaned or "병해충 일반 방제 정보를 제공할 수 없었습니다."
+
+
 @tool
 async def diagnose_pest(pest: str, crop: str, region: str) -> str:
     """FarmOS 병해충 진단 파이프라인 실행 (날씨 + NCPMS + 농약 DB).
@@ -98,16 +281,21 @@ async def diagnose_pest(pest: str, crop: str, region: str) -> str:
     Returns:
         진단 결과 마크다운 (권장 농약, NCPMS 방제법, 날씨 조언 포함).
 
-    Safety:
-        파이프라인 실패 시 절대 빈/가짜 응답을 돌려주지 않는다.
-        대신 어느 단계에서 실패했는지 명시한 에러 메시지를 반환해
-        verifier-agent / orchestrator가 농약 추천을 임의 합성하지 못하게 한다.
+    Safety (hard-gated):
+        - 파이프라인 실패 시 절대 빈/가짜 응답을 돌려주지 않는다.
+        - LLM 출력에 농약 콘텐츠가 포함되면 동일 파이프라인의 authoritative
+          pesticide_data 와 결정론적으로 대조한다. 불일치 시 농약 섹션을
+          제거하고 RDA 안내로 대체. 빈 truth 면 농약 추천 자체 차단.
+        - 본 게이트는 오케스트레이터/서브에이전트의 LLM 동작과 무관하게 항상 작동.
     """
     final = ""
+    pesticide_truth_json = ""
     completed_nodes: list[str] = []
     try:
         async for node, payload in run_diagnosis(pest=pest, crop=crop, region=region):
             completed_nodes.append(node)
+            if node == "fetch_pesticide":
+                pesticide_truth_json = payload.get("pesticide_data") or ""
             if node == "generate_diagnosis":
                 result = payload.get("analysis_result") or {}
                 final = result.get("result_text", "")
@@ -125,7 +313,6 @@ async def diagnose_pest(pest: str, crop: str, region: str) -> str:
         )
 
     if not final:
-        # generate_diagnosis 노드가 끝까지 도달하지 못했거나 result_text가 비어있음.
         logger.warning(
             "diagnose_pest.no_result pest=%s crop=%s region=%s nodes=%s",
             pest, crop, region, completed_nodes,
@@ -135,7 +322,33 @@ async def diagnose_pest(pest: str, crop: str, region: str) -> str:
             f"(통과 노드: {completed_nodes or '없음'}). "
             "농약·방제 정보를 임의로 생성하지 마세요. 사용자에게 데이터 부족을 안내하세요."
         )
-    return final
+
+    # ── Hard gate ────────────────────────────────────────────────────────
+    if not _should_verify(final):
+        # 농약 콘텐츠가 없으면 검증 면제 (예: "예방 위주로 환기 잘 해주세요")
+        return final
+
+    truth = _extract_authoritative_strings(pesticide_truth_json)
+    status, mismatches = _verify_against_truth(final, truth)
+
+    if status == "PASS":
+        return final
+
+    if status == "UNKNOWN":
+        logger.warning(
+            "diagnose_pest.verify_unknown pest=%s crop=%s region=%s reason=%s",
+            pest, crop, region, mismatches,
+        )
+        stripped = _strip_pesticide_sections(final)
+        return stripped + _UNKNOWN_FALLBACK_NOTICE
+
+    # FAIL
+    logger.warning(
+        "diagnose_pest.verify_failed pest=%s crop=%s region=%s mismatches=%s",
+        pest, crop, region, mismatches,
+    )
+    stripped = _strip_pesticide_sections(final)
+    return stripped + _FAIL_FALLBACK_NOTICE
 
 
 # ── 2. 공익직불 ─────────────────────────────────────────────────────────────
@@ -173,7 +386,11 @@ async def check_eligibility_rule(subsidy_code: str, config: RunnableConfig) -> s
 
 @tool
 async def search_subsidy_regulations(query: str, top_k: int = 5) -> str:
-    """공익직불 시행지침에서 가장 관련 있는 조항을 검색.
+    """공익직불 시행지침에서 가장 관련 있는 조항을 정밀 검색 (느림).
+
+    Solar embedding + BM25 + RRF + bge-reranker (수 초 소요). 정확도 최고지만 느리다.
+    **단순 단일-주제 질의는 `search_subsidy_regulations_fast` 를 먼저 사용하고,
+    결과가 약하면 본 도구로 재검색**하는 agentic RAG 패턴을 권장.
 
     반드시 응답 시 [doc > 조] 형식의 인용을 유지하세요.
 
@@ -189,6 +406,152 @@ async def search_subsidy_regulations(query: str, top_k: int = 5) -> str:
         [c.model_dump(exclude_none=True) for c in citations],
         ensure_ascii=False,
     )
+
+
+@tool
+async def search_subsidy_regulations_fast(query: str, top_k: int = 5) -> str:
+    """공익직불 시행지침 검색 (자동 escalation 내장).
+
+    내부 동작:
+      1) Fast 검색 (~500ms, 리랭커 스킵).
+      2) 신뢰도 낮으면(top similarity < 0.5) 자동으로 full 정밀 검색(~수 초)으로 전환.
+
+    호출자(에이전트)는 신뢰도 판단·재시도 결정을 **하지 마세요** — 본 도구가 처리.
+    수동 정밀 검색이 필요한 경우(예: 사용자가 "완전한 조문" 요구)에만
+    `search_subsidy_regulations` 직접 호출.
+
+    **다중 주제는 한 응답에서 본 도구를 여러 번 호출** (병렬 실행됨).
+    직렬 호출 금지.
+    """
+    import asyncio
+    citations = await asyncio.to_thread(_search_subsidy_regulations_fast, query, top_k)
+    if not citations:
+        return "검색된 조항이 없습니다."
+    return json.dumps(
+        [c.model_dump(exclude_none=True) for c in citations],
+        ensure_ascii=False,
+    )
+
+
+# ── 8대 준수사항 키워드 매트릭스 (deterministic shortcut) ─────────────────
+#
+# 농업인 8대 준수사항(공익직불법 시행령) 은 모두 "필수" 의무이며 위반 시 직불금
+# 10% 감액. 가설 기반 RAG 만으로는 두 가설이 같은 청크를 회수할 때(예: 영농일지
+# 질의에서 "VI. 영농기록 작성 및 보관" 청크가 양쪽에 동시 매칭) similarity 격차가
+# 0.1 미만으로 떨어져 UNCLEAR 가 나오는 false-negative 가 발생한다.
+#
+# 8대 준수사항은 도메인 상수이므로 RAG 점수에 의존하지 않고 키워드로 단정한다.
+# 키워드는 사용자 구어체와 시행지침 정식 용어를 모두 포함한다.
+_MANDATORY_TOPIC_KEYWORDS: tuple[tuple[str, ...], ...] = (
+    ("영농일지", "영농기록", "농사일지", "기록부", "작업일지"),       # ⑧ 기록·보관
+    ("경영체 등록", "경영체등록", "농업경영체"),                       # ① 경영체 변경신고
+    ("농지 형상", "농지형상", "농지 관리", "농지관리"),               # ② 농지 형상·기능 유지
+    ("농약 안전사용", "농약안전사용", "안전사용기준"),                 # ③ 농약 안전사용
+    ("화학비료", "비료 사용기준", "비료사용기준"),                     # ④ 화학비료 사용기준
+    ("영농폐기물", "폐비닐", "농약병"),                                # ⑤ 폐기물 적정 처리
+    ("공익기능", "공익기능 증진 교육", "교육 이수"),                   # ⑥ 의무교육 이수
+    ("마을공동체", "마을 활동", "마을활동"),                           # ⑦ 마을 활동
+)
+
+
+def _matches_known_mandatory(topic: str) -> bool:
+    """topic 이 8대 준수사항 중 하나에 해당하는지 키워드 매칭.
+
+    8대 준수사항은 시행령에 의한 법적 의무이므로 RAG similarity 격차에 무관하게
+    MANDATORY 로 단정해야 한다 (UNCLEAR 응답이 사용자에게 직불금 박탈 위험을
+    잘못 전달하는 회귀 방지).
+    """
+    if not topic:
+        return False
+    t = topic.replace(" ", "")
+    for group in _MANDATORY_TOPIC_KEYWORDS:
+        if any(kw.replace(" ", "") in t for kw in group):
+            return True
+    return False
+
+
+# 시행지침 본문에 등장하면 의무 조항임을 강하게 시사하는 법령 표현.
+# "권장한다" 같은 표현은 임의 단서지만 시행지침 특성상 거의 등장하지 않는다.
+_MANDATORY_PHRASES: tuple[str, ...] = (
+    "하여야 한다",
+    "해야 한다",
+    "준수하여야",
+    "준수해야",
+    "준수사항",
+    "위반 시",
+    "위반시",
+    "감액",
+    "이행하여야",
+    "이행해야",
+)
+
+
+def _has_mandatory_language(citations: list[Citation]) -> bool:
+    """검색된 인용 본문에 의무 법령 표현이 등장하는지 확인 (top 2개 청크 검사)."""
+    for c in citations[:2]:
+        text = (c.snippet or "") + " " + (c.article or "") + " " + (c.chapter or "")
+        if any(phrase in text for phrase in _MANDATORY_PHRASES):
+            return True
+    return False
+
+
+@tool
+async def search_subsidy_obligation_check(topic: str) -> str:
+    """특정 의무가 강제인지 임의인지 판정 (가설 기반 RAG + 도메인 단정).
+
+    "X 꼭 해야 해?", "X 안 해도 돼?" 같은 yes/no 의무성 질문 전용 도구.
+    내부적으로 두 가설을 병렬 검색해 증거 강도를 비교한다 (2026 hypothesis-driven RAG):
+      - 가설 A: "{topic} 의무 준수 위반 감액"  (의무 증거)
+      - 가설 B: "{topic} 권장 임의 선택"      (선택 증거)
+
+    Verdict 결정 우선순위 (false-negative 방지):
+      1) topic 이 8대 준수사항 키워드와 매칭 → 즉시 MANDATORY (시행령 직접 근거).
+      2) 의무 가설 검색 결과 본문에 "하여야 한다", "준수사항", "감액" 등 의무
+         법령 표현 등장 + ob_top >= 0.4 → MANDATORY.
+      3) 일반 유사도 격차 휴리스틱 (ob_top >= 0.5 AND ob_top - op_top >= 0.1).
+
+    Args:
+        topic: 의무 항목 (예: "영농기록 작성 보관", "공익기능 교육 이수").
+    """
+    import asyncio
+    obligation_q = f"{topic} 의무 준수 위반 감액"
+    optional_q = f"{topic} 권장 임의 선택"
+    obligation_cites, optional_cites = await asyncio.gather(
+        asyncio.to_thread(_search_subsidy_regulations_fast, obligation_q, 5),
+        asyncio.to_thread(_search_subsidy_regulations_fast, optional_q, 5),
+    )
+    ob_top = max((c.similarity or 0.0 for c in obligation_cites), default=0.0)
+    op_top = max((c.similarity or 0.0 for c in optional_cites), default=0.0)
+
+    # 1) 8대 준수사항은 시행령상 의무 — RAG 점수 무관 단정.
+    if _matches_known_mandatory(topic):
+        verdict = "MANDATORY"
+        verdict_source = "known_8_obligations"
+    # 2) 의무 법령 표현이 본문에 직접 등장 — 단정 가능.
+    elif ob_top >= 0.4 and _has_mandatory_language(obligation_cites):
+        verdict = "MANDATORY"
+        verdict_source = "mandatory_phrase_in_snippet"
+    # 3) 일반 유사도 격차 휴리스틱.
+    elif ob_top >= 0.5 and ob_top - op_top >= 0.1:
+        verdict = "MANDATORY"
+        verdict_source = "similarity_margin"
+    elif op_top >= 0.5 and op_top - ob_top >= 0.1:
+        verdict = "OPTIONAL"
+        verdict_source = "similarity_margin"
+    else:
+        verdict = "UNCLEAR"
+        verdict_source = "no_signal"
+
+    payload = {
+        "topic": topic,
+        "obligation_evidence": [c.model_dump(exclude_none=True) for c in obligation_cites],
+        "optional_evidence": [c.model_dump(exclude_none=True) for c in optional_cites],
+        "obligation_top_sim": round(ob_top, 4),
+        "optional_top_sim": round(op_top, 4),
+        "verdict_hint": verdict,
+        "verdict_source": verdict_source,
+    }
+    return json.dumps(payload, ensure_ascii=False)
 
 
 @tool
@@ -393,7 +756,11 @@ SUBSIDY_TOOLS = [
     get_my_farm_profile,
     list_eligible_subsidies,
     check_eligibility_rule,
-    search_subsidy_regulations,
+    search_subsidy_regulations_fast,
+    # search_subsidy_regulations (slow rerank) 는 노출하지 않는다 — `_fast` 가
+    # 내부적으로 신뢰도 낮을 때 자동 escalate 하므로 LLM 이 직접 호출할 이유가 없다.
+    # 이전엔 둘 다 노출 → Grok 이 "확신 위해" 둘 다 호출 → 14s 추가 비용 발생.
+    search_subsidy_obligation_check,
     get_subsidy_details,
 ]
 
@@ -428,6 +795,8 @@ ORCHESTRATOR_TOOLS = [
     get_recent_iot_decisions,
     list_eligible_subsidies,
     check_eligibility_rule,
-    search_subsidy_regulations,
+    search_subsidy_regulations_fast,
+    # search_subsidy_regulations (slow) 제외 — `_fast` 의 자동 escalation 으로 대체.
+    search_subsidy_obligation_check,
     get_subsidy_details,
 ]

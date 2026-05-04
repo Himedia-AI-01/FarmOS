@@ -198,20 +198,20 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
   });
 
   return (
-    <div className="rounded-2xl border border-indigo-100 shadow-sm overflow-hidden bg-white">
+    <div className="rounded-2xl border border-[color:var(--color-line)] shadow-sm overflow-hidden bg-white">
       {/* 헤더 (그라디언트 바) */}
-      <div className="bg-gradient-to-r from-indigo-50 via-white to-purple-50 px-5 py-4 border-b border-indigo-100">
+      <div className="bg-[color:var(--color-primary-soft)] px-5 py-4 border-b border-[color:var(--color-line)]">
         <div className="flex items-center justify-between">
           <button
             onClick={() => moveDate(-1)}
-            className="p-1.5 rounded-lg text-[color:var(--color-ink-faint)] hover:text-indigo-600 hover:bg-white/70 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-primary-dark)] hover:bg-white/70 transition cursor-pointer"
             aria-label="이전 날짜"
           >
             <MdChevronLeft className="text-xl" />
           </button>
 
           <div className="flex flex-col items-center gap-1">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-indigo-500">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--color-primary-dark)]">
               <MdAutoAwesome />
               <span>AI 통합 영농일지</span>
             </div>
@@ -220,7 +220,7 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
               <button
                 type="button"
                 onClick={() => setDate(todayStr)}
-                className="text-[11px] text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5 cursor-pointer"
+                className="text-[11px] text-[color:var(--color-primary-dark)] hover:text-[color:var(--color-primary-dark)] flex items-center gap-0.5 cursor-pointer"
               >
                 <MdToday className="text-sm" /> 오늘로
               </button>
@@ -230,7 +230,7 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
           <button
             onClick={() => moveDate(1)}
             disabled={isToday}
-            className="p-1.5 rounded-lg text-[color:var(--color-ink-faint)] hover:text-indigo-600 hover:bg-white/70 transition cursor-pointer disabled:text-gray-200 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            className="p-1.5 rounded-lg text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-primary-dark)] hover:bg-white/70 transition cursor-pointer disabled:text-gray-200 disabled:cursor-not-allowed disabled:hover:bg-transparent"
             aria-label="다음 날짜"
           >
             <MdChevronRight className="text-xl" />
@@ -266,12 +266,12 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
         {/* 상태 B: 기록은 있는데 통합본 아직 없음 → CTA */}
         {!loading && !current && entryCount > 0 && (
           <div className="py-6 flex flex-col items-center text-center">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center mb-4 shadow-md">
+            <div className="w-14 h-14 rounded-full bg-[color:var(--color-primary)] flex items-center justify-center mb-4 shadow-md">
               <MdAutoAwesome className="text-white text-2xl" />
             </div>
             <p className="text-sm text-[color:var(--color-ink-soft)] mb-1">
               오늘 기록한{" "}
-              <strong className="text-indigo-600 text-base">{entryCount}건</strong>
+              <strong className="text-[color:var(--color-primary-dark)] text-base">{entryCount}건</strong>
               의 작업을
             </p>
             <p className="text-sm text-[color:var(--color-ink-soft)] mb-5">
@@ -280,7 +280,7 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
             <button
               onClick={() => handleGenerate(false)}
               disabled={busy}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-md hover:shadow-lg active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white bg-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-dark)] shadow-md hover:shadow-lg active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer"
             >
               <MdAutoAwesome className="text-base" />
               {busy ? "AI가 작성 중..." : "통합 영농일지 생성"}
@@ -350,7 +350,7 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
                   <MdEdit className="text-sm" /> 초안
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 font-medium">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)] font-medium">
                 <MdAutoAwesome className="text-sm" />
                 {SOURCE_LABEL[current.narrative_source] || current.narrative_source}
               </span>
@@ -391,7 +391,7 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
                   <button
                     onClick={handleRegenerate}
                     disabled={busy}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 active:scale-95 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium text-[color:var(--color-primary-dark)] bg-white border border-[color:var(--color-primary-soft)] hover:bg-[color:var(--color-primary-soft)] active:scale-95 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     title="기존 본문을 히스토리로 보내고 새로 생성"
                   >
                     <MdAutorenew className={`text-base ${busy ? "animate-spin" : ""}`} /> 재생성
@@ -399,7 +399,7 @@ export default function DailyJournalPanel({ initialDate, refreshToken }: Props) 
                   <button
                     onClick={handleConfirm}
                     disabled={busy}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-sm hover:shadow active:scale-95 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-semibold text-white bg-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-dark)] shadow-sm hover:shadow active:scale-95 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                   >
                     <MdCheckCircle className="text-base" /> 확정
                   </button>

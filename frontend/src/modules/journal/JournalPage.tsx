@@ -27,7 +27,7 @@ const STAGE_COLORS: Record<string, string> = {
   사전준비: "bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-soft)]",
   경운: "bg-[color:var(--tint-warning)] text-[color:var(--color-accent-dark)]",
   파종: "bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]",
-  정식: "bg-emerald-100 text-emerald-700",
+  정식: "bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]",
   작물관리: "bg-blue-100 text-[color:var(--color-info)]",
   수확: "bg-orange-100 text-orange-700",
 };

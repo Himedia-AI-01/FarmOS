@@ -13,7 +13,7 @@ export default function SubsidySkeleton() {
       </span>
       <div className="space-y-6 animate-pulse" aria-hidden>
         {/* 안내 헤더 카드 */}
-        <div className="card bg-gradient-to-r from-gray-50 to-gray-100/60 border-gray-200">
+        <div className="card bg-[color:var(--color-surface)] border-[color:var(--color-line)]">
           <div className="flex items-start gap-3">
             <div className="h-10 w-10 flex-shrink-0 rounded-lg bg-gray-200" />
             <div className="flex-1 space-y-2">

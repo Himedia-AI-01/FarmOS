@@ -37,7 +37,7 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
   });
 
   return (
-    <div className="card bg-gradient-to-r from-green-50 to-emerald-50">
+    <div className="card bg-[color:var(--color-primary-soft)]">
       {/* 날짜 네비게이션 */}
       <div className="flex items-center justify-between mb-3">
         <button
@@ -75,7 +75,7 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
             </div>
             {summary.crops.length > 0 && (
               <div>
-                <p className="text-2xl font-bold text-emerald-600">
+                <p className="text-2xl font-bold text-[color:var(--color-primary)]">
                   {summary.crops.length}
                 </p>
                 <p className="text-xs text-[color:var(--color-ink-mute)]">작목 수</p>

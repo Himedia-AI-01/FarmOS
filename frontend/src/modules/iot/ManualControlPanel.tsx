@@ -21,8 +21,8 @@ function SourceBadge({ source }: { source: string }) {
     manual: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
     button: 'bg-blue-100 text-[color:var(--color-info)]',
     rule: 'bg-yellow-100 text-yellow-700',
-    ai: 'bg-purple-100 text-purple-700',
-    tool: 'bg-indigo-100 text-indigo-700',
+    ai: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
+    tool: 'bg-[color:var(--tint-info)] text-[color:var(--color-info)]',
   };
   const labels: Record<string, string> = {
     manual: '수동',
@@ -47,7 +47,7 @@ function LedIndicator({ on }: { on: boolean }) {
 const ACCENT_CLASSES: Record<string, string> = {
   'blue-500': 'accent-blue-500',
   'amber-500': 'accent-amber-500',
-  'emerald-500': 'accent-emerald-500',
+  'primary': 'accent-primary',
   'orange-500': 'accent-orange-500',
 };
 
@@ -332,7 +332,7 @@ function ShadingCard({
   return (
     <div className={`bg-white rounded-xl border p-4 space-y-3 ${state.locked ? 'ring-1 ring-orange-300' : ''}`}>
       <div className="flex items-center gap-2">
-        <MdShield className="text-xl text-emerald-500" />
+        <MdShield className="text-xl text-[color:var(--color-success)]" />
         <span className="font-semibold text-[color:var(--color-ink)] text-sm">차광/보온</span>
         <LedIndicator on={state.led_on} />
         <SourceBadge source={state.source} />
@@ -345,7 +345,7 @@ function ShadingCard({
           onClick={handleMasterToggle}
           className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
             state.on
-              ? 'bg-emerald-500 text-white'
+              ? 'bg-[color:var(--color-primary)] text-white'
               : 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)] hover:bg-[color:var(--color-surface-deep)]'
           }`}
         >
@@ -361,7 +361,7 @@ function ShadingCard({
         <ControlSlider
           value={state.shade_pct}
           onChange={(v) => onSlider({ shade_pct: v, on: v > 0 || state.insulation_pct > 0 })}
-          color="emerald-500"
+          color="primary"
           disabled={!state.on}
         />
       </div>
@@ -488,7 +488,7 @@ export default function ManualControlPanel() {
                 ventilation: 'bg-blue-100 border-blue-400 text-[color:var(--color-info)]',
                 irrigation: 'bg-cyan-100 border-cyan-400 text-cyan-700',
                 lighting: 'bg-[color:var(--tint-warning)] border-amber-400 text-[color:var(--color-accent-dark)]',
-                shading: 'bg-emerald-100 border-emerald-400 text-emerald-700',
+                shading: 'bg-[color:var(--color-primary-soft)] border-[color:var(--color-primary-light)] text-[color:var(--color-primary-dark)]',
               };
               const isActive = controlState[ct].active;
               return (

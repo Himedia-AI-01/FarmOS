@@ -262,7 +262,7 @@ export default function MarketPricePage() {
       </div>
 
       {/* ── 주요 가격 변동 알림 ──────────────────────── */}
-      <div className={`card ${importantChanges.length > 0 ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200' : 'bg-gradient-to-r from-green-50 to-emerald-50 border-[color:var(--color-primary-soft)]'}`}>
+      <div className={`card ${importantChanges.length > 0 ? 'bg-[color:var(--tint-warning)] border-[color:var(--color-accent)]/30' : 'bg-[color:var(--color-primary-soft)] border-[color:var(--color-primary-soft)]'}`}>
         <div className="flex items-center gap-2 mb-3">
           <MdWarningAmber className={`text-xl ${importantChanges.length > 0 ? 'text-[color:var(--color-accent)]' : 'text-success'}`} />
           <h3 className="section-title">주요 가격 변동</h3>

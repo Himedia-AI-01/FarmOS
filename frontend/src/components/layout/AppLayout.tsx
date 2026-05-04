@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
@@ -16,7 +16,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/iot': '시설 제어',
   '/reviews': '판매 인사이트',
   '/weather': '기상',
-  '/journal': '영농 기록',
+  '/journal': '영농일지',
   '/market': '시세 정보',
   '/subsidy': '공익직불',
   '/profile': '농장 프로필',
@@ -29,6 +29,13 @@ export default function AppLayout() {
 
   const drawerRef = useFocusTrap<HTMLDivElement>(agentOpen);
   useScrollLock(agentOpen);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Reset main scroll on route change (browser default doesn't help for our
+  // overflow-y-auto main; sub-pages otherwise inherit prior scroll position).
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [pathname]);
 
   // ESC closes the agent drawer
   useEffect(() => {
@@ -53,6 +60,7 @@ export default function AppLayout() {
         <div className="flex min-w-0 flex-col">
           <TopBar title={title} onOpenAgent={openAgent} />
           <main
+            ref={mainRef}
             id="main-content"
             tabIndex={-1}
             aria-label="본문"

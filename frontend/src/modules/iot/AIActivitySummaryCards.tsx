@@ -100,7 +100,7 @@ export default function AIActivitySummaryCards({
       {/* 카드 3개 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <Card
-          icon={<MdBarChart className="text-indigo-500" />}
+          icon={<MdBarChart className="text-[color:var(--color-info)]" />}
           label="총 판단"
           value={
             loading && !summary

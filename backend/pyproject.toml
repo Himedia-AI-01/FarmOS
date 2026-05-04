@@ -22,6 +22,8 @@ dependencies = [
     "langchain-upstage>=0.7.0",
     "langgraph>=1.1.6",
     "langgraph-checkpoint-postgres>=2.0.0",
+    "langsmith>=0.4.0",
+    "langcache>=0.5.0",
     "psycopg[binary,pool]>=3.2",
     "rank-bm25>=0.2.2",
     "passlib[bcrypt]>=1.7.4",
@@ -46,6 +48,9 @@ dependencies = [
 subsidy-ingest = "app.services.subsidy.gov_rag:run_ingest_pipeline"
 # PDF → Markdown 변환만 (Upstage Parse 호출, 최초 1회 또는 PDF 교체 시)
 subsidy-parse-pdf = "app.services.subsidy.pdf_ingest:_cli_main"
+# Farm Agent eval harness — 사용: cd backend && uv run farm-agent-eval
+# LangSmith 트레이싱이 활성화돼 있으면 결과가 자동 업로드됨.
+farm-agent-eval = "scripts.eval_farm_agent:main"
 
 [tool.uv]
 exclude-newer = "7 days"
@@ -53,6 +58,7 @@ exclude-newer = "7 days"
 package = true
 
 [tool.setuptools.packages.find]
-# data/, chroma_data/, logs/ 같은 런타임 산출물 디렉터리를 패키지 탐색에서 배제
-include = ["app*"]
+# data/, chroma_data/, logs/ 같은 런타임 산출물 디렉터리를 패키지 탐색에서 배제.
+# scripts* 는 [project.scripts] 콘솔 엔트리포인트가 의존하므로 포함.
+include = ["app*", "scripts*"]
 exclude = ["data*", "chroma_data*", "logs*", ".ruff_cache*"]

@@ -18,7 +18,7 @@ export default function MarketPriceSkeleton() {
         </div>
 
         {/* 주요 가격 변동 카드 */}
-        <div className="card bg-gradient-to-r from-gray-50 to-gray-100/60 border-gray-200">
+        <div className="card bg-[color:var(--color-surface)] border-[color:var(--color-line)]">
           <div className="mb-3 flex items-center gap-2">
             <div className="h-5 w-5 rounded bg-gray-200" />
             <div className="h-4 w-28 rounded bg-gray-200" />

@@ -127,6 +127,16 @@ def _search_subsidy_regulations_cached(query: str, top_k: int) -> tuple[Citation
     return tuple(rag.search(query, top_k=top_k))
 
 
+@lru_cache(maxsize=256)
+def _search_subsidy_regulations_fast_cached(query: str, top_k: int) -> tuple[Citation, ...]:
+    """Reranker 없는 경량 검색 — Solar embedding + ChromaDB top_k 만.
+
+    리랭커 단계 (cross-encoder, ~수 초) 를 건너뛴다. ~500ms 수준의 빠른 검색.
+    """
+    rag = _get_rag()
+    return tuple(rag.search_fast(query, top_k=top_k))
+
+
 def search_subsidy_regulations(query: str, top_k: int = 5) -> list[Citation]:
     """자연어 질의에 가장 관련 높은 시행지침 조항을 반환한다.
 
@@ -146,6 +156,53 @@ def search_subsidy_regulations(query: str, top_k: int = 5) -> list[Citation]:
     except Exception as e:  # noqa: BLE001 — 실패는 캐시 미스로 다음 호출에서 재시도 가능해야 함
         logger.warning("search_subsidy_regulations.failed query=%s err=%s", query, e)
         return []
+
+
+# Auto-escalation threshold: if fast search's top similarity falls below this,
+# automatically re-run with the full reranker pipeline. This is deterministic
+# (Python-side) rather than prompt-dependent — research (2026 production patterns)
+# shows LLM agents frequently ignore "if low confidence, retry" prompt rules,
+# especially under short-context / no-reasoning configurations.
+_FAST_SEARCH_CONFIDENCE_THRESHOLD = 0.5
+
+
+def search_subsidy_regulations_fast(query: str, top_k: int = 5) -> list[Citation]:
+    """빠른 시행지침 검색 + 자동 escalation.
+
+    1) 리랭커 스킵 fast 검색 시도 (~500ms).
+    2) 최고 similarity 가 0.5 미만이면 자동으로 full 정밀 검색으로 escalate.
+       ("critique-refine" 패턴 — 호출자가 신뢰도 판단을 안 해도 안전.)
+
+    호출자(에이전트)는 단일 도구만 알면 되므로 prompt 가 짧아지고 결정성이
+    좋아진다. 호출 결과의 `similarity` 필드로 어느 경로가 사용됐는지 식별 가능.
+    """
+    try:
+        fast = list(_search_subsidy_regulations_fast_cached(query, top_k))
+    except RuntimeError as e:
+        logger.error(f"RAG 초기화 실패: {e}")
+        return []
+    except Exception as e:  # noqa: BLE001
+        logger.warning("search_subsidy_regulations_fast.failed query=%s err=%s", query, e)
+        return []
+
+    if not fast:
+        # 0건 — full 검색이 더 잘 잡을 수도 있음
+        logger.info("fast_search.empty query=%r → escalating to precise", query)
+        return search_subsidy_regulations(query, top_k=top_k)
+
+    top_sim = max((c.similarity or 0.0) for c in fast)
+    if top_sim < _FAST_SEARCH_CONFIDENCE_THRESHOLD:
+        logger.info(
+            "fast_search.low_confidence query=%r top_sim=%.3f → escalating to precise",
+            query, top_sim,
+        )
+        precise = search_subsidy_regulations(query, top_k=top_k)
+        # precise 결과가 더 좋으면 그것을, 아니면 fast 유지
+        if precise:
+            precise_top = max((c.similarity or 0.0) for c in precise)
+            if precise_top > top_sim:
+                return precise
+    return fast
 
 
 # ── 5. 지원금 상세 정보 ───────────────────────────────────

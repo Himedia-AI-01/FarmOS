@@ -43,8 +43,8 @@ function PriorityBadge({ priority }: { priority: string }) {
 function SourceBadge({ source }: { source: string }) {
   const colors: Record<string, string> = {
     rule: 'bg-yellow-100 text-yellow-700',
-    llm: 'bg-purple-100 text-purple-700',
-    tool: 'bg-indigo-100 text-indigo-700',
+    llm: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
+    tool: 'bg-[color:var(--tint-info)] text-[color:var(--color-info)]',
     manual: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
   };
   const labels: Record<string, string> = {
@@ -126,7 +126,7 @@ function DecisionRow({
             <PriorityBadge priority={decision.priority} />
             <SourceBadge source={decision.source} />
             {toolCount > 0 && (
-              <span className="text-[10px] text-indigo-500">· 도구 {toolCount}</span>
+              <span className="text-[10px] text-[color:var(--color-info)]">· 도구 {toolCount}</span>
             )}
           </div>
           <p className="text-xs text-[color:var(--color-ink-mute)] mt-1 leading-relaxed line-clamp-2">
@@ -252,7 +252,7 @@ export default function AIAgentPanel() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <MdSmartToy className="text-2xl text-purple-600" />
+            <MdSmartToy className="text-2xl text-[color:var(--color-primary-dark)]" />
             <h3 className="section-title !mb-0">AI Agent 제어</h3>
             {status.enabled && (
               <span className="relative flex h-2.5 w-2.5">
@@ -360,7 +360,7 @@ export default function AIAgentPanel() {
             </ControlCard>
 
             <ControlCard
-              icon={<MdShield className="text-xl text-emerald-500" />}
+              icon={<MdShield className="text-xl text-[color:var(--color-success)]" />}
               title="차광/보온"
             >
               <div className="flex justify-between">
@@ -368,7 +368,7 @@ export default function AIAgentPanel() {
                 <span className="font-semibold text-[color:var(--color-ink)]">{cs.shading.shade_pct}%</span>
               </div>
               <div className="w-full bg-[color:var(--color-surface-deep)] rounded-full h-1.5 mt-1">
-                <div className="bg-emerald-400 h-1.5 rounded-full transition-all" style={{ width: `${cs.shading.shade_pct}%` }} />
+                <div className="bg-[color:var(--color-primary)] h-1.5 rounded-full transition-all" style={{ width: `${cs.shading.shade_pct}%` }} />
               </div>
               <div className="flex justify-between mt-1.5">
                 <span>보온커튼</span>
@@ -415,7 +415,7 @@ export default function AIAgentPanel() {
                       data-testid="ai-more-btn"
                       onClick={() => fetchMore()}
                       disabled={listLoading || loading}
-                      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 disabled:text-[color:var(--color-ink-faint)]"
+                      className="inline-flex items-center gap-1 text-xs text-[color:var(--color-info)] hover:text-[color:var(--color-info)] disabled:text-[color:var(--color-ink-faint)]"
                     >
                       <MdExpandMore className="text-base" />
                       {listLoading ? '불러오는 중…' : '더보기'}

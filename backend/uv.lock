@@ -725,6 +725,7 @@ dependencies = [
     { name = "fpdf2" },
     { name = "httpx" },
     { name = "kiwipiepy" },
+    { name = "langcache" },
     { name = "langchain" },
     { name = "langchain-core" },
     { name = "langchain-mcp-adapters" },
@@ -732,6 +733,7 @@ dependencies = [
     { name = "langchain-upstage" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
+    { name = "langsmith" },
     { name = "passlib", extra = ["bcrypt"] },
     { name = "pillow" },
     { name = "psycopg", extra = ["binary", "pool"] },
@@ -762,6 +764,7 @@ requires-dist = [
     { name = "fpdf2", specifier = ">=2.8.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "kiwipiepy", specifier = ">=0.18.0" },
+    { name = "langcache", specifier = ">=0.5.0" },
     { name = "langchain", specifier = ">=1.0.0" },
     { name = "langchain-core", specifier = ">=1.2.27" },
     { name = "langchain-mcp-adapters", specifier = ">=0.2.2" },
@@ -769,6 +772,7 @@ requires-dist = [
     { name = "langchain-upstage", specifier = ">=0.7.0" },
     { name = "langgraph", specifier = ">=1.1.6" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.0" },
+    { name = "langsmith", specifier = ">=0.4.0" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
@@ -1533,6 +1537,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2c/8f/85bf51ad4150f64e8c665daf0d9dfe9787ae92005efb9a4d1cba592bd79d/kubernetes-35.0.0.tar.gz", hash = "sha256:3d00d344944239821458b9efd484d6df9f011da367ecb155dadf9513f05f09ee", size = 1094642, upload-time = "2026-01-16T01:05:27.76Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0c/70/05b685ea2dffcb2adbf3cdcea5d8865b7bc66f67249084cf845012a0ff13/kubernetes-35.0.0-py2.py3-none-any.whl", hash = "sha256:39e2b33b46e5834ef6c3985ebfe2047ab39135d41de51ce7641a7ca5b372a13d", size = 2017602, upload-time = "2026-01-16T01:05:25.991Z" },
+]
+
+[[package]]
+name = "langcache"
+version = "0.11.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpcore" },
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/58/6b/8f0c5f8079e5ff50be72da71ea11934ffa66c70a5c378bc3576fcfcfa53a/langcache-0.11.1.tar.gz", hash = "sha256:df7b9221b88785ffdc02fd9539963e84652717100994ba83014cd7cc7f1787be", size = 39780, upload-time = "2025-11-21T15:01:38.289Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/f9/b6a4606c39cff5bd07342a476f01ba0b4038f8bb9fa41c214f4e537316f9/langcache-0.11.1-py3-none-any.whl", hash = "sha256:27b7125196159d67cdad0103f2c5fe770807fb5514445924094b1a2f490dcc8a", size = 64424, upload-time = "2025-11-21T15:01:37.405Z" },
 ]
 
 [[package]]

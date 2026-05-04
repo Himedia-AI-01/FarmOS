@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = ""
     APP_TIMEZONE: str = ""
 
+    # 개발 모드 — True 일 때 farm_agent SSE 가 실제 예외 메시지를 사용자에게
+    # 그대로 노출한다 (디버깅 편의). 운영에서는 반드시 .env 에서 false 로.
+    DEBUG: bool = False
+
     # ── 데이터베이스 ────────────────────────────────────────────────────────
     # 데이터베이스 (PostgreSQL)
     DATABASE_URL: str = ""
@@ -73,6 +77,16 @@ class Settings(BaseSettings):
     LITELLM_API_KEY: str = ""
     LITELLM_URL: str = ""
     LITELLM_MODEL: str = ""
+
+    # OpenRouter (Farm Agent 전용 — Grok 4.1 Fast with reasoning)
+    # 비어있으면 LITELLM_* 로 폴백한다.
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_MODEL: str = "x-ai/grok-4.1-fast"
+    # 기본 OFF — reasoning ON 은 LLM 호출당 8-25 초 추가. Deep Agents 는 한 턴에
+    # LLM 을 3-4 회 호출하므로 (오케스트레이터 → 서브에이전트 → 합성) 차이가 누적되어
+    # 30-70 초 vs 6-14 초 로 5x 차이가 난다. 어려운 질의에만 ON 으로 토글.
+    OPENROUTER_REASONING_ENABLED: bool = False
 
     # Groq (Whisper STT)
     # 영농일지 서버사이드 음성 전사(STT)에 사용
@@ -156,6 +170,32 @@ class Settings(BaseSettings):
     # SSE 스트리밍 heartbeat 주기 (초). nginx 등 리버스 프록시의 idle timeout 회피.
     # Gemma 가 task 위임 직후 첫 토큰까지 10초 이상 걸릴 수 있어 heartbeat 필요.
     FARM_AGENT_SSE_HEARTBEAT_SEC: int = 15
+
+    # 직불(시행지침) 답변에 [doc > 제N조] 인용이 누락되면 1회 재프롬프트.
+    # ReasoningBank 패턴: 실패한 turn 을 graph 내부에서 즉시 보정한다.
+    # OFF 로 두면 iter-4 의 low_confidence 경고 신호만 유지 (재프롬프트 없음).
+    FARM_AGENT_CITATION_REPROMPT_ENABLED: bool = True
+    # 재프롬프트 최대 횟수 — 1 이 권장. 2 이상은 latency 폭발 위험.
+    FARM_AGENT_CITATION_REPROMPT_MAX: int = 1
+
+    # 추가 메모리 파일 (CSV, backend/ 기준 상대경로 또는 절대경로).
+    # 기본 AGENTS.md (도메인 상수) 외에 ReasoningBank 스타일 STRATEGIES.md
+    # (전략-수준 추론 힌트 + 실패 모드 회피 패턴) 등을 추가 주입한다.
+    # 예: "memory/STRATEGIES.md,memory/POLICIES.md"
+    # 비어 있으면 AGENTS.md 만 사용 (기존 동작 유지).
+    FARM_AGENT_MEMORY_PATHS: str = "memory/STRATEGIES.md"
+
+    # ── Redis LangCache (LLM 응답 의미 기반 캐시) ───────────────────────────
+    # Hosted semantic cache — 직불/진단/시세 등 반복·유사 질의의 LLM 호출을 우회한다.
+    # 캐시 hit 시 LLM 라운드트립(2-10s)을 ms 단위 lookup 으로 대체 → 비용·지연 동시 감소.
+    # 비활성: LANGCACHE_API_KEY / CACHE_ID / SERVER_URL 중 하나라도 비어있으면 자동 OFF.
+    # Scope: 답변은 사용자별 attributes={"user_id": ...} 로 격리 — 농장 컨텍스트 누수 방지.
+    LANGCACHE_API_KEY: str = ""
+    LANGCACHE_CACHE_ID: str = ""
+    LANGCACHE_SERVER_URL: str = "https://api.langcache.redis.io"
+    # Threshold 0.0-1.0 — Redis 권장 시작값 0.85. 낮추면 paraphrase 더 잡고 오답 risk ↑.
+    LANGCACHE_SIMILARITY_THRESHOLD: float = 0.85
+    LANGCACHE_ENABLED: bool = True
 
     # LangSmith 트레이싱 (Deep Agent + 서브에이전트 + 도구 호출 전체 추적).
     # API 키가 비어 있으면 자동 비활성. shopping_mall과 동일 키 공유 가능.

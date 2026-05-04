@@ -145,123 +145,140 @@ export default function DashboardPage() {
   })();
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-7 lg:space-y-9">
 
-      {/* ──────────── Hero ──────────── */}
-      <section className="rise rise-1 relative overflow-hidden rounded-3xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-8 lg:p-10">
+      {/* ──────────── Hero strip — compact greeting ──────────── */}
+      <section className="rise rise-1 flex flex-wrap items-end justify-between gap-x-6 gap-y-3" aria-label="대시보드 헤더">
+        <div className="min-w-0">
+          <p className="eyebrow">{greeting}</p>
+          <h2 className="display-1 mt-1">
+            {user?.farmname || `${user?.name ?? '농장'}님`}
+          </h2>
+          <p className="mt-2 max-w-[56ch] text-helper">
+            에이전트가 오늘의 농장 데이터를 정리해 두었어요. 우선순위를 확인하세요.
+          </p>
+        </div>
+        <div
+          className="inline-flex items-center gap-2 rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-card)] px-3.5 py-2 text-[13px] font-semibold shadow-[var(--shadow-xs)]"
+          role="status"
+          aria-live="polite"
+        >
+          {connected && hasData ? (
+            <>
+              <StatusDot tone="success" pulse />
+              <span className="text-[color:var(--color-success)]">실시간</span>
+              <span className="text-[color:var(--color-ink-faint)]">·</span>
+              <span className="num text-[color:var(--color-ink-soft)]">{formatTime(latest?.timestamp)}</span>
+            </>
+          ) : (
+            <>
+              <MdWifiOff aria-hidden className="text-[15px] text-[color:var(--color-ink-mute)]" />
+              <span className="text-[color:var(--color-ink-mute)]">오프라인</span>
+            </>
+          )}
+        </div>
+      </section>
 
-        <div className="relative grid gap-10 lg:grid-cols-[1.5fr_1fr]">
-          {/* Greeting + briefing */}
-          <div>
-            <p className="eyebrow">{greeting}</p>
-            <h2 className="display-1 mt-1.5">
-              {user?.farmname || `${user?.name ?? '농장'}님`}
-            </h2>
-            <p className="mt-3 max-w-md text-helper">
-              에이전트가 오늘의 농장 데이터를 정리해 두었어요. 아래에서 우선순위를 확인하세요.
-            </p>
+      {/* ──────────── Field data — sensors + status strip ──────────── */}
+      <section className="rise rise-2 space-y-3" aria-labelledby="field-data-title">
+        <div className="flex items-end justify-between">
+          <h3 id="field-data-title" className="text-[1.125rem] font-bold tracking-[-0.018em] text-[color:var(--color-ink)]">
+            현장 데이터
+          </h3>
+          <Link
+            to="/iot"
+            className="text-[13px] font-semibold text-[color:var(--color-primary-dark)] transition hover:text-[color:var(--color-primary)]"
+          >
+            전체 보기 →
+          </Link>
+        </div>
 
-            <div className="mt-7">
-              <div className="mb-3 flex items-center gap-2.5">
-                <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]">
-                  <MdAutoAwesome className="text-[16px]" />
+        <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {sensorTiles.map(({ label, value, unit, icon: Icon, tintClass, iconClass }) => (
+            <li
+              key={label}
+              className="rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-4 transition-colors hover:border-[color:var(--color-primary-light)] sm:p-5"
+            >
+              <div className="flex items-start justify-between">
+                <span
+                  aria-hidden
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl ${tintClass} ${iconClass}`}
+                >
+                  <Icon className="text-[20px]" />
                 </span>
-                <span className="text-[15px] font-bold text-[color:var(--color-ink)]">오늘의 브리핑</span>
-                <button
-                  type="button"
-                  onClick={() => void fetchBriefing(true)}
-                  disabled={briefingLoading}
-                  className="ml-auto rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-[color:var(--color-primary-dark)] transition hover:bg-[color:var(--color-primary-soft)] disabled:opacity-50"
-                >
-                  {briefingLoading ? '분석 중...' : '다시 분석'}
-                </button>
+                <span className="text-[12px] font-semibold text-[color:var(--color-ink-faint)]">{label}</span>
               </div>
-              <div className="max-h-52 overflow-y-auto rounded-2xl bg-[color:var(--color-surface)] px-5 py-5">
-                {briefingLoading && !briefing ? (
-                  <Skeleton shape="text" lines={4} label="브리핑 생성 중" />
-                ) : briefing ? (
-                  <div className="text-[15px] leading-[1.75] text-[color:var(--color-ink-soft)]">
-                    <AgentMarkdown content={briefing.content} />
-                  </div>
-                ) : (
-                  <p className="text-[15px] text-[color:var(--color-ink-mute)]">브리핑이 아직 준비되지 않았습니다.</p>
-                )}
-              </div>
-            </div>
+              <p className="mt-3 num text-[1.75rem] font-bold leading-[1.05] tracking-[-0.022em] text-[color:var(--color-ink)] sm:text-[2rem]">
+                {value ?? '--'}
+                <span className="ml-1 text-[14px] font-semibold text-[color:var(--color-ink-mute)]">
+                  {unit}
+                </span>
+              </p>
+            </li>
+          ))}
+        </ul>
+
+        <dl className="grid grid-cols-3 divide-x divide-[color:var(--color-line-soft)] overflow-hidden rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] text-center">
+          <div className="px-4 py-3">
+            <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">에이전트</dt>
+            <dd className="mt-1 text-[15px] font-bold text-[color:var(--color-ink)]">{agentMode}</dd>
           </div>
-
-          {/* Live status panel */}
-          <div className="lg:border-l lg:border-[color:var(--color-line-soft)] lg:pl-10">
-            <div className="flex items-center justify-between">
-              <span className="text-[15px] font-bold text-[color:var(--color-ink)]">현장 데이터</span>
-              <span
-                className="inline-flex items-center gap-1.5 text-[13px] font-semibold"
-                role="status"
-                aria-live="polite"
-              >
-                {connected && hasData ? (
-                  <>
-                    <StatusDot tone="success" pulse />
-                    <span className="text-[color:var(--color-success)]">실시간 · {formatTime(latest?.timestamp)}</span>
-                  </>
-                ) : (
-                  <>
-                    <MdWifiOff aria-hidden className="text-[15px] text-[color:var(--color-ink-mute)]" />
-                    <span className="text-[color:var(--color-ink-mute)]">오프라인</span>
-                  </>
-                )}
-              </span>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              {sensorTiles.map(({ label, value, unit, icon: Icon, tintClass, iconClass }) => (
-                <div
-                  key={label}
-                  className="rounded-2xl border border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] p-4 transition-colors hover:border-[color:var(--color-line)]"
-                >
-                  <span
-                    aria-hidden
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${tintClass} ${iconClass}`}
-                  >
-                    <Icon className="text-[18px]" />
-                  </span>
-                  <p className="mt-3 text-[13.5px] font-semibold text-[color:var(--color-ink-mute)]">{label}</p>
-                  <p className="mt-1 num text-[1.625rem] font-bold leading-[1.1] tracking-[-0.02em] text-[color:var(--color-ink)]">
-                    {value ?? '--'}
-                    <span className="ml-0.5 text-[14px] font-semibold text-[color:var(--color-ink-mute)]">
-                      {unit}
-                    </span>
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <dl className="mt-5 grid grid-cols-3 gap-3 text-center">
-              <div>
-                <dt className="text-[12.5px] font-semibold text-[color:var(--color-ink-mute)]">에이전트</dt>
-                <dd className="mt-1 text-[15px] font-bold text-[color:var(--color-ink)]">{agentMode}</dd>
-              </div>
-              <div className="border-x border-[color:var(--color-line-soft)]">
-                <dt className="text-[12.5px] font-semibold text-[color:var(--color-ink-mute)]">미해결 알림</dt>
-                <dd className="mt-1 num text-[15px] font-bold text-[color:var(--color-ink)]">
-                  {riskCount}
-                  <span className="ml-0.5 text-[12.5px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[12.5px] font-semibold text-[color:var(--color-ink-mute)]">관수 이력</dt>
-                <dd className="mt-1 num text-[15px] font-bold text-[color:var(--color-ink)]">
-                  {irrigations.length}
-                  <span className="ml-0.5 text-[12.5px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
-                </dd>
-              </div>
-            </dl>
+          <div className="px-4 py-3">
+            <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">미해결 알림</dt>
+            <dd className="mt-1 num text-[15px] font-bold text-[color:var(--color-ink)]">
+              {riskCount}
+              <span className="ml-0.5 text-[12px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
+            </dd>
           </div>
+          <div className="px-4 py-3">
+            <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">관수 이력</dt>
+            <dd className="mt-1 num text-[15px] font-bold text-[color:var(--color-ink)]">
+              {irrigations.length}
+              <span className="ml-0.5 text-[12px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      {/* ──────────── Today's briefing — featured AI card ──────────── */}
+      <section className="rise rise-3 overflow-hidden rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)]" aria-labelledby="briefing-title">
+        <header className="flex items-center gap-2.5 border-b border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] px-5 py-3.5 sm:px-6">
+          <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]">
+            <MdAutoAwesome className="text-[16px]" />
+          </span>
+          <h3 id="briefing-title" className="text-[15px] font-bold text-[color:var(--color-ink)]">오늘의 브리핑</h3>
+          {briefing?.cached && (
+            <span className="chip text-[11px]" title="캐시된 응답">cached</span>
+          )}
+          <button
+            type="button"
+            onClick={() => void fetchBriefing(true)}
+            disabled={briefingLoading}
+            className="ml-auto rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-[color:var(--color-primary-dark)] transition hover:bg-[color:var(--color-primary-soft)] disabled:opacity-50"
+          >
+            {briefingLoading ? '분석 중...' : '다시 분석'}
+          </button>
+        </header>
+        <div className="max-h-[24rem] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+          {briefingLoading && !briefing ? (
+            <Skeleton shape="text" lines={5} label="브리핑 생성 중" />
+          ) : briefing ? (
+            <div className="text-[15px] leading-[1.75] text-[color:var(--color-ink-soft)]">
+              <AgentMarkdown content={briefing.content} />
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              icon={<MdAutoAwesome className="text-[22px]" />}
+              title="브리핑이 아직 준비되지 않았어요"
+              description="센서 데이터가 들어오면 자동으로 정리해 드릴게요."
+            />
+          )}
         </div>
       </section>
 
       {/* ──────────── Agent actions ──────────── */}
-      <section className="rise rise-2" aria-labelledby="agent-actions-title">
+      <section className="rise rise-4" aria-labelledby="agent-actions-title">
         <div className="mb-5">
           <h3 id="agent-actions-title" className="text-[1.375rem] font-bold tracking-[-0.02em] text-[color:var(--color-ink)]">
             에이전트에게 맡기기
@@ -300,7 +317,7 @@ export default function DashboardPage() {
       </section>
 
       {/* ──────────── Modules + insights ──────────── */}
-      <section className="rise rise-3 grid gap-7 xl:grid-cols-[minmax(0,1fr)_360px]" aria-labelledby="modules-title">
+      <section className="rise grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]" aria-labelledby="modules-title">
         <div>
           <div className="mb-5">
             <h3 id="modules-title" className="text-[1.375rem] font-bold tracking-[-0.02em] text-[color:var(--color-ink)]">

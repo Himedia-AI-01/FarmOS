@@ -110,10 +110,10 @@ const isRainy = (item: ForecastItem) =>
   (item.precipitation ?? 0) > 0 || ['비', '비/눈', '눈', '빗방울', '진눈깨비'].includes(item.sky ?? '');
 
 const weatherTone = (item: ForecastItem) => {
-  if (isRainy(item)) return 'border-blue-200 bg-blue-50';
-  if ((item.wind_speed ?? 0) >= 7) return 'border-amber-200 bg-amber-50';
-  if (item.sky === '맑음') return 'border-green-200 bg-green-50';
-  return 'border-gray-100 bg-gray-50';
+  if (isRainy(item)) return 'border-[color:var(--color-info)]/30 bg-[color:var(--tint-info)]';
+  if ((item.wind_speed ?? 0) >= 7) return 'border-amber-200 bg-[color:var(--tint-warning)]';
+  if (item.sky === '맑음') return 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]';
+  return 'border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)]';
 };
 
 // 일일 예보 카드 톤 — sky 텍스트 또는 부분 매칭(예: "흐리고 비")으로 판정
@@ -123,13 +123,13 @@ const dailyTone = (item: DailyForecast) => {
     (item.precipitation ?? 0) > 0 ||
     /비|눈|빗방울|진눈깨비|소나기/.test(sky)
   ) {
-    return 'border-blue-200 bg-blue-50';
+    return 'border-[color:var(--color-info)]/30 bg-[color:var(--tint-info)]';
   }
-  if ((item.precipitation_prob ?? 0) >= 60) return 'border-blue-100 bg-blue-50/60';
-  if ((item.wind_speed_max ?? 0) >= 7) return 'border-amber-200 bg-amber-50';
-  if (sky === '맑음') return 'border-green-200 bg-green-50';
-  if (/흐림/.test(sky)) return 'border-gray-200 bg-gray-100';
-  return 'border-gray-100 bg-gray-50';
+  if ((item.precipitation_prob ?? 0) >= 60) return 'border-[color:var(--color-info)]/20 bg-[color:var(--tint-info)]/60';
+  if ((item.wind_speed_max ?? 0) >= 7) return 'border-amber-200 bg-[color:var(--tint-warning)]';
+  if (sky === '맑음') return 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]';
+  if (/흐림/.test(sky)) return 'border-[color:var(--color-line)] bg-[color:var(--color-surface-deep)]';
+  return 'border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)]';
 };
 
 const dailySkyEmoji = (item: DailyForecast) => {
@@ -156,8 +156,25 @@ const formatDailyLabel = (item: DailyForecast) => {
   return `${item.weekday ?? ''} · ${md}`;
 };
 
+// 백엔드 farm_agent.weather_alerts.build_task_advisories 가 만드는 per-day 결정.
+// status 의 의미:
+//   blocked → critical advisory 또는 강수/적설 — 작업 자체 보류 권장
+//   caution → warning level — 주의해서 진행
+//   ok      → 임계 미달 — 정상 진행
+interface TaskAdvisory {
+  date: string;
+  when: string;
+  status: 'blocked' | 'caution' | 'ok';
+  title: string;
+  type: string;
+  summary: string;
+  actions: string[];
+  crop_hint?: string | null;
+}
+
 export default function WeatherPage() {
   const [weather, setWeather] = useState<WeatherPayload | null>(null);
+  const [taskAdvisories, setTaskAdvisories] = useState<TaskAdvisory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   // 30초마다 갱신해 "N분 전" 라벨이 살아 움직이게 한다.
@@ -168,14 +185,23 @@ export default function WeatherPage() {
     setIsLoading(true);
     setError('');
     try {
-      const response = await fetch(`${FARMOS_API_BASE}/weather/current`, {
-        credentials: 'include',
-        signal,
-      });
-      if (!response.ok) {
-        throw new Error(`weather ${response.status}`);
+      // 기상 페이로드와 agentic 작업 판단을 동시 호출 — 두 엔드포인트 모두
+      // 같은 KMA 호출을 거치지만 각자 캐시되므로 직렬화할 이유 없음.
+      const [weatherRes, advRes] = await Promise.all([
+        fetch(`${FARMOS_API_BASE}/weather/current`, { credentials: 'include', signal }),
+        fetch(`${FARMOS_API_BASE}/weather/task-advisories`, { credentials: 'include', signal }),
+      ]);
+      if (!weatherRes.ok) {
+        throw new Error(`weather ${weatherRes.status}`);
       }
-      setWeather(await response.json());
+      setWeather(await weatherRes.json());
+      // task-advisories 실패는 치명적이지 않다 — 페이지 나머지는 그대로 살아있게.
+      if (advRes.ok) {
+        const payload = (await advRes.json()) as { items?: TaskAdvisory[] };
+        setTaskAdvisories(payload.items ?? []);
+      } else {
+        setTaskAdvisories([]);
+      }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         setError('기상 데이터를 불러오지 못했습니다.');
@@ -235,39 +261,25 @@ export default function WeatherPage() {
     return { firstRain, firstWind };
   }, [forecasts]);
 
-  const tasks = useMemo(() => {
-    const next = forecasts.slice(0, 4);
-    return next.map((item) => {
-      if ((item.precipitation ?? 0) > 0) {
-        return {
-          key: `${item.valid_at}-rain`,
-          date: item.valid_at,
-          title: '실외 방제 보류',
-          description: '강수 예보가 있어 약제 살포와 노지 작업은 피하는 편이 좋습니다.',
-          type: '방제',
-          blocked: true,
-        };
-      }
-      if ((item.wind_speed ?? 0) >= 7) {
-        return {
-          key: `${item.valid_at}-wind`,
-          date: item.valid_at,
-          title: '살포 전 풍속 확인',
-          description: '바람이 강해질 수 있어 분무 작업 전 현장 풍속을 다시 확인하세요.',
-          type: '주의',
-          blocked: false,
-        };
-      }
-      return {
-        key: `${item.valid_at}-ok`,
-        date: item.valid_at,
-        title: '예정 작업 진행 가능',
-        description: '초단기 예보 기준으로 큰 기상 제한은 보이지 않습니다.',
-        type: '작업',
-        blocked: false,
-      };
-    });
-  }, [forecasts]);
+  // 작업 판단은 백엔드 agentic policy (`build_task_advisories`) 가 결정한다.
+  // 프런트엔드는 단순 렌더러 — 이 페이지의 if/else 가 farm-agent 의 판단과
+  // 어긋날 가능성을 제거. status: blocked | caution | ok.
+  const tasks = useMemo(
+    () =>
+      taskAdvisories.map((adv) => ({
+        key: `${adv.date}-${adv.status}`,
+        date: adv.date,
+        when: adv.when,
+        title: adv.title,
+        description: adv.summary,
+        type: adv.type,
+        status: adv.status,
+        blocked: adv.status === 'blocked',
+        actions: adv.actions ?? [],
+        cropHint: adv.crop_hint ?? null,
+      })),
+    [taskAdvisories],
+  );
 
   // 첫 로딩(아직 페이로드 도착 전) 에서는 shape skeleton 으로 인지 지연을 줄인다.
   // 새로고침(이미 데이터 있음)은 헤더 spin 아이콘 + 제자리 업데이트로 처리하므로 skeleton 미사용.
@@ -281,17 +293,17 @@ export default function WeatherPage() {
       <div className="card">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-blue-700">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--color-info)]">
               <MdCloud className="text-lg" />
               <span>{weather?.source === 'kma' ? '기상청 초단기실황' : '모의 기상 데이터'}</span>
             </div>
             <h3 className="mt-2 text-2xl font-bold text-gray-950">
               {current?.temperature ?? '-'}°C
             </h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-[color:var(--color-ink-mute)]">
               기준 {formatDateTime(current?.observed_at ?? weather?.generated_at)} · KST
               {observedRel && (
-                <span className="ml-2 text-xs font-medium text-gray-400" aria-live="polite">
+                <span className="ml-2 text-xs font-medium text-[color:var(--color-ink-faint)]" aria-live="polite">
                   ({observedRel})
                 </span>
               )}
@@ -308,32 +320,32 @@ export default function WeatherPage() {
           >
             <MdRefresh className={isLoading ? 'animate-spin' : ''} />
             새로고침
-            <kbd className="ml-1 hidden rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-500 sm:inline-block">
+            <kbd className="ml-1 hidden rounded border border-[color:var(--color-line)] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[color:var(--color-ink-mute)] sm:inline-block">
               R
             </kbd>
           </button>
         </div>
 
         {error ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mt-4 rounded-lg border border-[color:var(--color-danger-light)] bg-[color:var(--color-danger-light)] px-4 py-3 text-sm text-[color:var(--color-danger)]">
             {error}
           </div>
         ) : (
           <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <p className="text-xs font-semibold text-gray-500">습도</p>
+            <div className="rounded-lg border border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] p-3">
+              <p className="text-xs font-semibold text-[color:var(--color-ink-mute)]">습도</p>
               <p className="mt-1 text-lg font-bold text-gray-950">{current?.humidity ?? '-'}%</p>
             </div>
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <p className="text-xs font-semibold text-gray-500">풍속</p>
+            <div className="rounded-lg border border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] p-3">
+              <p className="text-xs font-semibold text-[color:var(--color-ink-mute)]">풍속</p>
               <p className="mt-1 text-lg font-bold text-gray-950">{current?.wind_speed ?? '-'}m/s</p>
             </div>
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <p className="text-xs font-semibold text-gray-500">강수</p>
+            <div className="rounded-lg border border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] p-3">
+              <p className="text-xs font-semibold text-[color:var(--color-ink-mute)]">강수</p>
               <p className="mt-1 text-lg font-bold text-gray-950">{current?.precipitation ?? 0}mm</p>
             </div>
-            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <p className="text-xs font-semibold text-gray-500">격자</p>
+            <div className="rounded-lg border border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] p-3">
+              <p className="text-xs font-semibold text-[color:var(--color-ink-mute)]">격자</p>
               <p className="mt-1 text-lg font-bold text-gray-950">
                 {weather?.nx ?? '-'}, {weather?.ny ?? '-'}
               </p>
@@ -343,9 +355,9 @@ export default function WeatherPage() {
       </div>
 
       {(alerts.firstRain || alerts.firstWind) && (
-        <div className="card border-amber-200 bg-amber-50">
+        <div className="card border-amber-200 bg-[color:var(--tint-warning)]">
           <div className="flex items-start gap-3">
-            <MdWarning className="mt-0.5 text-2xl text-amber-600" />
+            <MdWarning className="mt-0.5 text-2xl text-[color:var(--color-accent-dark)]" />
             <div>
               <p className="font-bold text-amber-800">작업 전 기상 확인 필요</p>
               <p className="mt-1 text-sm text-amber-800">
@@ -365,7 +377,7 @@ export default function WeatherPage() {
             <MdCalendarMonth className="text-xl text-primary" />
             5일 예보
           </h3>
-          <span className="text-xs font-semibold text-gray-500">
+          <span className="text-xs font-semibold text-[color:var(--color-ink-mute)]">
             출처: 기상청 (단기 + 중기)
           </span>
         </div>
@@ -383,23 +395,23 @@ export default function WeatherPage() {
                     isToday ? 'ring-2 ring-primary/40' : ''
                   }`}
                 >
-                  <p className="text-xs font-bold text-gray-700">{formatDailyLabel(day)}</p>
+                  <p className="text-xs font-bold text-[color:var(--color-ink-soft)]">{formatDailyLabel(day)}</p>
                   <p className="mt-2 text-2xl">{dailySkyEmoji(day)}</p>
-                  <p className="mt-1 text-xs font-semibold text-gray-700">{day.sky ?? '확인 어려움'}</p>
+                  <p className="mt-1 text-xs font-semibold text-[color:var(--color-ink-soft)]">{day.sky ?? '확인 어려움'}</p>
                   <p className="mt-2 text-sm font-bold text-gray-950">
                     {day.temp_min != null ? `${Math.round(day.temp_min)}°` : '-'}
-                    <span className="mx-1 text-gray-300">/</span>
+                    <span className="mx-1 text-[color:var(--color-ink-disabled)]">/</span>
                     {day.temp_max != null ? (
-                      <span className="text-red-600">{Math.round(day.temp_max)}°</span>
+                      <span className="text-[color:var(--color-danger)]">{Math.round(day.temp_max)}°</span>
                     ) : (
                       '-'
                     )}
                   </p>
-                  <p className="mt-2 text-[11px] text-gray-500">
+                  <p className="mt-2 text-[11px] text-[color:var(--color-ink-mute)]">
                     강수 {day.precipitation_prob != null ? `${day.precipitation_prob}%` : '-'}
                   </p>
                   {day.wind_speed_max != null && (
-                    <p className="text-[11px] text-gray-400">바람 {day.wind_speed_max}m/s</p>
+                    <p className="text-[11px] text-[color:var(--color-ink-faint)]">바람 {day.wind_speed_max}m/s</p>
                   )}
                 </div>
               );
@@ -407,7 +419,7 @@ export default function WeatherPage() {
           </div>
         </div>
         {dailyForecasts.length === 0 && !isLoading && (
-          <p className="mt-3 text-xs text-gray-400">
+          <p className="mt-3 text-xs text-[color:var(--color-ink-faint)]">
             중기예보 데이터가 아직 도착하지 않았습니다. 지역 코드(.env의 KMA_MID_LAND_REG_ID)를 확인해주세요.
           </p>
         )}
@@ -417,9 +429,9 @@ export default function WeatherPage() {
       <div className="card !p-4 sm:!p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="section-title">오늘 시간별 예보</h3>
-          <span className="text-xs font-semibold text-gray-500">
+          <span className="text-xs font-semibold text-[color:var(--color-ink-mute)]">
             갱신 {formatDateTime(weather?.generated_at)}
-            {generatedRel && <span className="ml-1 text-gray-400">({generatedRel})</span>}
+            {generatedRel && <span className="ml-1 text-[color:var(--color-ink-faint)]">({generatedRel})</span>}
           </span>
         </div>
         <div className="overflow-x-auto -mx-1 px-1">
@@ -431,16 +443,16 @@ export default function WeatherPage() {
                   key={forecast.valid_at ?? index}
                   className={`w-[112px] rounded-lg border p-3 text-center transition-all sm:w-[136px] ${weatherTone(forecast)}`}
                 >
-                  <p className="text-xs font-semibold text-gray-600">{formatDay(forecast)}</p>
-                  <p className="mt-1 flex items-center justify-center gap-1 text-xs text-gray-500">
+                  <p className="text-xs font-semibold text-[color:var(--color-ink-mute)]">{formatDay(forecast)}</p>
+                  <p className="mt-1 flex items-center justify-center gap-1 text-xs text-[color:var(--color-ink-mute)]">
                     <MdAccessTime />
                     {formatTime(forecast)}
                   </p>
                   <p className="mt-3 text-xl font-bold text-gray-950">
                     {forecast.temperature ?? '-'}°
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-gray-700">{forecast.sky ?? '확인 중'}</p>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-1 text-sm font-semibold text-[color:var(--color-ink-soft)]">{forecast.sky ?? '확인 중'}</p>
+                  <p className="mt-2 text-xs text-[color:var(--color-ink-mute)]">
                     강수 {forecast.precipitation ?? 0}mm · 습도 {forecast.humidity ?? '-'}%
                   </p>
                 </div>
@@ -451,40 +463,70 @@ export default function WeatherPage() {
       </div>
 
       <div className="card">
-        <h3 className="section-title mb-4">작업 판단</h3>
+        <h3 className="section-title mb-1">작업 판단</h3>
+        <p className="mb-4 text-xs text-[color:var(--color-ink-mute)]">
+          5일 예보·작물 정보를 farm-agent 가 분석한 결정입니다.
+        </p>
         <div className="space-y-3">
-          {tasks.map((task) => (
+          {tasks.map((task) => {
+            // status → tone tokens (blocked: red, caution: amber, ok: green).
+            const tone =
+              task.status === 'blocked'
+                ? { card: 'border-[color:var(--color-danger-light)] bg-[color:var(--color-danger-light)]', icon: 'text-[color:var(--color-danger)]', badge: 'badge-danger' }
+                : task.status === 'caution'
+                  ? { card: 'border-amber-200 bg-[color:var(--tint-warning)]', icon: 'text-[color:var(--color-accent-dark)]', badge: 'badge-warning' }
+                  : { card: 'border-[color:var(--color-primary-soft)] bg-[color:var(--color-primary-soft)]', icon: 'text-[color:var(--color-primary)]', badge: 'badge-success' };
+            return (
             <div
               key={task.key}
-              className={`rounded-lg border p-4 ${
-                task.blocked ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'
-              }`}
+              className={`rounded-lg border p-4 ${tone.card}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                   {task.blocked ? (
-                    <MdBlock className="mt-0.5 text-xl text-red-600" />
+                    <MdBlock className={`mt-0.5 text-xl ${tone.icon}`} />
                   ) : (
-                    <MdCheckCircle className="mt-0.5 text-xl text-green-600" />
+                    <MdCheckCircle className={`mt-0.5 text-xl ${tone.icon}`} />
                   )}
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="font-semibold text-gray-950">{task.title}</h4>
-                      <span className={`badge text-xs ${task.blocked ? 'badge-danger' : 'badge-success'}`}>
-                        {task.type}
-                      </span>
+                      <span className={`badge text-xs ${tone.badge}`}>{task.type}</span>
                     </div>
-                    <p className="mt-1 text-sm text-gray-700">{task.description}</p>
+                    <p className="mt-1 text-sm text-[color:var(--color-ink-soft)]">{task.description}</p>
+                    {task.actions.length > 0 && (
+                      <ul className="mt-2 space-y-1 text-xs text-[color:var(--color-ink-mute)]">
+                        {task.actions.map((action, idx) => (
+                          <li key={idx} className="flex gap-1.5">
+                            <span aria-hidden>•</span>
+                            <span>{action}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {task.cropHint && (
+                      <p className="mt-2 rounded-md bg-white/60 px-2 py-1 text-xs text-[color:var(--color-ink-soft)]">
+                        🌱 {task.cropHint}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <span className="whitespace-nowrap text-sm font-medium text-gray-500">
-                  {formatDateTime(task.date)}
+                <span className="whitespace-nowrap text-sm font-medium text-[color:var(--color-ink-mute)]">
+                  {task.date
+                    ? new Date(task.date).toLocaleDateString('ko-KR', {
+                        timeZone: 'Asia/Seoul',
+                        month: 'short',
+                        day: 'numeric',
+                        weekday: 'short',
+                      })
+                    : '확인 중'}
                 </span>
               </div>
             </div>
-          ))}
+            );
+          })}
           {!isLoading && tasks.length === 0 && (
-            <p className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+            <p className="rounded-lg border border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-ink-mute)]">
               예보 데이터가 아직 없습니다.
             </p>
           )}

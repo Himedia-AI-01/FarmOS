@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { MdCheckCircle } from 'react-icons/md';
 import toast from 'react-hot-toast';
+import { Spinner } from '@/components/ui';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
@@ -10,6 +12,11 @@ export default function FindIdPage() {
   const [email, setEmail] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +30,6 @@ export default function FindIdPage() {
       const res = await fetch(`${API_BASE}/auth/find-id`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // 일관성: 다른 인증 호출과 같이 credentials 포함 (서버측 rate-limit / CSRF 토큰 호환)
         credentials: 'include',
         body: JSON.stringify({ name, email }),
       });
@@ -32,7 +38,6 @@ export default function FindIdPage() {
         throw new Error(err.detail || '아이디를 찾을 수 없습니다.');
       }
       const data = await res.json();
-      // 서버는 일치/불일치 모두 200 + masked 반환 (계정 열거 방지). 빈 문자열이면 미일치 안내.
       if (data.user_id_masked) {
         setResult(data.user_id_masked);
       } else {
@@ -45,54 +50,81 @@ export default function FindIdPage() {
     }
   };
 
-  const inputClass = 'w-full px-4 py-3 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition';
-
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-4">
+    <main className="flex min-h-screen items-center justify-center bg-[color:var(--color-surface)] p-4">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
         className="w-full max-w-md"
       >
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">아이디 찾기</h1>
-          <p className="text-gray-500 mt-1">가입 시 등록한 이름과 이메일을 입력하세요</p>
+        <div className="mb-7 text-center">
+          <h1 className="text-[1.75rem] font-bold tracking-[-0.022em] text-[color:var(--color-ink)]">
+            아이디 찾기
+          </h1>
+          <p className="mt-2 text-[14.5px] text-[color:var(--color-ink-mute)]">
+            가입 시 등록한 이름과 이메일을 입력하세요
+          </p>
         </div>
 
-        <div className="card">
+        <div className="rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-7 shadow-[var(--shadow-sm)]">
           {!result ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-base font-medium text-gray-700 mb-2">이름</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="이름을 입력하세요" className={inputClass} />
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              <div className="field">
+                <label htmlFor="findid-name" className="field-label">이름</label>
+                <input
+                  ref={nameRef}
+                  id="findid-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="이름을 입력하세요"
+                  className="input"
+                  required
+                />
               </div>
-              <div>
-                <label className="block text-base font-medium text-gray-700 mb-2">이메일</label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="가입 시 등록한 이메일" className={inputClass} />
+              <div className="field">
+                <label htmlFor="findid-email" className="field-label">이메일</label>
+                <input
+                  id="findid-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="가입 시 등록한 이메일"
+                  autoComplete="email"
+                  className="input"
+                  required
+                />
               </div>
-              <button type="submit" disabled={loading} className="btn-primary w-full">
-                {loading ? '조회 중...' : '아이디 찾기'}
+              <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary mt-2 w-full">
+                {loading ? (<><Spinner size={16} tone="inverse" label="" />조회 중...</>) : '아이디 찾기'}
               </button>
             </form>
           ) : (
-            <div className="text-center py-4">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-success/10 text-3xl mb-4">
-                ✅
-              </div>
-              <p className="text-lg text-gray-700 mb-2">회원님의 아이디는</p>
-              <p className="text-2xl font-bold text-primary mb-4">{result}</p>
-              <p className="text-sm text-gray-400 mb-6">개인정보 보호를 위해 일부가 가려져 있습니다.</p>
-              <Link to="/login" className="btn-primary w-full">로그인하러 가기</Link>
+            <div role="status" aria-live="polite" className="py-2 text-center">
+              <span aria-hidden className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary)]">
+                <MdCheckCircle className="text-[34px]" />
+              </span>
+              <p className="text-[15px] text-[color:var(--color-ink-soft)]">회원님의 아이디는</p>
+              <p className="mt-2 num text-[1.625rem] font-bold tracking-[-0.02em] text-[color:var(--color-primary-dark)]">{result}</p>
+              <p className="mt-2 text-[12.5px] text-[color:var(--color-ink-mute)]">
+                개인정보 보호를 위해 일부가 가려져 있습니다
+              </p>
+              <Link to="/login" className="btn-primary mt-6 w-full">로그인하러 가기</Link>
             </div>
           )}
 
-          <div className="mt-4 text-center flex justify-center gap-4">
-            <Link to="/find-password" className="text-gray-500 hover:text-primary transition text-base">비밀번호 찾기</Link>
-            <span className="text-gray-300">|</span>
-            <Link to="/login" className="text-gray-500 hover:text-primary transition text-base">로그인</Link>
-          </div>
+          <nav aria-label="계정 관리" className="mt-5 flex justify-center gap-4 text-[13.5px]">
+            <Link to="/find-password" className="text-[color:var(--color-ink-mute)] transition hover:text-[color:var(--color-primary-dark)]">
+              비밀번호 찾기
+            </Link>
+            <span aria-hidden className="text-[color:var(--color-line)]">·</span>
+            <Link to="/login" className="text-[color:var(--color-ink-mute)] transition hover:text-[color:var(--color-primary-dark)]">
+              로그인
+            </Link>
+          </nav>
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 }

@@ -172,19 +172,19 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
         {/* 필수 필드 */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">
               작업일 *
             </label>
             <input
               type="date"
               value={workDate}
               onChange={(e) => setWorkDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">
               필지 *
             </label>
             <input
@@ -192,12 +192,12 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
               value={fieldName}
               onChange={(e) => setFieldName(e.target.value)}
               placeholder="예: 1번 필지, 하우스 2호"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">
               작목 *
             </label>
             <input
@@ -205,18 +205,18 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
               value={crop}
               onChange={(e) => setCrop(e.target.value)}
               placeholder="예: 사과, 고추, 토마토"
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">
               작업단계 *
             </label>
             <select
               value={workStage}
               onChange={(e) => setWorkStage(e.target.value as WorkStage)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               {WORK_STAGES.map((s) => (
                 <option key={s} value={s}>
@@ -229,7 +229,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
 
         {/* 날씨 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">
             날씨
           </label>
           <div className="flex gap-2 flex-wrap">
@@ -241,7 +241,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
                 className={`px-3 py-1.5 rounded-full text-sm cursor-pointer transition-colors ${
                   weather === w
                     ? "bg-primary text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    : "bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)] hover:bg-[color:var(--color-surface-deep)]"
                 }`}
               >
                 {w}
@@ -255,16 +255,16 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
           <button
             type="button"
             onClick={() => setShowChemicals(!showChemicals)}
-            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 cursor-pointer"
+            className="flex items-center gap-1 text-sm text-[color:var(--color-ink-mute)] hover:text-[color:var(--color-ink-soft)] cursor-pointer"
           >
             {showChemicals ? <MdExpandLess /> : <MdExpandMore />}
             농약/비료 사용 정보
           </button>
 
           {showChemicals && (
-            <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-lg">
+            <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-[color:var(--color-surface)] rounded-lg">
               <div>
-                <label className="flex items-center gap-1 text-xs font-medium text-gray-500 mb-1">
+                <label className="flex items-center gap-1 text-xs font-medium text-[color:var(--color-ink-mute)] mb-1">
                   농약 제품명
                   {pesticideUncertain && (
                     <span
@@ -282,13 +282,13 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
                   placeholder="예: 프로피네브 수화제"
                   className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 ${
                     pesticideUncertain
-                      ? "border-yellow-300 bg-yellow-50 focus:ring-yellow-300/40"
-                      : "border-gray-200 focus:ring-primary/30"
+                      ? "border-yellow-300 bg-[color:var(--tint-warning)] focus:ring-yellow-300/40"
+                      : "border-[color:var(--color-line)] focus:ring-primary/30"
                   }`}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-[color:var(--color-ink-mute)] mb-1">
                   농약 사용량
                 </label>
                 <input
@@ -296,11 +296,11 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
                   value={usagePesticideAmount}
                   onChange={(e) => setUsagePesticideAmount(e.target.value)}
                   placeholder="예: 500배액"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-[color:var(--color-ink-mute)] mb-1">
                   비료 제품명
                 </label>
                 <input
@@ -308,11 +308,11 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
                   value={usageFertilizerProduct}
                   onChange={(e) => setUsageFertilizerProduct(e.target.value)}
                   placeholder="예: 요소비료"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
+                <label className="block text-xs font-medium text-[color:var(--color-ink-mute)] mb-1">
                   비료 사용량
                 </label>
                 <input
@@ -320,7 +320,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
                   value={usageFertilizerAmount}
                   onChange={(e) => setUsageFertilizerAmount(e.target.value)}
                   placeholder="예: 10kg"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
             </div>
@@ -330,14 +330,14 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
         {/* 첨부 사진 */}
         {(uploadPhoto || photoIds.length > 0) && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-2">
               첨부 사진 {photoIds.length > 0 && `(${photoIds.length})`}
             </label>
             <div className="grid grid-cols-4 gap-2">
               {photoIds.map((id) => (
                 <div
                   key={id}
-                  className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50"
+                  className="relative aspect-square rounded-lg overflow-hidden border border-[color:var(--color-line)] bg-[color:var(--color-surface)]"
                 >
                   <AuthenticatedPhoto
                     photoId={id}
@@ -356,7 +356,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
               ))}
               {uploadPhoto && (
                 <label
-                  className={`aspect-square rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 cursor-pointer hover:border-primary hover:text-primary ${
+                  className={`aspect-square rounded-lg border-2 border-dashed border-[color:var(--color-line)] flex flex-col items-center justify-center text-[color:var(--color-ink-faint)] cursor-pointer hover:border-primary hover:text-primary ${
                     photoBusy ? "opacity-50 pointer-events-none" : ""
                   }`}
                 >
@@ -379,7 +379,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
 
         {/* 세부작업내용 */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">
             세부작업내용
           </label>
           <textarea
@@ -387,7 +387,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
             onChange={(e) => setDetail(e.target.value)}
             rows={3}
             placeholder="작업 내용을 자유롭게 입력하세요"
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+            className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
           />
         </div>
 
@@ -405,7 +405,7 @@ const JournalEntryForm = forwardRef<JournalEntryFormHandle, Props>(
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 cursor-pointer"
+            className="px-4 py-2 text-sm text-[color:var(--color-ink-mute)] bg-[color:var(--color-surface-deep)] rounded-lg hover:bg-[color:var(--color-surface-deep)] cursor-pointer"
           >
             취소
           </button>

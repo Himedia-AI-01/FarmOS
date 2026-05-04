@@ -24,11 +24,11 @@ import type { JournalEntryAPI, STTParseResult } from "@/types";
 import { toLocalDateString } from "@/utils/date";
 
 const STAGE_COLORS: Record<string, string> = {
-  사전준비: "bg-gray-100 text-gray-700",
-  경운: "bg-amber-100 text-amber-700",
-  파종: "bg-green-100 text-green-700",
+  사전준비: "bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-soft)]",
+  경운: "bg-[color:var(--tint-warning)] text-[color:var(--color-accent-dark)]",
+  파종: "bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]",
   정식: "bg-emerald-100 text-emerald-700",
-  작물관리: "bg-blue-100 text-blue-700",
+  작물관리: "bg-blue-100 text-[color:var(--color-info)]",
   수확: "bg-orange-100 text-orange-700",
 };
 
@@ -348,15 +348,17 @@ export default function JournalPage() {
   return (
     <div className="space-y-6">
       {/* 액션 바 */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">총 {total}건</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[14px] font-semibold text-[color:var(--color-ink-mute)]">
+          총 <span className="font-bold text-[color:var(--color-ink)]">{total}</span>건의 기록
+        </p>
         <div className="flex gap-2">
           <button
             onClick={handleExportPDF}
-            className="btn-outline text-sm"
+            className="btn-outline"
             title="기간 내 모든 통합 영농일지를 한 PDF로 받습니다"
           >
-            <MdFileDownload /> PDF 내보내기
+            <MdFileDownload className="text-[18px]" /> PDF 내보내기
           </button>
           <button
             onClick={() => {
@@ -369,9 +371,9 @@ export default function JournalPage() {
               setPendingPhotoIds([]);
               setPrefillVersion((v) => v + 1);
             }}
-            className="btn-primary text-sm"
+            className="btn-primary"
           >
-            <MdAdd /> 새 일지
+            <MdAdd className="text-[18px]" /> 새 일지
           </button>
         </div>
       </div>
@@ -418,32 +420,32 @@ export default function JournalPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center">
           <div onClick={closeForm} className="absolute inset-0 bg-black/30" />
           <div className="relative bg-white rounded-2xl shadow-xl w-[90vw] max-w-lg max-h-[85vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white rounded-t-2xl z-10 border-b border-gray-100">
+            <div className="sticky top-0 bg-white rounded-t-2xl z-10 border-b border-[color:var(--color-line-soft)]">
               <div className="flex items-center justify-between px-5 py-4">
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-[color:var(--color-ink)]">
                   {editingEntry ? "영농일지 수정" : "새 영농일지 작성"}
                 </h3>
                 <button
                   onClick={closeForm}
-                  className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  className="p-1 text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-mute)] cursor-pointer"
                 >
                   <MdClose className="text-xl" />
                 </button>
               </div>
               {/* 다중 엔트리 네비게이터 */}
               {sttEntries.length > 1 && (
-                <div className="flex items-center justify-between px-5 py-2 bg-blue-50 border-t border-blue-100">
+                <div className="flex items-center justify-between px-5 py-2 bg-[color:var(--tint-info)] border-t border-[color:var(--color-info)]/20">
                   <button
                     type="button"
                     onClick={() => gotoEntry(currentEntryIdx - 1)}
                     disabled={currentEntryIdx === 0}
-                    className="p-1 text-blue-700 disabled:text-gray-300 cursor-pointer disabled:cursor-not-allowed"
+                    className="p-1 text-[color:var(--color-info)] disabled:text-[color:var(--color-ink-disabled)] cursor-pointer disabled:cursor-not-allowed"
                   >
                     <MdChevronLeft className="text-2xl" />
                   </button>
-                  <span className="text-sm font-medium text-blue-800">
+                  <span className="text-sm font-medium text-[color:var(--color-info)]">
                     {currentEntryIdx + 1} / {sttEntries.length}
-                    <span className="ml-2 text-xs text-blue-600">
+                    <span className="ml-2 text-xs text-[color:var(--color-info)]">
                       건 감지됨
                     </span>
                   </span>
@@ -451,7 +453,7 @@ export default function JournalPage() {
                     <button
                       type="button"
                       onClick={removeCurrentEntry}
-                      className="p-1 text-red-500 hover:text-red-600 cursor-pointer"
+                      className="p-1 text-[color:var(--color-danger)] hover:text-[color:var(--color-danger)] cursor-pointer"
                       title="이 작업 제외"
                     >
                       <MdDelete className="text-lg" />
@@ -460,7 +462,7 @@ export default function JournalPage() {
                       type="button"
                       onClick={() => gotoEntry(currentEntryIdx + 1)}
                       disabled={currentEntryIdx === sttEntries.length - 1}
-                      className="p-1 text-blue-700 disabled:text-gray-300 cursor-pointer disabled:cursor-not-allowed"
+                      className="p-1 text-[color:var(--color-info)] disabled:text-[color:var(--color-ink-disabled)] cursor-pointer disabled:cursor-not-allowed"
                     >
                       <MdChevronRight className="text-2xl" />
                     </button>
@@ -503,10 +505,10 @@ export default function JournalPage() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap cursor-pointer transition-colors ${
+            className={`px-4 py-2 rounded-full text-[13.5px] font-semibold whitespace-nowrap transition-colors ${
               filter === f
-                ? "bg-primary text-white"
-                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                ? "bg-[color:var(--color-primary)] text-white"
+                : "bg-[color:var(--color-card)] text-[color:var(--color-ink-soft)] border border-[color:var(--color-line)] hover:border-[color:var(--color-primary-light)] hover:text-[color:var(--color-primary-dark)]"
             }`}
           >
             {f === "all" ? "전체" : f}
@@ -520,13 +522,23 @@ export default function JournalPage() {
 
       {/* 빈 상태 */}
       {!loading && entries.length === 0 && (
-        <div className="text-center py-10">
-          <p className="text-gray-400">기록된 영농일지가 없습니다.</p>
+        <div className="rounded-2xl border border-dashed border-[color:var(--color-line)] bg-[color:var(--color-card)] py-10 px-6 text-center">
+          <img
+            src="/illustrations/journal-empty.png"
+            alt=""
+            aria-hidden
+            className="mx-auto h-40 w-40 object-contain mb-3"
+          />
+          <p className="text-[16px] font-bold text-[color:var(--color-ink)]">기록된 영농일지가 없습니다</p>
+          <p className="mt-1.5 text-[14px] text-[color:var(--color-ink-mute)] max-w-sm mx-auto leading-[1.6]">
+            음성, 사진, 또는 직접 입력으로 첫 한 줄을 남겨 보세요
+          </p>
           <button
             onClick={() => setShowForm(true)}
-            className="mt-3 text-primary text-sm font-medium cursor-pointer hover:underline"
+            className="btn-primary mt-6"
           >
-            첫 영농일지를 작성해보세요
+            <MdAdd className="text-[18px]" />
+            첫 영농일지 작성
           </button>
         </div>
       )}
@@ -536,13 +548,13 @@ export default function JournalPage() {
         {sortedDates.map((dateStr) => (
           <div key={dateStr}>
             <div className="flex items-center gap-3 py-2">
-              <span className="text-sm font-bold text-gray-400">
+              <span className="text-sm font-bold text-[color:var(--color-ink-faint)]">
                 {new Date(dateStr).toLocaleDateString("ko-KR", {
                   month: "long",
                   day: "numeric",
                 })}
               </span>
-              <div className="flex-1 h-px bg-gray-200" />
+              <div className="flex-1 h-px bg-[color:var(--color-surface-deep)]" />
             </div>
 
             {grouped[dateStr].map((entry, i) => (
@@ -552,7 +564,7 @@ export default function JournalPage() {
                     className={`w-3 h-3 rounded-full ${entry.source === "stt" ? "bg-red-400" : entry.source === "vision" ? "bg-amber-400" : "bg-primary"} z-10`}
                   />
                   {i < grouped[dateStr].length - 1 && (
-                    <div className="w-0.5 flex-1 bg-gray-200" />
+                    <div className="w-0.5 flex-1 bg-[color:var(--color-surface-deep)]" />
                   )}
                 </div>
 
@@ -562,19 +574,19 @@ export default function JournalPage() {
                     onClick={() =>
                       setExpandedId(expandedId === entry.id ? null : entry.id)
                     }
-                    className="p-4 rounded-xl bg-white border border-gray-100 hover:shadow-sm transition-shadow cursor-pointer"
+                    className="p-4 rounded-xl bg-white border border-[color:var(--color-line-soft)] hover:shadow-sm transition-shadow cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
-                          className={`badge text-xs ${STAGE_COLORS[entry.work_stage] || "bg-gray-100 text-gray-600"}`}
+                          className={`badge text-xs ${STAGE_COLORS[entry.work_stage] || "bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)]"}`}
                         >
                           {entry.work_stage}
                         </span>
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-[color:var(--color-ink-faint)]">
                           {entry.crop}
                         </span>
-                        <span className="text-xs text-gray-300">
+                        <span className="text-xs text-[color:var(--color-ink-disabled)]">
                           {entry.field_name}
                         </span>
                         {entry.weather && (
@@ -589,13 +601,13 @@ export default function JournalPage() {
                       >
                         <button
                           onClick={() => setEditingEntry(entry)}
-                          className="p-1 text-gray-400 hover:text-primary cursor-pointer"
+                          className="p-1 text-[color:var(--color-ink-faint)] hover:text-primary cursor-pointer"
                         >
                           <MdEdit className="text-sm" />
                         </button>
                         <button
                           onClick={() => handleDelete(entry.id)}
-                          className="p-1 text-gray-400 hover:text-red-500 cursor-pointer"
+                          className="p-1 text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-danger)] cursor-pointer"
                         >
                           <MdDelete className="text-sm" />
                         </button>
@@ -603,7 +615,7 @@ export default function JournalPage() {
                     </div>
 
                     {entry.detail && (
-                      <p className="text-sm text-gray-600 mt-2">
+                      <p className="text-sm text-[color:var(--color-ink-mute)] mt-2">
                         {entry.detail}
                       </p>
                     )}
@@ -611,46 +623,46 @@ export default function JournalPage() {
 
                   {/* 펼쳐진 상세 정보 */}
                   {expandedId === entry.id && editingEntry?.id !== entry.id && (
-                    <div className="mt-2 p-4 rounded-xl border border-gray-200 bg-gray-50/50">
+                    <div className="mt-2 p-4 rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)]/50">
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                          <span className="text-xs font-medium text-gray-400">
+                          <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                             작업일
                           </span>
-                          <p className="text-gray-700">{entry.work_date}</p>
+                          <p className="text-[color:var(--color-ink-soft)]">{entry.work_date}</p>
                         </div>
                         <div>
-                          <span className="text-xs font-medium text-gray-400">
+                          <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                             필지
                           </span>
-                          <p className="text-gray-700">{entry.field_name}</p>
+                          <p className="text-[color:var(--color-ink-soft)]">{entry.field_name}</p>
                         </div>
                         <div>
-                          <span className="text-xs font-medium text-gray-400">
+                          <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                             작목
                           </span>
-                          <p className="text-gray-700">{entry.crop}</p>
+                          <p className="text-[color:var(--color-ink-soft)]">{entry.crop}</p>
                         </div>
                         <div>
-                          <span className="text-xs font-medium text-gray-400">
+                          <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                             작업단계
                           </span>
-                          <p className="text-gray-700">{entry.work_stage}</p>
+                          <p className="text-[color:var(--color-ink-soft)]">{entry.work_stage}</p>
                         </div>
                         {entry.weather && (
                           <div>
-                            <span className="text-xs font-medium text-gray-400">
+                            <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                               날씨
                             </span>
-                            <p className="text-gray-700">{entry.weather}</p>
+                            <p className="text-[color:var(--color-ink-soft)]">{entry.weather}</p>
                           </div>
                         )}
                         {entry.usage_pesticide_product && (
                           <div>
-                            <span className="text-xs font-medium text-gray-400">
+                            <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                               농약 사용
                             </span>
-                            <p className="text-gray-700">
+                            <p className="text-[color:var(--color-ink-soft)]">
                               {entry.usage_pesticide_product}{" "}
                               {entry.usage_pesticide_amount || ""}
                             </p>
@@ -658,10 +670,10 @@ export default function JournalPage() {
                         )}
                         {entry.usage_fertilizer_product && (
                           <div>
-                            <span className="text-xs font-medium text-gray-400">
+                            <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                               비료 사용
                             </span>
-                            <p className="text-gray-700">
+                            <p className="text-[color:var(--color-ink-soft)]">
                               {entry.usage_fertilizer_product}{" "}
                               {entry.usage_fertilizer_amount || ""}
                             </p>
@@ -669,17 +681,17 @@ export default function JournalPage() {
                         )}
                         {entry.detail && (
                           <div className="col-span-2">
-                            <span className="text-xs font-medium text-gray-400">
+                            <span className="text-xs font-medium text-[color:var(--color-ink-faint)]">
                               세부작업내용
                             </span>
-                            <p className="text-gray-700">{entry.detail}</p>
+                            <p className="text-[color:var(--color-ink-soft)]">{entry.detail}</p>
                           </div>
                         )}
                       </div>
 
                       {entry.photos && entry.photos.length > 0 && (
                         <div className="mt-3">
-                          <span className="text-xs font-medium text-gray-400 mb-1 block">
+                          <span className="text-xs font-medium text-[color:var(--color-ink-faint)] mb-1 block">
                             첨부 사진 ({entry.photos.length})
                           </span>
                           {/* 화면 폭과 무관하게 일정한 썸네일 크기 — PC 에서도 과하게 커지지 않도록 고정 */}
@@ -692,7 +704,7 @@ export default function JournalPage() {
                                   e.stopPropagation();
                                   setLightboxPhotoId(p.id);
                                 }}
-                                className="w-24 h-24 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-zoom-in hover:opacity-80 transition-opacity"
+                                className="w-24 h-24 rounded-lg overflow-hidden border border-[color:var(--color-line)] bg-[color:var(--color-surface)] cursor-zoom-in hover:opacity-80 transition-opacity"
                               >
                                 <AuthenticatedPhoto
                                   photoId={p.id}
@@ -705,7 +717,7 @@ export default function JournalPage() {
                         </div>
                       )}
 
-                      <div className="text-xs text-gray-300 mt-3">
+                      <div className="text-xs text-[color:var(--color-ink-disabled)] mt-3">
                         {entry.source === "stt"
                           ? "음성 입력"
                           : entry.source === "vision"

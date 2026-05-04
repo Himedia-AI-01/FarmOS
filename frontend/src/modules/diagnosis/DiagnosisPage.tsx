@@ -378,14 +378,14 @@ export default function DiagnosisPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="card bg-white border border-gray-100 shadow-sm">
+      <div className="card bg-white border border-[color:var(--color-line-soft)] shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <h2 className="text-lg font-bold text-[color:var(--color-ink)] flex items-center gap-2">
             <MdInfoOutline className="text-primary" />
             진단 환경 설정
           </h2>
           {isAutoFilled && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-600 text-xs font-bold rounded-full border border-green-100">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary)] text-xs font-bold rounded-full border border-[color:var(--color-primary-soft)]">
               <MdCheckCircle className="text-sm" />
               내 농장 정보 적용됨
             </span>
@@ -394,7 +394,7 @@ export default function DiagnosisPage() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5 flex flex-col">
-            <label className="text-xs font-bold text-gray-400 ml-1">지역/상세주소 (기상청 연동)</label>
+            <label className="text-xs font-bold text-[color:var(--color-ink-faint)] ml-1">지역/상세주소 (기상청 연동)</label>
             <div className="flex gap-2">
               <input 
                 type="text"
@@ -409,7 +409,7 @@ export default function DiagnosisPage() {
                   }
                 }}
                 tabIndex={0}
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
+                className="w-full p-3 rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
               />
               <button 
                 type="button"
@@ -437,14 +437,14 @@ export default function DiagnosisPage() {
                   className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden flex flex-col"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex justify-between items-center p-4 border-b border-gray-100">
-                    <h3 id="diagnosis-postcode-modal-title" className="font-bold text-gray-800 text-lg">주소 검색</h3>
+                  <div className="flex justify-between items-center p-4 border-b border-[color:var(--color-line-soft)]">
+                    <h3 id="diagnosis-postcode-modal-title" className="font-bold text-[color:var(--color-ink)] text-lg">주소 검색</h3>
                     <button 
                       type="button"
                       ref={postcodeCloseButtonRef}
                       aria-label="주소 검색 닫기"
                       onClick={() => setIsPostcodeOpen(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      className="text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-mute)] transition-colors"
                     >
                       ✕ 닫기
                     </button>
@@ -459,11 +459,11 @@ export default function DiagnosisPage() {
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-400 ml-1">작물 (농약 안전정보 연동)</label>
+            <label className="text-xs font-bold text-[color:var(--color-ink-faint)] ml-1">작물 (농약 안전정보 연동)</label>
             <select 
               value={selectedCrop} 
               onChange={(e) => setSelectedCrop(e.target.value)}
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
+              className="w-full p-3 rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
             >
               <option value="" disabled>작물 선택</option>
               {CROPS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -475,17 +475,17 @@ export default function DiagnosisPage() {
       <div
         {...getRootProps()}
         className={`card border-2 border-dashed cursor-pointer transition-all text-center py-16 ${
-          isDragActive ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-primary/40 hover:bg-gray-50/50'
+          isDragActive ? 'border-primary bg-primary/5' : 'border-[color:var(--color-line)] hover:border-primary/40 hover:bg-[color:var(--color-surface)]/50'
         }`}
       >
         <input {...customInputProps} />
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <MdCameraAlt className="text-4xl text-primary" />
         </div>
-        <p className="text-xl font-bold text-gray-800">
+        <p className="text-xl font-bold text-[color:var(--color-ink)]">
           {isDragActive ? '여기에 사진을 놓으세요!' : '해충 사진을 업로드하세요'}
         </p>
-        <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
+        <p className="text-sm text-[color:var(--color-ink-faint)] mt-2 max-w-xs mx-auto">
           작물의 특징이나 해충이 잘 보이도록 근접 촬영한 사진일수록 정확합니다
         </p>
         <div className="flex justify-center">
@@ -495,8 +495,8 @@ export default function DiagnosisPage() {
         </div>
       </div>
 
-      <div className="card bg-amber-50/50 border border-amber-100 border-dashed">
-        <div className="flex items-center gap-2 mb-4 text-amber-700 font-bold text-sm">
+      <div className="card bg-[color:var(--tint-warning)]/50 border border-amber-100 border-dashed">
+        <div className="flex items-center gap-2 mb-4 text-[color:var(--color-accent-dark)] font-bold text-sm">
           <span className="px-2 py-0.5 bg-amber-200 rounded-md text-[10px]">FIXED</span>
           임시 VLM 진단 테스트 (해충 강제 지정)
         </div>
@@ -517,13 +517,13 @@ export default function DiagnosisPage() {
         </div>
       </div>
 
-      <div className="card border border-gray-100">
+      <div className="card border border-[color:var(--color-line-soft)]">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-gray-100 rounded-lg">
-              <MdHistory className="text-xl text-gray-600" />
+            <div className="p-2 bg-[color:var(--color-surface-deep)] rounded-lg">
+              <MdHistory className="text-xl text-[color:var(--color-ink-mute)]" />
             </div>
-            <h3 className="text-lg font-bold text-gray-800">최근 진단 기록</h3>
+            <h3 className="text-lg font-bold text-[color:var(--color-ink)]">최근 진단 기록</h3>
           </div>
           
           {history.length > 0 && (
@@ -531,14 +531,14 @@ export default function DiagnosisPage() {
               {selectedIds.length > 0 && (
                 <button 
                   onClick={() => setSelectedIds([])}
-                  className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors cursor-pointer mr-2"
+                  className="text-xs font-bold text-red-400 hover:text-[color:var(--color-danger)] transition-colors cursor-pointer mr-2"
                 >
                   선택 해제 ({selectedIds.length})
                 </button>
               )}
               <button 
                 onClick={toggleSelectAll}
-                className="text-xs font-bold text-gray-400 hover:text-primary transition-colors cursor-pointer"
+                className="text-xs font-bold text-[color:var(--color-ink-faint)] hover:text-primary transition-colors cursor-pointer"
               >
                 {currentItems.length > 0 && currentItems.every(id => selectedIds.includes(id.id)) 
                   ? "전체 해제" 
@@ -547,7 +547,7 @@ export default function DiagnosisPage() {
               {selectedIds.length > 0 && (
                 <button 
                   onClick={deleteSelected}
-                  className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 hover:bg-red-100 transition-all flex items-center gap-1"
+                  className="px-3 py-1.5 bg-[color:var(--color-danger-light)] text-[color:var(--color-danger)] text-xs font-bold rounded-lg border border-[color:var(--color-danger-light)] hover:bg-[color:var(--color-danger-light)] transition-all flex items-center gap-1"
                 >
                   <MdDeleteOutline className="text-sm" />
                   {selectedIds.length}개 삭제
@@ -561,8 +561,8 @@ export default function DiagnosisPage() {
           {loadingHistory && history.length === 0 ? (
             <DiagnosisHistorySkeleton />
           ) : history.length === 0 ? (
-            <div className="py-20 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-              <p className="text-gray-400 text-sm">최근 진단 내역이 없습니다.</p>
+            <div className="py-20 text-center bg-[color:var(--color-surface)]/50 rounded-2xl border border-dashed border-[color:var(--color-line)]">
+              <p className="text-[color:var(--color-ink-faint)] text-sm">최근 진단 내역이 없습니다.</p>
             </div>
           ) : (
             <>
@@ -604,7 +604,7 @@ export default function DiagnosisPage() {
                           {record.pest}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-[color:var(--color-ink-faint)]">
                         {record.region} · {record.date ? record.date : new Date(record.created_at).toLocaleDateString()} 
                       </p>
                     </div>
@@ -613,14 +613,14 @@ export default function DiagnosisPage() {
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={(e) => deleteOne(e, record.id)}
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 bg-red-50 border border-red-100 transition-all cursor-pointer hover:border-red-500"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-[color:var(--color-danger)] bg-[color:var(--color-danger-light)] border border-[color:var(--color-danger-light)] transition-all cursor-pointer hover:border-red-500"
                       title="기록 삭제"
                     >
                       <MdDeleteOutline className="text-xl" />
                     </button>
                     
                     <div 
-                      className="flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-sm bg-green-50 text-primary cursor-pointer border border-green-100 hover:border-primary"
+                      className="flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-sm bg-[color:var(--color-primary-soft)] text-primary cursor-pointer border border-[color:var(--color-primary-soft)] hover:border-primary"
                       onClick={() => navigate('/diagnosis/chat', { 
                         state: { 
                           diagnosisContext: record,
@@ -641,7 +641,7 @@ export default function DiagnosisPage() {
                   <button
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="p-2 rounded-lg border border-[color:var(--color-line)] text-[color:var(--color-ink-faint)] hover:bg-[color:var(--color-surface)] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     이전
                   </button>
@@ -651,7 +651,7 @@ export default function DiagnosisPage() {
                       const pageNum = i + 1;
                       // 너무 많은 페이지 번호 방지 (현재 페이지 주변만 표시)
                       if (totalPages > 5 && Math.abs(pageNum - currentPage) > 2 && pageNum !== 1 && pageNum !== totalPages) {
-                        if (pageNum === 2 || pageNum === totalPages - 1) return <span key={pageNum} className="px-1 text-gray-300">...</span>;
+                        if (pageNum === 2 || pageNum === totalPages - 1) return <span key={pageNum} className="px-1 text-[color:var(--color-ink-disabled)]">...</span>;
                         return null;
                       }
                       
@@ -662,7 +662,7 @@ export default function DiagnosisPage() {
                           className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${
                             currentPage === pageNum 
                               ? 'bg-primary text-white shadow-md shadow-primary/20 scale-110' 
-                              : 'text-gray-400 hover:bg-gray-50'
+                              : 'text-[color:var(--color-ink-faint)] hover:bg-[color:var(--color-surface)]'
                           }`}
                         >
                           {pageNum}
@@ -674,7 +674,7 @@ export default function DiagnosisPage() {
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="p-2 rounded-lg border border-[color:var(--color-line)] text-[color:var(--color-ink-faint)] hover:bg-[color:var(--color-surface)] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     다음
                   </button>
@@ -711,14 +711,14 @@ export default function DiagnosisPage() {
               </div>
 
               <div className="space-y-4">
-                <h2 className="text-2xl font-bold text-gray-800">AI 분석 진행 중</h2>
+                <h2 className="text-2xl font-bold text-[color:var(--color-ink)]">AI 분석 진행 중</h2>
                 <p className="text-primary font-medium animate-pulse">
                   {loadingMessage}
                 </p>
               </div>
 
               <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                <p className="text-xs text-gray-500 leading-relaxed">
+                <p className="text-xs text-[color:var(--color-ink-mute)] leading-relaxed">
                   <span className="font-bold text-primary block mb-1">💡 알고 계셨나요?</span>
                   {randomTip}
                 </p>
@@ -727,7 +727,7 @@ export default function DiagnosisPage() {
               <div className="pt-4">
                 <button
                   onClick={cancelDiagnosis}
-                  className="px-6 py-2.5 bg-white text-gray-500 font-bold rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:text-red-500 transition-all"
+                  className="px-6 py-2.5 bg-white text-[color:var(--color-ink-mute)] font-bold rounded-xl border border-[color:var(--color-line)] shadow-sm hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-danger)] transition-all"
                 >
                   진단 취소 및 돌아가기
                 </button>

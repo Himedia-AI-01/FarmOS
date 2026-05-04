@@ -42,23 +42,23 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={() => moveDate(-1)}
-          className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+          className="p-1 text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-mute)] cursor-pointer"
         >
           <MdChevronLeft className="text-xl" />
         </button>
-        <h3 className="text-sm font-semibold text-gray-700">
+        <h3 className="text-sm font-semibold text-[color:var(--color-ink-soft)]">
           {dateLabel} 영농보고서
         </h3>
         <button
           onClick={() => moveDate(1)}
-          className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+          className="p-1 text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-mute)] cursor-pointer"
         >
           <MdChevronRight className="text-xl" />
         </button>
       </div>
 
       {loading && (
-        <div className="flex items-center justify-center py-4 text-gray-400">
+        <div className="flex items-center justify-center py-4 text-[color:var(--color-ink-faint)]">
           <MdAutorenew className="animate-spin mr-2" /> 요약 생성 중...
         </div>
       )}
@@ -71,14 +71,14 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
               <p className="text-2xl font-bold text-primary">
                 {summary.entry_count}
               </p>
-              <p className="text-xs text-gray-500">작업 건수</p>
+              <p className="text-xs text-[color:var(--color-ink-mute)]">작업 건수</p>
             </div>
             {summary.crops.length > 0 && (
               <div>
                 <p className="text-2xl font-bold text-emerald-600">
                   {summary.crops.length}
                 </p>
-                <p className="text-xs text-gray-500">작목 수</p>
+                <p className="text-xs text-[color:var(--color-ink-mute)]">작목 수</p>
               </div>
             )}
             {summary.weather && (
@@ -86,7 +86,7 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
                 <p className="text-2xl font-bold text-cyan-600">
                   {summary.weather}
                 </p>
-                <p className="text-xs text-gray-500">날씨</p>
+                <p className="text-xs text-[color:var(--color-ink-mute)]">날씨</p>
               </div>
             )}
           </div>
@@ -97,7 +97,7 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
               {summary.stages_worked.map((stage) => (
                 <span
                   key={stage}
-                  className="badge bg-green-100 text-green-700 text-xs"
+                  className="badge bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)] text-xs"
                 >
                   {stage}
                 </span>
@@ -106,20 +106,20 @@ export default function DailySummaryCard({ fetchDailySummary }: Props) {
           )}
 
           {/* LLM 요약문 */}
-          <p className="text-sm text-gray-700 leading-relaxed">
+          <p className="text-sm text-[color:var(--color-ink-soft)] leading-relaxed">
             {summary.summary_text}
           </p>
         </div>
       )}
 
       {!loading && summary && summary.entry_count === 0 && (
-        <p className="text-sm text-gray-400 text-center py-3">
+        <p className="text-sm text-[color:var(--color-ink-faint)] text-center py-3">
           이 날짜에 기록된 영농일지가 없습니다.
         </p>
       )}
 
       {!loading && !summary && (
-        <p className="text-sm text-gray-400 text-center py-3">
+        <p className="text-sm text-[color:var(--color-ink-faint)] text-center py-3">
           요약을 불러올 수 없습니다.
         </p>
       )}

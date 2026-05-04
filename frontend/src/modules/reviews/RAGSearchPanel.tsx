@@ -39,11 +39,11 @@ export default function RAGSearchPanel({ onSearch, results, isSearching }: Props
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSearch()}
           placeholder="자연어로 리뷰 검색 (예: 포장 관련 불만)"
-          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          className="flex-1 px-3 py-2 border border-[color:var(--color-line)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
         />
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`p-2 rounded-lg border ${showFilters ? 'border-primary text-primary bg-primary/5' : 'border-gray-200 text-gray-500'}`}
+          className={`p-2 rounded-lg border ${showFilters ? 'border-primary text-primary bg-primary/5' : 'border-[color:var(--color-line)] text-[color:var(--color-ink-mute)]'}`}
         >
           <MdFilterList className="text-lg" />
         </button>
@@ -57,11 +57,11 @@ export default function RAGSearchPanel({ onSearch, results, isSearching }: Props
       </div>
 
       {showFilters && (
-        <div className="flex gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+        <div className="flex gap-3 mb-3 p-3 bg-[color:var(--color-surface)] rounded-lg">
           <select
             value={platform}
             onChange={e => setPlatform(e.target.value)}
-            className="px-2 py-1.5 border border-gray-200 rounded text-sm"
+            className="px-2 py-1.5 border border-[color:var(--color-line)] rounded text-sm"
           >
             <option value="">전체 플랫폼</option>
             <option value="네이버스마트스토어">네이버</option>
@@ -70,7 +70,7 @@ export default function RAGSearchPanel({ onSearch, results, isSearching }: Props
           <select
             value={ratingMax}
             onChange={e => setRatingMax(e.target.value ? Number(e.target.value) : '')}
-            className="px-2 py-1.5 border border-gray-200 rounded text-sm"
+            className="px-2 py-1.5 border border-[color:var(--color-line)] rounded text-sm"
           >
             <option value="">평점 필터</option>
             <option value="3">3점 이하</option>
@@ -81,7 +81,7 @@ export default function RAGSearchPanel({ onSearch, results, isSearching }: Props
             type="date"
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
-            className="px-2 py-1.5 border border-gray-200 rounded text-sm"
+            className="px-2 py-1.5 border border-[color:var(--color-line)] rounded text-sm"
             placeholder="시작 날짜"
           />
         </div>
@@ -90,29 +90,29 @@ export default function RAGSearchPanel({ onSearch, results, isSearching }: Props
       {results.length > 0 && (
         <div className="space-y-2 max-h-[300px] overflow-y-auto">
           {results.map((r) => (
-            <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50">
-              <span className="mt-0.5 text-xs font-mono text-gray-400 w-6 text-right flex-shrink-0">
+            <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl bg-[color:var(--color-surface)]">
+              <span className="mt-0.5 text-xs font-mono text-[color:var(--color-ink-faint)] w-6 text-right flex-shrink-0">
                 {(r.similarity * 100).toFixed(0)}%
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-800">{r.text}</p>
+                <p className="text-sm text-[color:var(--color-ink)]">{r.text}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-[color:var(--color-ink-faint)]">
                     {(r.metadata as { platform?: string })?.platform || ''}
                   </span>
-                  <span className="text-xs text-amber-500">
+                  <span className="text-xs text-[color:var(--color-accent)]">
                     {'★'.repeat((r.metadata as { rating?: number })?.rating || 0)}
                   </span>
                 </div>
               </div>
             </div>
           ))}
-          <p className="text-xs text-gray-400 text-center">{results.length}건 검색됨</p>
+          <p className="text-xs text-[color:var(--color-ink-faint)] text-center">{results.length}건 검색됨</p>
         </div>
       )}
 
       {results.length === 0 && query && !isSearching && (
-        <p className="text-sm text-gray-400 text-center py-4">검색 결과가 없습니다</p>
+        <p className="text-sm text-[color:var(--color-ink-faint)] text-center py-4">검색 결과가 없습니다</p>
       )}
     </div>
   );

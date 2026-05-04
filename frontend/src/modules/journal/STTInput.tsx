@@ -370,8 +370,8 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
                   className="h-12 px-5 rounded-full shadow-lg flex items-center justify-center gap-2
                     bg-white/90 cursor-pointer transition-colors hover:bg-white"
                 >
-                  <MdClose className="text-gray-600 text-xl" />
-                  <span className="text-gray-600 text-sm font-medium">
+                  <MdClose className="text-[color:var(--color-ink-mute)] text-xl" />
+                  <span className="text-[color:var(--color-ink-mute)] text-sm font-medium">
                     취소
                   </span>
                 </button>
@@ -386,8 +386,8 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
                   className="h-12 px-5 rounded-full shadow-lg flex items-center justify-center gap-2
                     bg-white/90 cursor-pointer transition-colors hover:bg-white"
                 >
-                  <MdClose className="text-gray-600 text-xl" />
-                  <span className="text-gray-600 text-sm font-medium">
+                  <MdClose className="text-[color:var(--color-ink-mute)] text-xl" />
+                  <span className="text-[color:var(--color-ink-mute)] text-sm font-medium">
                     녹음 취소
                   </span>
                 </button>

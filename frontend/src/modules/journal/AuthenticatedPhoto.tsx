@@ -62,7 +62,7 @@ export default function AuthenticatedPhoto({
   if (!src) {
     return (
       <div
-        className={`${className ?? ""} bg-gray-100`}
+        className={`${className ?? ""} bg-[color:var(--color-surface-deep)]`}
         role="img"
         aria-label={alt}
       />

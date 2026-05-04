@@ -30,23 +30,23 @@ const STATUS_CONFIG = {
   eligible: {
     label: '신청 가능',
     icon: MdCheckCircle,
-    cardClass: 'border-green-300 bg-green-50',
+    cardClass: 'border-green-300 bg-[color:var(--color-primary-soft)]',
     badgeClass: 'bg-green-600 text-white',
-    iconClass: 'text-green-600',
+    iconClass: 'text-[color:var(--color-primary)]',
   },
   needs_review: {
     label: '추가 확인 필요',
     icon: MdWarning,
-    cardClass: 'border-amber-300 bg-amber-50',
+    cardClass: 'border-amber-300 bg-[color:var(--tint-warning)]',
     badgeClass: 'bg-amber-500 text-white',
-    iconClass: 'text-amber-600',
+    iconClass: 'text-[color:var(--color-accent-dark)]',
   },
   ineligible: {
     label: '해당 없음',
     icon: MdBlock,
-    cardClass: 'border-gray-200 bg-gray-50',
+    cardClass: 'border-[color:var(--color-line)] bg-[color:var(--color-surface)]',
     badgeClass: 'bg-gray-400 text-white',
-    iconClass: 'text-gray-400',
+    iconClass: 'text-[color:var(--color-ink-faint)]',
   },
 } as const;
 
@@ -91,10 +91,10 @@ export default function SubsidyPage() {
         <div className="flex items-start gap-3">
           <div className="text-4xl">🌾</div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">
+            <h2 className="text-lg font-bold text-[color:var(--color-ink)]">
               2026년도 기본형 공익직불사업
             </h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm text-[color:var(--color-ink-mute)] mt-1">
               귀하의 프로필 정보를 바탕으로 신청 가능한 지원금을 분석했습니다.
               각 카드를 클릭하면 상세 정보와 근거 조항을 확인할 수 있습니다.
             </p>
@@ -124,7 +124,7 @@ export default function SubsidyPage() {
       {/* 지원금 카드 목록 */}
       <div className="space-y-3">
         {allResults.length === 0 ? (
-          <div className="card text-center text-gray-500">
+          <div className="card text-center text-[color:var(--color-ink-mute)]">
             등록된 지원금 정보가 없습니다.
           </div>
         ) : (
@@ -166,9 +166,9 @@ function SummaryTile({
   tone: 'green' | 'amber' | 'gray';
 }) {
   const toneMap = {
-    green: 'bg-green-50 border-green-200 text-green-700',
-    amber: 'bg-amber-50 border-amber-200 text-amber-700',
-    gray: 'bg-gray-50 border-gray-200 text-gray-700',
+    green: 'bg-[color:var(--color-primary-soft)] border-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
+    amber: 'bg-[color:var(--tint-warning)] border-amber-200 text-[color:var(--color-accent-dark)]',
+    gray: 'bg-[color:var(--color-surface)] border-[color:var(--color-line)] text-[color:var(--color-ink-soft)]',
   };
   return (
     <div className={`border-2 rounded-2xl p-4 text-center ${toneMap[tone]}`}>
@@ -197,7 +197,7 @@ function SubsidyCard({
         <Icon className={`text-3xl ${cfg.iconClass} flex-shrink-0`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-bold text-lg text-gray-900">
+            <h3 className="font-bold text-lg text-[color:var(--color-ink)]">
               {result.subsidy_name}
             </h3>
             <span
@@ -212,7 +212,7 @@ function SubsidyCard({
             </p>
           )}
           {result.reasons.length > 0 && (
-            <p className="text-sm text-gray-700 mt-2 line-clamp-2">
+            <p className="text-sm text-[color:var(--color-ink-soft)] mt-2 line-clamp-2">
               {result.reasons[0].text}
             </p>
           )}
@@ -272,12 +272,12 @@ function DetailDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-3">
-          <h2 className="text-xl font-bold text-gray-900">
+          <h2 className="text-xl font-bold text-[color:var(--color-ink)]">
             {result.subsidy_name}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 p-1"
+            className="text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-soft)] p-1"
           >
             <MdClose className="text-2xl" />
           </button>
@@ -291,7 +291,7 @@ function DetailDrawer({
 
         {result.estimated_amount_krw != null && (
           <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-4">
-            <p className="text-sm text-gray-600">예상 수령액</p>
+            <p className="text-sm text-[color:var(--color-ink-mute)]">예상 수령액</p>
             <p className="text-2xl font-bold text-primary">
               {formatKrw(result.estimated_amount_krw)}
             </p>
@@ -302,11 +302,11 @@ function DetailDrawer({
         )}
 
         <div className="space-y-3">
-          <h3 className="font-semibold text-gray-900">판정 사유</h3>
-          <ul className="space-y-2 text-sm text-gray-700">
+          <h3 className="font-semibold text-[color:var(--color-ink)]">판정 사유</h3>
+          <ul className="space-y-2 text-sm text-[color:var(--color-ink-soft)]">
             {result.reasons.map((reason, i) => (
               <li key={i} className="flex gap-2 items-start">
-                <span className="text-gray-400 flex-shrink-0 leading-relaxed">•</span>
+                <span className="text-[color:var(--color-ink-faint)] flex-shrink-0 leading-relaxed">•</span>
                 <span className="flex-1 leading-relaxed">
                   {reason.text}
                   {reason.source && (
@@ -321,15 +321,15 @@ function DetailDrawer({
         </div>
 
         {(clauses.length > 0 || result.source_articles.length > 0) && (
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="mt-4 pt-4 border-t border-[color:var(--color-line-soft)]">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-500">출처</p>
+              <p className="text-xs font-semibold text-[color:var(--color-ink-mute)]">출처</p>
               {snippetsLoading && (
-                <span className="text-[11px] text-gray-400">시행지침 원문 불러오는 중…</span>
+                <span className="text-[11px] text-[color:var(--color-ink-faint)]">시행지침 원문 불러오는 중…</span>
               )}
             </div>
             {result.source_articles.length > 0 && (
-              <p className="text-sm text-gray-700 mb-3">
+              <p className="text-sm text-[color:var(--color-ink-soft)] mb-3">
                 {result.source_articles.join(' · ')}
               </p>
             )}
@@ -347,7 +347,7 @@ function DetailDrawer({
           </div>
         )}
 
-        <div className="mt-6 text-xs text-gray-400 text-center">
+        <div className="mt-6 text-xs text-[color:var(--color-ink-faint)] text-center">
           실제 지급은 농업경영체 등록·현장 확인 등 정식 절차를 거쳐 확정됩니다.
         </div>
       </div>
@@ -360,29 +360,29 @@ function DetailDrawer({
 function PaymentBreakdown({ calc }: { calc: PaymentCalculation }) {
   return (
     <div className="mt-3 pt-3 border-t border-primary/20 space-y-2">
-      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+      <p className="text-[11px] font-semibold text-[color:var(--color-ink-mute)] uppercase tracking-wide">
         계산 내역
       </p>
       <ul className="space-y-1.5">
         {calc.steps.map((step, i) => (
           <li key={i} className="flex items-start justify-between gap-3 text-xs">
-            <span className="text-gray-700 leading-relaxed flex-1">
+            <span className="text-[color:var(--color-ink-soft)] leading-relaxed flex-1">
               {step.description}
             </span>
-            <span className="text-gray-900 font-semibold whitespace-nowrap">
+            <span className="text-[color:var(--color-ink)] font-semibold whitespace-nowrap">
               {formatKrw(step.amount_krw)}
             </span>
           </li>
         ))}
       </ul>
       {calc.steps.length > 1 && (
-        <div className="flex items-center justify-between pt-1.5 border-t border-gray-200 text-xs">
-          <span className="font-semibold text-gray-700">합계</span>
+        <div className="flex items-center justify-between pt-1.5 border-t border-[color:var(--color-line)] text-xs">
+          <span className="font-semibold text-[color:var(--color-ink-soft)]">합계</span>
           <span className="font-bold text-primary">{formatKrw(calc.total_krw)}</span>
         </div>
       )}
       {calc.note && (
-        <p className="text-[11px] text-gray-500 leading-relaxed pt-1">※ {calc.note}</p>
+        <p className="text-[11px] text-[color:var(--color-ink-mute)] leading-relaxed pt-1">※ {calc.note}</p>
       )}
     </div>
   );
@@ -533,16 +533,16 @@ function AskModal({ onClose }: { onClose: () => void }) {
         className="bg-white rounded-2xl w-full max-w-2xl h-[90vh] sm:h-[85vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between p-5 border-b border-[color:var(--color-line-soft)] flex-shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
               <MdSmartToy className="text-xl" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900 leading-tight">
+              <h2 className="text-lg font-bold text-[color:var(--color-ink)] leading-tight">
                 시행지침 챗봇
               </h2>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[color:var(--color-ink-mute)]">
                 2026년도 기본형 공익직불사업
               </p>
             </div>
@@ -551,12 +551,12 @@ function AskModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={resetThread}
               disabled={loading || messages.length === 0}
-              className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed p-1"
+              className="text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-soft)] disabled:opacity-30 disabled:cursor-not-allowed p-1"
               title="새 대화"
             >
               <MdRefresh className="text-2xl" />
             </button>
-            <button onClick={requestClose} className="text-gray-400 hover:text-gray-700 p-1">
+            <button onClick={requestClose} className="text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-soft)] p-1">
               <MdClose className="text-2xl" />
             </button>
           </div>
@@ -570,7 +570,7 @@ function AskModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <div className="p-4 border-t border-gray-100 flex gap-2 flex-shrink-0">
+        <div className="p-4 border-t border-[color:var(--color-line-soft)] flex gap-2 flex-shrink-0">
           <input
             type="text"
             value={input}
@@ -581,7 +581,7 @@ function AskModal({ onClose }: { onClose: () => void }) {
                 ? '질문을 입력하거나 위의 예시를 눌러보세요'
                 : '이어서 질문하세요'
             }
-            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-primary"
+            className="flex-1 px-4 py-2.5 border border-[color:var(--color-line)] rounded-xl focus:outline-none focus:border-primary"
             disabled={loading}
           />
           <button
@@ -606,21 +606,21 @@ function EmptyState({ onPick }: { onPick: (q: string) => void }) {
         <div className="inline-flex w-12 h-12 rounded-full bg-primary/10 items-center justify-center text-primary">
           <MdSmartToy className="text-2xl" />
         </div>
-        <p className="text-gray-700 font-semibold">
+        <p className="text-[color:var(--color-ink-soft)] font-semibold">
           공익직불사업에 관한 무엇이든 물어보세요
         </p>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[color:var(--color-ink-mute)]">
           시행지침 본문을 근거로 답변합니다. 답변 끝에는 출처 조항이 함께 표시됩니다.
         </p>
       </div>
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-gray-500 px-1">자주 묻는 질문</p>
+        <p className="text-xs font-semibold text-[color:var(--color-ink-mute)] px-1">자주 묻는 질문</p>
         <div className="flex flex-col gap-2">
           {STARTER_PROMPTS.map((q) => (
             <button
               key={q}
               onClick={() => onPick(q)}
-              className="text-left text-sm text-gray-700 bg-gray-50 hover:bg-primary/5 hover:text-primary border border-gray-200 hover:border-primary/30 rounded-xl px-3 py-2.5 transition"
+              className="text-left text-sm text-[color:var(--color-ink-soft)] bg-[color:var(--color-surface)] hover:bg-primary/5 hover:text-primary border border-[color:var(--color-line)] hover:border-primary/30 rounded-xl px-3 py-2.5 transition"
             >
               {q}
             </button>
@@ -657,7 +657,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
           <MdSmartToy className="text-base" />
         </div>
         <div className="space-y-2 flex-1 min-w-0">
-          <div className="bg-gray-50 border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-2.5">
+          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-2xl rounded-tl-sm px-4 py-2.5">
             {isStreaming && !hasContent ? (
               <span className="flex items-center gap-1.5 py-1" role="status" aria-live="polite">
                 <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" style={{ animationDelay: '0ms' }} />
@@ -665,7 +665,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
                 <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" style={{ animationDelay: '300ms' }} />
               </span>
             ) : (
-              <p className="text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">
+              <p className="text-sm text-[color:var(--color-ink)] whitespace-pre-wrap leading-relaxed">
                 {message.content}
                 {isStreaming && (
                   <span
@@ -684,7 +684,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             <FaithfulnessWarning tags={message.faithfulnessWarnings} />
           )}
           {message.escalationNeeded && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+            <div className="bg-[color:var(--tint-warning)] border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
               시행지침만으로 답변하기 어려운 질문입니다.
               농관원 콜센터(1334) 또는 지자체 담당자에게 문의해주세요.
             </div>
@@ -700,9 +700,9 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 // 출처를 확인하도록 유도. 빨강 (위험) 보다 한 단계 부드러운 amber 톤으로 표시.
 function FaithfulnessWarning({ tags }: { tags: string[] }) {
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
+    <div className="bg-[color:var(--tint-warning)] border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
       <p className="font-semibold mb-1 flex items-center gap-1.5">
-        <MdWarning className="text-amber-600" /> 검증되지 않은 인용 발견
+        <MdWarning className="text-[color:var(--color-accent-dark)]" /> 검증되지 않은 인용 발견
       </p>
       <p className="leading-relaxed">
         답변에 다음 조항 태그가 등장했지만 검색된 시행지침 조항과 일치하지 않습니다:{' '}
@@ -731,7 +731,7 @@ function CitationsSection({ citations }: { citations: Citation[] }) {
 
   return (
     <div>
-      <p className="text-xs font-semibold text-gray-500 mb-2">
+      <p className="text-xs font-semibold text-[color:var(--color-ink-mute)] mb-2">
         근거 조항 ({deduped.length}건)
       </p>
       <div className="space-y-2">
@@ -755,32 +755,32 @@ function CitationCard({ c }: { c: Citation }) {
   const hasSnippet = Boolean(cleanSnippet);
 
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-lg overflow-hidden">
       <button
         type="button"
         onClick={() => hasSnippet && setOpen(!open)}
         className={`w-full text-left px-3 py-2.5 flex items-start gap-2 ${
-          hasSnippet ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
+          hasSnippet ? 'hover:bg-[color:var(--color-surface-deep)] cursor-pointer' : 'cursor-default'
         }`}
         aria-expanded={open}
       >
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">
+          <p className="text-sm font-semibold text-[color:var(--color-ink)] truncate">
             {c.article || '(제목 없음)'}
           </p>
           {cleanChapter && (
-            <p className="text-xs text-gray-500 mt-0.5 truncate">{cleanChapter}</p>
+            <p className="text-xs text-[color:var(--color-ink-mute)] mt-0.5 truncate">{cleanChapter}</p>
           )}
         </div>
         {hasSnippet && (
-          <span className="flex-shrink-0 text-gray-400 text-lg mt-0.5">
+          <span className="flex-shrink-0 text-[color:var(--color-ink-faint)] text-lg mt-0.5">
             {open ? <MdExpandLess /> : <MdExpandMore />}
           </span>
         )}
       </button>
       {open && hasSnippet && (
-        <div className="px-3 pb-3 pt-2 border-t border-gray-200 bg-white">
-          <p className="text-xs text-gray-700 leading-relaxed">{cleanSnippet}</p>
+        <div className="px-3 pb-3 pt-2 border-t border-[color:var(--color-line)] bg-white">
+          <p className="text-xs text-[color:var(--color-ink-soft)] leading-relaxed">{cleanSnippet}</p>
         </div>
       )}
     </div>
@@ -806,12 +806,12 @@ function SourceClauseCard({
   const interactive = hasSnippet && !loading;
 
   return (
-    <li className="bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
+    <li className="bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-lg overflow-hidden">
       <button
         type="button"
         onClick={() => interactive && setOpen(!open)}
-        className={`w-full text-left px-3 py-2 flex items-start gap-2 text-sm text-gray-700 ${
-          interactive ? 'hover:bg-gray-100 cursor-pointer' : 'cursor-default'
+        className={`w-full text-left px-3 py-2 flex items-start gap-2 text-sm text-[color:var(--color-ink-soft)] ${
+          interactive ? 'hover:bg-[color:var(--color-surface-deep)] cursor-pointer' : 'cursor-default'
         }`}
         aria-expanded={open}
         disabled={!interactive}
@@ -822,23 +822,23 @@ function SourceClauseCard({
         <span className="flex-1 leading-relaxed">{clause.text}</span>
         {loading ? (
           <span
-            className="flex-shrink-0 mt-1 w-3 h-3 rounded-full border-2 border-gray-300 border-t-primary animate-spin"
+            className="flex-shrink-0 mt-1 w-3 h-3 rounded-full border-2 border-[color:var(--color-line)] border-t-primary animate-spin"
             aria-label="원문 불러오는 중"
           />
         ) : (
           hasSnippet && (
-            <span className="flex-shrink-0 text-gray-400 text-lg mt-0.5" aria-hidden>
+            <span className="flex-shrink-0 text-[color:var(--color-ink-faint)] text-lg mt-0.5" aria-hidden>
               {open ? <MdExpandLess /> : <MdExpandMore />}
             </span>
           )
         )}
       </button>
       {open && hasSnippet && (
-        <div className="px-3 pb-3 pt-2 border-t border-gray-200 bg-white">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
+        <div className="px-3 pb-3 pt-2 border-t border-[color:var(--color-line)] bg-white">
+          <p className="text-[11px] font-semibold text-[color:var(--color-ink-mute)] uppercase tracking-wide mb-1">
             시행지침 원문
           </p>
-          <p className="text-xs text-gray-700 leading-relaxed">{cleanSnippet}</p>
+          <p className="text-xs text-[color:var(--color-ink-soft)] leading-relaxed">{cleanSnippet}</p>
         </div>
       )}
     </li>

@@ -22,17 +22,17 @@ const CT_LABELS: Record<string, string> = {
 };
 
 const PR_LABELS: Record<string, { label: string; cls: string }> = {
-  emergency: { label: '긴급', cls: 'bg-red-100 text-red-700' },
+  emergency: { label: '긴급', cls: 'bg-[color:var(--color-danger-light)] text-[color:var(--color-danger)]' },
   high: { label: '높음', cls: 'bg-orange-100 text-orange-700' },
-  medium: { label: '중간', cls: 'bg-blue-100 text-blue-700' },
-  low: { label: '낮음', cls: 'bg-gray-100 text-gray-600' },
+  medium: { label: '중간', cls: 'bg-blue-100 text-[color:var(--color-info)]' },
+  low: { label: '낮음', cls: 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)]' },
 };
 
 const SRC_LABELS: Record<string, { label: string; cls: string }> = {
   rule: { label: '규칙', cls: 'bg-yellow-100 text-yellow-700' },
   llm: { label: 'AI', cls: 'bg-purple-100 text-purple-700' },
   tool: { label: 'AI Tool', cls: 'bg-indigo-100 text-indigo-700' },
-  manual: { label: '수동', cls: 'bg-green-100 text-green-700' },
+  manual: { label: '수동', cls: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]' },
 };
 
 function isReasoningTurn(
@@ -141,7 +141,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
   return (
     <button
       onClick={onCopy}
-      className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+      className="inline-flex items-center gap-1 text-xs text-[color:var(--color-ink-mute)] hover:text-indigo-600 transition-colors"
       aria-label={label ?? 'Copy'}
     >
       {copied ? <MdCheck className="text-green-500" /> : <MdContentCopy />}
@@ -158,8 +158,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-t border-gray-100 pt-3 mt-3 first:border-0 first:pt-0 first:mt-0">
-      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+    <div className="border-t border-[color:var(--color-line-soft)] pt-3 mt-3 first:border-0 first:pt-0 first:mt-0">
+      <h4 className="text-xs font-semibold text-[color:var(--color-ink-mute)] uppercase tracking-wide mb-1.5">
         {title}
       </h4>
       {children}
@@ -242,13 +242,13 @@ export default function AIDecisionDetailModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b">
-          <h3 id="ai-decision-detail-title" className="font-semibold text-gray-800">
+          <h3 id="ai-decision-detail-title" className="font-semibold text-[color:var(--color-ink)]">
             판단 상세
           </h3>
           <button
             ref={closeBtnRef}
             onClick={onClose}
-            className="p-1 rounded hover:bg-gray-100 text-gray-500"
+            className="p-1 rounded hover:bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)]"
             aria-label="닫기"
           >
             <MdClose className="text-xl" />
@@ -258,11 +258,11 @@ export default function AIDecisionDetailModal({
         {/* Body */}
         <div className="px-5 py-4 overflow-y-auto flex-1">
           {loading && !decision && (
-            <div className="text-sm text-gray-500 py-8 text-center">불러오는 중…</div>
+            <div className="text-sm text-[color:var(--color-ink-mute)] py-8 text-center">불러오는 중…</div>
           )}
 
           {error && (
-            <div className="flex items-start gap-2 bg-red-50 text-red-700 rounded-lg p-3 text-sm">
+            <div className="flex items-start gap-2 bg-[color:var(--color-danger-light)] text-[color:var(--color-danger)] rounded-lg p-3 text-sm">
               <MdWarningAmber className="text-xl shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -272,8 +272,8 @@ export default function AIDecisionDetailModal({
             <>
               {/* Meta */}
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className="text-xs text-gray-500">{time}</span>
-                <span className="text-sm font-medium text-gray-800">
+                <span className="text-xs text-[color:var(--color-ink-mute)]">{time}</span>
+                <span className="text-sm font-medium text-[color:var(--color-ink)]">
                   {CT_LABELS[decision.control_type] ?? decision.control_type}
                 </span>
                 {priority && (
@@ -301,7 +301,7 @@ export default function AIDecisionDetailModal({
                       : ''
                   }
                 >
-                  <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  <p className="text-sm text-[color:var(--color-ink)] leading-relaxed whitespace-pre-wrap">
                     {conclusionText}
                   </p>
                 </div>
@@ -310,13 +310,13 @@ export default function AIDecisionDetailModal({
               {/* 2. 적용된 제어 */}
               <Section title="적용된 제어">
                 {actionRows.length === 0 ? (
-                  <p className="text-xs text-gray-400">변경 사항 없음</p>
+                  <p className="text-xs text-[color:var(--color-ink-faint)]">변경 사항 없음</p>
                 ) : (
                   <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
                     {actionRows.map((row, i) => (
                       <div key={i} className="contents">
-                        <dt className="text-gray-500">{row.label}</dt>
-                        <dd className="font-medium text-gray-800">{row.value}</dd>
+                        <dt className="text-[color:var(--color-ink-mute)]">{row.label}</dt>
+                        <dd className="font-medium text-[color:var(--color-ink)]">{row.value}</dd>
                       </div>
                     ))}
                   </dl>
@@ -329,32 +329,32 @@ export default function AIDecisionDetailModal({
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                     {snapshot.temperature != null && (
                       <div className="flex justify-between">
-                        <span className="text-gray-500">온도</span>
-                        <span className="font-medium text-gray-800">
+                        <span className="text-[color:var(--color-ink-mute)]">온도</span>
+                        <span className="font-medium text-[color:var(--color-ink)]">
                           {snapshot.temperature}°C
                         </span>
                       </div>
                     )}
                     {snapshot.humidity != null && (
                       <div className="flex justify-between">
-                        <span className="text-gray-500">대기 습도</span>
-                        <span className="font-medium text-gray-800">
+                        <span className="text-[color:var(--color-ink-mute)]">대기 습도</span>
+                        <span className="font-medium text-[color:var(--color-ink)]">
                           {snapshot.humidity}%
                         </span>
                       </div>
                     )}
                     {snapshot.light_intensity != null && (
                       <div className="flex justify-between">
-                        <span className="text-gray-500">조도</span>
-                        <span className="font-medium text-gray-800">
+                        <span className="text-[color:var(--color-ink-mute)]">조도</span>
+                        <span className="font-medium text-[color:var(--color-ink)]">
                           {snapshot.light_intensity} lx
                         </span>
                       </div>
                     )}
                     {snapshot.soil_moisture != null && (
                       <div className="flex justify-between">
-                        <span className="text-gray-500">토양 수분</span>
-                        <span className="font-medium text-gray-800">
+                        <span className="text-[color:var(--color-ink-mute)]">토양 수분</span>
+                        <span className="font-medium text-[color:var(--color-ink)]">
                           {snapshot.soil_moisture}%
                         </span>
                       </div>
@@ -368,17 +368,17 @@ export default function AIDecisionDetailModal({
 
         {/* Footer */}
         {decision && (
-          <div className="border-t px-5 py-2.5 text-[11px] text-gray-400 flex items-center justify-between gap-2">
+          <div className="border-t px-5 py-2.5 text-[11px] text-[color:var(--color-ink-faint)] flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 truncate">
               <span>
                 duration{' '}
-                <span className="font-mono text-gray-600">
+                <span className="font-mono text-[color:var(--color-ink-mute)]">
                   {decision.duration_ms != null ? `${decision.duration_ms}ms` : '-'}
                 </span>
               </span>
               <span className="truncate">
                 id{' '}
-                <span className="font-mono text-gray-600">
+                <span className="font-mono text-[color:var(--color-ink-mute)]">
                   {decision.id.slice(0, 8)}…
                 </span>
               </span>

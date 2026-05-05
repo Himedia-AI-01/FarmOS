@@ -14,9 +14,11 @@ build/
 
 # ========== ChromaDB ==========
 chroma_data/
+shopping_mall/backend/ai/data/bm25_index.json
 
-# ========== 정책 문서 (PDF/DOCX — 로컬 배치, 커밋 제외) ==========
-shopping_mall/backend/ai/docs/
+# ========== Logs ==========
+logs/
+*.log
 
 # ========== Environment variables ==========
 .env
@@ -54,9 +56,6 @@ Thumbs.db
 
 # ========== bkit ==========
 .bkit/
-
-# ========== Logs ==========
-*.log
 
 # ========== Generated outputs (eval reports, presentations) ==========
 backend/reports/

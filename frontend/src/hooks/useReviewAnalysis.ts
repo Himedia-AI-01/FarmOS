@@ -56,7 +56,7 @@ export function useReviewAnalysis() {
   }, []);
 
   // 분석 실행 (SSE 스트림으로 진행률 표시)
-  const analyzeReviews = useCallback(async (_scope = 'all', batchSize = 50, sampleSize = 200) => {
+  const analyzeReviews = useCallback(async (batchSize = 50, sampleSize = 200) => {
     setIsAnalyzing(true);
     setAnalyzeProgress(0);
     setProgressMessage('분석 준비 중...');

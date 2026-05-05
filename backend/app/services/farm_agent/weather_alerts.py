@@ -268,6 +268,22 @@ def _safe_num(value: Any) -> float | None:
         return None
 
 
+def _coerce_int(value: Any) -> int | None:
+    """Same shape as _safe_num but for ints. KMA may emit numeric fields as
+    strings ("0", "1"); booleans coerce safely; everything else returns None."""
+    if value is None or isinstance(value, bool):
+        # bool is an int subclass — explicitly excluded so True doesn't sneak
+        # through as 1.
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+
 def _detect_drought(
     daily: list[Any],
     current: dict[str, Any],
@@ -348,7 +364,7 @@ def analyze_weather_risks(
     weather: dict[str, Any] | None,
     main_crop: str | None = None,
     *,
-    horizon_days: int = 3,
+    horizon_days: int = 5,
 ) -> list[dict[str, Any]]:
     """Build a list of crop-aware risk advisories from a get_weather() payload.
 
@@ -357,7 +373,8 @@ def analyze_weather_risks(
             keys — empty input → empty list (callers safely chain).
         main_crop: free-form Korean crop name. Used only for crop_hint
             decoration; thresholds themselves are crop-agnostic.
-        horizon_days: how many `daily_forecasts` entries to scan (default 3).
+        horizon_days: how many `daily_forecasts` entries to scan (default 5,
+            matching KMA 단기+중기 결합 daily_forecasts 길이).
 
     Returns:
         List of advisory dicts ordered by (severity desc, day asc). Empty when
@@ -407,8 +424,7 @@ def analyze_weather_risks(
     for entry in daily[:horizon_days]:
         if not isinstance(entry, dict):
             continue
-        offset = entry.get("day_offset")
-        offset = int(offset) if isinstance(offset, int) else None
+        offset = _coerce_int(entry.get("day_offset"))
         when = (
             _label_for_offset(offset)
             if offset is not None
@@ -678,6 +694,154 @@ def analyze_weather_risks(
         )
     )
     return advisories
+
+
+# Per-day "task decision" status: blocked (작업 보류) > caution (주의) > ok (진행).
+# blocked 는 critical advisory 또는 강수/적설(작업 자체가 의미 없거나 위험) 시,
+# caution 은 warning level 또는 풍속·일교차 같은 "주의해서 진행" 신호일 때.
+_STATUS_TITLE: dict[str, str] = {
+    "blocked": "작업 보류 권장",
+    "caution": "주의하여 진행",
+    "ok": "예정 작업 진행 가능",
+}
+_STATUS_TYPE: dict[str, str] = {
+    "blocked": "방제",
+    "caution": "주의",
+    "ok": "작업",
+}
+# kind → 우선 액션 한 줄. 작물·심각도와 무관한 일반 액션 컨텍스트.
+_KIND_ACTION: dict[str, str] = {
+    "frost":         "야간 보온재·살수 점검, 개화기 작물 우선 보호.",
+    "cold_wave":     "시설 난방 가동·관수 라인 동파 방지·외부 작업 단축.",
+    "wind_chill":    "야외 작업은 풍속 약한 한낮으로 이동, 보온복·동상 예방.",
+    "heatwave":      "관수 사이클 단축·차광망 가동·정오 전후 작업 회피.",
+    "tropical_night":"시설 야간 환기·미스트·관수 사이클 조정.",
+    "heavy_rain":    "배수로 점검·시설 점검·약제 살포 보류.",
+    "rain_likely":   "야외 작업·약제 살포 일정 재조정 검토.",
+    "current_rain":  "야외 작업·방제 즉시 중단.",
+    "snow":          "시설 적설하중 분산, 비닐하우스 측창 점검·교통 안전 확인.",
+    "strong_wind":   "약제 살포·드론 작업 보류, 지주·방풍 시설 점검.",
+    "temp_swing":    "관수 안정화·시설 야간 보온으로 열과·갈라짐 예방.",
+    "fungal_humidity":"환기 강화·예방 약제 사이클 검토.",
+    "mites_window":  "잎 뒷면 점검·예찰, 발생 초기 약제 또는 천적 방사 검토.",
+    "aphid_window":  "신초·새순 점검, 황색 점착 트랩 설치·초기 약제 1회.",
+    "drought":       "관수 사이클 단축·토양 수분 점검, 관정·저수지 가용량 확인.",
+}
+
+# blocked 처리 대상 — critical 이 아니어도 "작업 자체 불가/무의미" 카테고리.
+_BLOCKING_KINDS: frozenset[str] = frozenset({
+    "heavy_rain", "current_rain", "snow",
+})
+
+
+def build_task_advisories(
+    weather: dict[str, Any] | None,
+    main_crop: str | None = None,
+    *,
+    horizon_days: int = 5,
+) -> list[dict[str, Any]]:
+    """Per-day task decisions derived from `analyze_weather_risks`.
+
+    Replaces the frontend's hardcoded if/precip>0/wind>=7 logic with a single
+    agentic policy: same thresholds the LLM and briefing use, same crop-aware
+    hints, same severity sort. Returned shape is intentionally stable so the
+    UI can render directly without re-deriving status.
+
+    Returns one entry per day in `weather.daily_forecasts[:horizon_days]`:
+        {
+          "date":      "YYYY-MM-DD",
+          "when":      "오늘" | "내일" | "모레" | "D+N",
+          "status":    "blocked" | "caution" | "ok",
+          "title":     사용자에게 보일 한국어 제목,
+          "type":      "방제" | "주의" | "작업",
+          "summary":   왜 이 status 인지 한 줄 (advisory.message 또는 기본 문구),
+          "actions":   ["관수 사이클 단축·...", ...]    # 우선 액션 1~3개
+          "crop_hint": 작물별 부가 한 줄 (없으면 None),
+          "advisories": [원본 advisory dict, ...]      # 디버그·툴팁용 풀 리스트
+        }
+    Empty `weather` 또는 `daily_forecasts` 누락 시 빈 리스트.
+    """
+    if not isinstance(weather, dict):
+        return []
+    daily = weather.get("daily_forecasts") or []
+    if not isinstance(daily, list) or not daily:
+        return []
+
+    advisories = analyze_weather_risks(
+        weather, main_crop=main_crop, horizon_days=horizon_days
+    )
+
+    # advisory.when ("오늘", "내일", date string) → daily index 매칭에 사용.
+    # current_rain/지금-카테고리는 offset=0 (오늘) 카드에 합류시킨다.
+    by_day: dict[str, list[dict[str, Any]]] = {}
+    for a in advisories:
+        when = a.get("when") or ""
+        if when in {"지금", "오늘밤"}:
+            when = "오늘"
+        if when.startswith("향후"):
+            # drought 는 단일 일자가 아니므로 0번째 (오늘) 카드에 attach.
+            when = "오늘"
+        by_day.setdefault(when, []).append(a)
+
+    out: list[dict[str, Any]] = []
+    for entry in daily[:horizon_days]:
+        if not isinstance(entry, dict):
+            continue
+        date = entry.get("date")
+        offset = _coerce_int(entry.get("day_offset"))
+        when = _label_for_offset(offset) if offset is not None else (date or "예보")
+        # 매칭: 오늘 카드는 _label_for_offset(0) == "오늘" 이지만, 실제 daily entry
+        # 의 date 키 기반 advisory 도 흡수해야 한다 (offset 미설정 케이스).
+        day_adv = list(by_day.get(when, []))
+        if date and date != when:
+            day_adv.extend(by_day.get(date, []))
+
+        if any(a.get("level") == "critical" for a in day_adv):
+            status = "blocked"
+        elif any(a.get("kind") in _BLOCKING_KINDS for a in day_adv):
+            status = "blocked"
+        elif any(a.get("level") == "warning" for a in day_adv):
+            status = "caution"
+        else:
+            status = "ok"
+
+        # 가장 심각한 advisory (sort 가 이미 critical→warning→info) 하나를 summary 로.
+        top = day_adv[0] if day_adv else None
+        if top is not None:
+            summary = top.get("message") or _STATUS_TITLE[status]
+        else:
+            summary = "5일 예보 기준으로 큰 기상 제한은 보이지 않습니다."
+
+        # actions: 모든 advisory 의 kind 별 액션 (중복 제거, 최대 3개).
+        seen: set[str] = set()
+        actions: list[str] = []
+        for a in day_adv:
+            kind = a.get("kind") or ""
+            action = _KIND_ACTION.get(kind)
+            if action and action not in seen:
+                actions.append(action)
+                seen.add(action)
+            if len(actions) >= 3:
+                break
+
+        # crop_hint: 첫 번째 비어있지 않은 작물별 힌트.
+        crop_hint = next(
+            (a.get("crop_hint") for a in day_adv if a.get("crop_hint")),
+            None,
+        )
+
+        out.append({
+            "date": date,
+            "when": when,
+            "status": status,
+            "title": _STATUS_TITLE[status],
+            "type": _STATUS_TYPE[status],
+            "summary": summary,
+            "actions": actions,
+            "crop_hint": crop_hint,
+            "advisories": day_adv,
+        })
+    return out
 
 
 def format_advisories_markdown(

@@ -135,7 +135,6 @@ export function useManualControl() {
     let toggleState: Record<string, unknown>;
     switch (controlType) {
       case 'ventilation': {
-        const current = controlState.ventilation;
         // Design Ref: §5.2 — 시뮬 OFF 시 현재값 저장 → 수동 ON 토글 시 복원 가능
         if (!newActive) {
           const current = controlState.ventilation;
@@ -158,7 +157,6 @@ export function useManualControl() {
         toggleState = { on: newActive, brightness_pct: newActive ? 60 : 0 };
         break;
       case 'shading': {
-        const current = controlState.shading;
         // Design Ref: §5.2 — 시뮬 OFF 시 현재값 저장
         if (!newActive) {
           const current = controlState.shading;
@@ -292,8 +290,9 @@ export function useManualControl() {
 
   // cleanup timers
   useEffect(() => {
+    const timers = debounceTimers.current;
     return () => {
-      Object.values(debounceTimers.current).forEach(clearTimeout);
+      Object.values(timers).forEach(clearTimeout);
     };
   }, []);
 

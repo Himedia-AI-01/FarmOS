@@ -77,7 +77,7 @@ export default function ReviewsPage() {
           </span>
         </button>
         <button
-          onClick={() => analyzeReviews('all', settings.default_batch_size)}
+          onClick={() => analyzeReviews(settings.default_batch_size)}
           disabled={isAnalyzing}
           aria-busy={isAnalyzing}
           className="btn-primary relative overflow-hidden !py-2 !text-[14px]"
@@ -206,7 +206,7 @@ export default function ReviewsPage() {
                     {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
                   <Tooltip formatter={(value) => `${value}건`} />
-                  <Legend formatter={(value, entry: any) => `${value} ${entry.payload.value}건`} iconType="circle" iconSize={10} />
+                  <Legend formatter={(value, entry) => `${value} ${(entry?.payload as { value?: number } | undefined)?.value ?? 0}건`} iconType="circle" iconSize={10} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

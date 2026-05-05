@@ -19,8 +19,13 @@ from datetime import date as date_cls, datetime, time, timezone, timedelta
 import httpx
 
 from app.core.config import settings
+from app.core.redis_cache import redis_cached
 
-# 캐시 (10분 TTL)
+# Cache TTL — 10분. KMA 초단기실황은 10분 갱신, 단기예보는 3시간 갱신이라
+# 10분 TTL 이 cache 적중률 vs 데이터 신선도의 균형점.
+WEATHER_CACHE_TTL_SEC = 600
+
+# In-memory fallback (Redis 가 비활성/실패 시) — 기존 동작 보존.
 _cache: dict = {}
 _cache_expiry: datetime | None = None
 CACHE_TTL = timedelta(minutes=10)
@@ -643,6 +648,14 @@ def _generate_mock_weather(sensor_data: dict | None = None) -> dict:
     }
 
 
+@redis_cached(
+    prefix="kma:weather",
+    ttl=WEATHER_CACHE_TTL_SEC,
+    # sensor_data 는 캐시 키에 포함하지 않음 — mock 폴백 시에만 사용되며
+    # 같은 농장의 sensor_data 변동은 KMA 응답에 영향을 주지 않는다. 키를 좁게
+    # 유지해 캐시 적중률을 극대화.
+    keygen=lambda sensor_data=None, **kw: f"{settings.FARM_NX}:{settings.FARM_NY}",
+)
 async def get_weather(sensor_data: dict | None = None) -> dict:
     """기상 데이터를 반환한다. KMA API 키가 있으면 실제 호출, 없으면 mock.
 
@@ -655,10 +668,14 @@ async def get_weather(sensor_data: dict | None = None) -> dict:
             "timezone": "Asia/Seoul",
             ...
         }
+
+    캐싱:
+        REDIS_URL 설정 시 응답이 ``kma:weather:{nx}:{ny}`` 키로 600초 캐시.
+        Redis 가 없으면 in-memory 폴백 (워커별 _cache).
     """
     global _cache, _cache_expiry
 
-    # 캐시 확인
+    # In-memory fallback (Redis 비활성 시).
     now_utc = datetime.now(timezone.utc)
     generated_at = _now_kst()
     if _cache_expiry and now_utc < _cache_expiry and _cache:

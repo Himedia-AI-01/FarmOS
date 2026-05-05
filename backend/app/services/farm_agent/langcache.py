@@ -23,23 +23,85 @@ Lifecycle:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+# Intent-scoped bypass — questions whose answers depend on per-user farm
+# context (profile, journal, eligibility) or carry regulatory/safety risk
+# (subsidy citations, pesticide dosing) MUST NOT be served from a semantic
+# cache. Even with user_id scoping, two different questions from the same
+# user can match above the similarity threshold and return the wrong answer
+# (e.g. Q: "공익직불 자격" hits cached A: "KAMIS 시세" when threshold is loose).
+#
+# Match is intentionally broad (Korean keyword OR-list) — false-positive
+# bypasses cost a cache miss; false-negative cache hits cost a wrong answer
+# in domains where wrong answers carry real consequences (subsidy denial,
+# pesticide misuse). Trade-off favours the miss.
+_BYPASS_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # Subsidy / compliance / regulation — citations must be re-derived per turn.
+    re.compile(
+        r"(공익직불|직불금|직불\s*제도|소농직불|면적직불|선택직불|"
+        r"준수사항|시행지침|영농기록|영농일지|농사일지|기록부|작업일지|"
+        r"부정수급|감액|환수|자격|신청|보조금|지원금|정책자금|"
+        r"농업경영체|농지\s*형상|화학비료|영농폐기물)"
+    ),
+    # Pest / disease diagnosis & pesticide recommendations — safety-critical.
+    re.compile(
+        r"(병해충|방제|진단|농약|살포|희석배수|살균제|살충제|약제|"
+        r"노균병|흰가루병|탄저병|잿빛곰팡이|역병|무름병|진딧물|응애|"
+        r"총채벌레|굼벵이|나방|깍지벌레|선충|친환경\s*방제)"
+    ),
+    # Farm-context-dependent reads — answer varies by user profile / records.
+    re.compile(
+        r"(내\s*농장|우리\s*농장|내\s*작물|내\s*땅|내\s*밭|"
+        r"농장\s*정보|프로필|일지|기록|영농\s*기록|"
+        r"IoT|센서|제어\s*이력|관수|환기|급수|온실\s*제어)"
+    ),
+)
+
+
+def should_bypass(question: str | None) -> bool:
+    """Return True if the question must skip the semantic cache.
+
+    Use at every lookup AND store site — bypassing only on lookup would still
+    pollute the cache with subsidy/diagnosis answers that future unrelated
+    questions could match.
+    """
+    if not question:
+        return False
+    text = question.strip()
+    if not text:
+        return False
+    # Cap regex input — a 100KB pasted question would otherwise re.search every
+    # bypass pattern across the whole blob. The patterns target keyword tokens
+    # near the head/tail of a question so 4 KB is well past anything the UI
+    # actually sends.
+    if len(text) > 4096:
+        text = text[:2048] + text[-2048:]
+    return any(p.search(text) for p in _BYPASS_PATTERNS)
+
 _client: Any | None = None
 _init_attempted = False
 
 # Runtime feature flag: flips False permanently the first time the LangCache
 # server rejects an `attributes` payload with HTTP 400 "no attributes are
-# configured for this cache." Subsequent calls then skip the attributes kwarg
-# entirely (avoids one wasted round-trip per request).
+# configured for this cache."
 #
-# To get per-user scoping back, add a `user_id` (string) attribute in the Redis
-# LangCache dashboard for this cache_id; until then answers are cache-shared
-# across users in the same threshold band.
+# IMPORTANT — fail-closed: when this is False the cache is **disabled entirely**
+# (lookup returns None, store no-ops). Previously we degraded to a global cache
+# without user_id scoping, which leaked answers across users (subsidy/diagnosis
+# answers are farm-context-dependent — sharing them is a real-money correctness
+# bug, not just a privacy concern).
+#
+# To re-enable: add a `user_id` (string) attribute in the Redis LangCache
+# dashboard for this cache_id. The first user_id-scoped request after that will
+# re-flip _supports_attributes to True automatically (we don't sticky the
+# False — restart fixes it; see _client = None reset path).
 _supports_attributes: bool = True
 
 
@@ -105,35 +167,47 @@ async def lookup(question: str, user_id: int | str | None = None) -> str | None:
     """
     if not question or not question.strip():
         return None
+    if should_bypass(question):
+        logger.info("langcache.bypass_intent op=lookup user=%s", user_id)
+        return None
     client = _get_client()
     if client is None:
         return None
     global _supports_attributes
+    # Fail-closed: if the cache can't scope by user_id, refuse to serve.
+    # Crossing user boundaries on cached subsidy/diagnosis answers is a
+    # correctness bug; degrading to global cache hides it.
+    if not _supports_attributes:
+        return None
+    if user_id is None:
+        # No user context = no isolation key. Skip rather than risk leak.
+        return None
     try:
-        attrs = _attrs(user_id) if _supports_attributes else None
+        attrs = _attrs(user_id)
         # SDK 는 attributes kwarg 를 지원 — 미지원 버전이면 TypeError 잡아서 fallback.
         try:
-            if attrs is not None:
-                result = await client.search_async(prompt=question, attributes=attrs)
-            else:
-                result = await client.search_async(prompt=question)
+            result = await client.search_async(prompt=question, attributes=attrs)
         except TypeError:
-            result = await client.search_async(prompt=question)
+            # SDK doesn't accept attributes kwarg → cannot scope → bail out.
+            logger.warning(
+                "langcache.sdk_no_attributes_kwarg — install langcache SDK with "
+                "attributes support; cache disabled until then."
+            )
+            _supports_attributes = False
+            return None
         except Exception as exc:  # noqa: BLE001
-            if _supports_attributes and _is_attributes_unsupported_error(exc):
+            if _is_attributes_unsupported_error(exc):
                 logger.warning(
                     "langcache.attributes_unsupported — Redis cache_id=%s lacks "
-                    "user_id attribute schema. Disabling attributes for this "
-                    "process and falling back to global cache. Add a 'user_id' "
-                    "(string) attribute in the LangCache dashboard for per-user "
-                    "isolation.",
+                    "user_id attribute schema. **Disabling cache entirely** "
+                    "until restarted. Add a 'user_id' (string) attribute in the "
+                    "LangCache dashboard for per-user isolation, then restart "
+                    "the backend.",
                     settings.LANGCACHE_CACHE_ID,
                 )
                 _supports_attributes = False
-                # Retry once without attributes so this request still benefits.
-                result = await client.search_async(prompt=question)
-            else:
-                raise
+                return None
+            raise
     except Exception as exc:  # noqa: BLE001
         logger.warning("langcache.lookup_failed err=%s", exc)
         return None
@@ -211,34 +285,46 @@ async def store(
         return
     if not question.strip() or not answer.strip():
         return
+    if should_bypass(question):
+        logger.info("langcache.bypass_intent op=store user=%s", user_id)
+        return
     client = _get_client()
     if client is None:
         return
     global _supports_attributes
+    # Fail-closed on store too — never write to the unscoped cache, since a
+    # poisoned global entry will leak to every other user on subsequent reads.
+    if not _supports_attributes:
+        return
+    if user_id is None:
+        return
     try:
-        attrs = _attrs(user_id) if _supports_attributes else None
+        attrs = _attrs(user_id)
         try:
-            if attrs is not None:
-                await client.set_async(prompt=question, response=answer, attributes=attrs)
-            else:
-                await client.set_async(prompt=question, response=answer)
+            await client.set_async(prompt=question, response=answer, attributes=attrs)
         except TypeError:
-            await client.set_async(prompt=question, response=answer)
+            logger.warning(
+                "langcache.sdk_no_attributes_kwarg — install langcache SDK with "
+                "attributes support; cache disabled until then."
+            )
+            _supports_attributes = False
+            return
         except Exception as exc:  # noqa: BLE001
-            if _supports_attributes and _is_attributes_unsupported_error(exc):
+            if _is_attributes_unsupported_error(exc):
                 logger.warning(
                     "langcache.attributes_unsupported — Redis cache_id=%s lacks "
-                    "user_id attribute schema. Disabling attributes for this "
-                    "process. Add a 'user_id' (string) attribute in the "
-                    "LangCache dashboard for per-user isolation.",
+                    "user_id attribute schema. **Disabling cache entirely** "
+                    "until restarted. Add a 'user_id' (string) attribute in "
+                    "the LangCache dashboard for per-user isolation, then "
+                    "restart the backend.",
                     settings.LANGCACHE_CACHE_ID,
                 )
                 _supports_attributes = False
-                await client.set_async(prompt=question, response=answer)
-            else:
-                raise
-        logger.info("langcache.stored user=%s qlen=%d alen=%d scoped=%s",
-                    user_id, len(question), len(answer), _supports_attributes)
+                return
+            raise
+        logger.info(
+            "langcache.stored user=%s qlen=%d alen=%d", user_id, len(question), len(answer)
+        )
     except Exception as exc:  # noqa: BLE001
         logger.warning("langcache.store_failed err=%s", exc)
 

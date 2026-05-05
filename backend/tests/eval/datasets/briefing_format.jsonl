@@ -1,0 +1,8 @@
+{"check":"no_markdown_tables","forbidden":["| 항목 |","|---|---|","|---|---|---|"],"reason":"브리핑은 대화체 — 표 사용 금지"}
+{"check":"no_dividers","forbidden":["\n---\n","\n---\n\n"],"reason":"구분선(---) 금지"}
+{"check":"no_excessive_emoji","max_emoji":6,"reason":"이모지 1-3개만 (마진 두 배까지 허용)"}
+{"check":"min_length","min_chars":120,"reason":"빈 응답·짧은 에러 메시지 캐싱 방지"}
+{"check":"max_length","max_chars":2500,"reason":"브리핑이 한 화면 분량을 크게 넘지 않도록"}
+{"check":"address_term","required":["사장님","선생님"],"min_count":1,"reason":"호칭 1회 이상"}
+{"check":"forbidden_meta","forbidden":["We have all data","Need to produce","글자 수 세자","Let's count"],"reason":"메타 사고 leak 방지"}
+{"check":"forbidden_pesticide_in_briefing","forbidden":["희석배수","스미치온","다이센","코퍼하이드록사이드"],"reason":"브리핑은 농약 추천 금지"}

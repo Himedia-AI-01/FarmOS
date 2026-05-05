@@ -1,0 +1,40 @@
+{"q":"영농일지 꼭 써야 하나요","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ⑧ 영농기록"}
+{"q":"농약 안전사용 기준 안 지켜도 되나요","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ③"}
+{"q":"마을 공동작업 안 나가면 직불금 깎이나요","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ⑦"}
+{"q":"공익기능 교육 안 들어도 되나","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ⑥"}
+{"q":"화학비료 더 줘도 되나요","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ④"}
+{"q":"영농폐기물 그냥 태워도 되나","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ⑤"}
+{"q":"농지에 비닐하우스 설치는 자율인가","expected_verdict":"UNCLEAR","expected_citations_min":0,"reason":"시행지침 직접 명시 없음"}
+{"q":"소농직불 자격 기준 알려줘","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"청년농 가산금 얼마","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"면적직불 단가","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"농업경영체 등록 변경 신고 의무인가","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ①"}
+{"q":"농지 묵혀도 되나요","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ② 농지 형상·기능 유지"}
+{"q":"논두렁 안 깎으면 감액되나요","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ②"}
+{"q":"폐비닐 그냥 모아두면 되나요","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ⑤"}
+{"q":"농약병 어디다 버려야 해","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ⑤"}
+{"q":"영농일지 몇 년 보관해야 해","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"8대 ⑧ 2년 보관"}
+{"q":"수확량도 기록해야 하나요","expected_verdict":"UNCLEAR","expected_citations_min":0,"reason":"시행지침이 영농기록 범위에 수확량 명시 없음. 에이전트가 단정 답변하면 over-classification."}
+{"q":"공익기능 교육 1년에 몇 번","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"빈도 조회 — 정보형 질문. 의무성 자체는 별도 케이스에서 검증."}
+{"q":"부정수급 처벌 수준","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"감액 사유 다 알려줘","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"감액 사유 목록 = 정보 조회. 사용자가 의무를 묻는 게 아니라 사유를 묻는 것."}
+{"q":"승계 처리는 어떻게 되나","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"III 등록 절차 — 절차 안내형 질문"}
+{"q":"등록증 발급 시기","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"발급 시기 = 절차 정보. 에이전트가 모호하면 명확화 질문 회신도 정당."}
+{"q":"기본직불 신청 기간","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"변경등록 기한","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"이행점검은 누가 하나","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"III-6"}
+{"q":"드론 방제도 농약 안전사용에 들어가나","expected_verdict":"UNCLEAR","expected_citations_min":0,"reason":"시행지침이 방법(드론/분무기) 별로 명시하지 않음. 농약 자체는 의무지만 방법 분류 = UNCLEAR. 에이전트가 MANDATORY 로 단정하면 over-classification."}
+{"q":"임차농지도 직불 받을 수 있나","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"휴경하면 직불 어떻게 되나","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"결과 조회형 질문 (어떻게 되나). 사용자가 행동 의무를 묻는 게 아니라 영향을 물음."}
+{"q":"부정수급 신고하면 보상 있나","expected_verdict":"UNCLEAR","expected_citations_min":0}
+{"q":"같은 위반 두 번 하면 감액 두 배인가","expected_verdict":"MANDATORY","expected_citations_min":1,"reason":"II-6 반복위반 가중"}
+{"q":"교육 받은 거 어떻게 증명","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"증명 절차 안내형 질문 (어떻게)."}
+{"q":"외국인 근로자 고용해도 직불 받나","expected_verdict":"UNCLEAR","expected_citations_min":0}
+{"q":"농약 안 쓰면 더 받나","expected_verdict":"UNCLEAR","expected_citations_min":0,"reason":"공익직불 시행지침에 직접 명시 없음. 친환경직불은 별도 제도 — 에이전트가 명확히 답하기 어려운 영역."}
+{"q":"비료 영수증 보관 의무","expected_verdict":"UNCLEAR","expected_citations_min":0,"reason":"시행지침에 영수증 보관 직접 명시 없음. 에이전트가 MANDATORY 로 단정하면 over-extension."}
+{"q":"농업법인도 직불 받나","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"II-2"}
+{"q":"논 0.1ha 도 받을 수 있나","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"최소면적 기준"}
+{"q":"농외소득 얼마까지 허용","expected_verdict":"OPTIONAL","expected_citations_min":1,"reason":"II-3 소농직불"}
+{"q":"3년 거주 어떻게 증명","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"가구 합산 경작면적 의미","expected_verdict":"OPTIONAL","expected_citations_min":1}
+{"q":"이의신청 절차","expected_verdict":"OPTIONAL","expected_citations_min":1}

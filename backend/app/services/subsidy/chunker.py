@@ -540,3 +540,281 @@ def load_cached_markdown() -> str:
     if not md_path.exists():
         raise FileNotFoundError(f"Markdown 캐시가 없습니다: {md_path}")
     return md_path.read_text(encoding="utf-8")
+
+
+# ── Leaf chunking (소단원 → 가/나/다 → ①/②/③) ─────────────────────────────
+#
+# Why this exists:
+#     Section chunks (build_chunks output) are 1-13K chars, with the worst
+#     offenders being heavily-cited clauses (II-6 준수사항, II-8 행정처분,
+#     C2-II 농약, C2-III 비료, C2-IV 교육). When the agent fetches "II-8" via
+#     get_clause_leaves(), passing the full 13K to the LLM is wasteful — both
+#     in tokens (~3K) and attention.
+#
+# Korean legal hierarchy (matches 시행지침 본문 markers):
+#     1. 가. 나. 다. 라. 마. 바. ...     ← primary subdivision (paragraph)
+#     2. ① ② ③ ④ ⑤ ⑥ ⑦ ⑧ ⑨ ⑩ ⑪ ⑫ ...   ← numbered point (within a 가/나)
+#     3. 1) 2) 3) ▽ ▶ - *               ← bullet (within a ①/②) — NOT split
+
+# Hard cap 1,500 chars: yields ~750 tokens per leaf. LLM sees 3-5 leaves of
+# this size (~3-4K tokens) instead of one 13K-char chunk (~3K tokens but as a
+# single dense block). Smaller chunks improve embedding sharpness AND
+# attention quality at generation time.
+HARD_CAP_CHARS = 1_500
+SOFT_TARGET_CHARS = 900
+# Below this, merge into previous leaf — avoids micro-chunks from intro lines.
+MIN_LEAF_CHARS = 200
+
+# Subdivision markers — note these appear INLINE in the parsed Markdown, not
+# on dedicated lines (Upstage Document Parse flattens hierarchy). The
+# trailing `\.` is essential — a single 가 may appear in regular text
+# (e.g. "가능"). 가-하 covers all 14 Korean primary subdivisions.
+GA_NA_DA_RE = re.compile(r"(?<![가-힣])([가나다라마바사아자차카타파하])\.\s+")
+# Circled digits 1-20 — Korean legal docs use ① through ⑳.
+CIRCLED_DIGIT_RE = re.compile(r"([①-⑳])\s*")
+# Sentence boundary fallback (Korean: 다., 합니다. + . ? ! 。)
+SENTENCE_END_RE = re.compile(r"(?<=[.!?。])\s+")
+
+
+@dataclass
+class LeafChunk:
+    """Sub-section level chunk for leaf-level retrieval.
+
+    Inherits all hierarchy fields from its parent Chunk; adds:
+      parent_id : id of the section chunk this leaf came from (for dedup-by-parent)
+      sub_path  : "가" | "가.①" | "①" | "b2" | "s0" — semantic position
+      leaf_idx  : 0-based position within the parent (for stable ordering)
+      clause_id : "II-3" | "C2-VI" | "BP4" — for TAG-filter retrieval in Redis
+    """
+
+    id: str
+    parent_id: str
+    sub_path: str
+    leaf_idx: int
+    content: str
+    chapter: str
+    section: str
+    subsection: str
+    subsection_title: str
+    page_start: int
+    page_end: int
+    section_type: str = "본문"
+    clause_id: str = ""
+
+    def char_len(self) -> int:
+        return len(self.content)
+
+
+_ROMAN_RE = re.compile(r"\b([IVXLCDM]+)\.")
+_ARABIC_RE = re.compile(r"^\s*(\d+)\.")
+
+
+def _derive_clause_id(chunk: Chunk) -> str:
+    """Map a section chunk to its canonical clause id ('II-3', 'C2-VI', ...).
+
+    Metadata layout from build_chunks():
+      Chapter 1: chapter='CHAPTER 1', section='II. 기본직불금...', subsection='3. 소농...'
+        → 'II-3' (roman from section, arabic from subsection)
+      Chapter 2: chapter='CHAPTER 2', section=PLACEHOLDER_NO_PARENT_SECTION,
+                 subsection='VI. 영농기록...'
+        → 'C2-VI' (roman from subsection)
+      별표:     chapter='별표', section='별표 4', subsection='별표 4 ...'
+        → 'BP4'
+    Returns "" if metadata is unrecognised (placeholder/edge-case chunks).
+    """
+    if chunk.chapter == "별표":
+        m = re.match(r"별표\s*(\d+)", chunk.section or "")
+        return f"BP{m.group(1)}" if m else ""
+
+    is_chapter_2 = "CHAPTER 2" in (chunk.chapter or "")
+
+    # Roman numeral lives in `section` for Chapter 1 (leaf=arabic) and in
+    # `subsection` for Chapter 2 (leaf=roman). Search both, prefer section.
+    section_roman = _ROMAN_RE.search(chunk.section or "")
+    sub_roman = _ROMAN_RE.search(chunk.subsection or "")
+    arabic = _ARABIC_RE.match(chunk.subsection or "")
+
+    if is_chapter_2 and sub_roman:
+        return f"C2-{sub_roman.group(1)}"
+
+    if section_roman and arabic:
+        return f"{section_roman.group(1)}-{arabic.group(1)}"
+
+    # Chapter 1 with arabic but no recognisable roman in section
+    # (placeholder section labels). Fall through to roman-only.
+    if section_roman:
+        return section_roman.group(1)
+    if sub_roman:
+        return sub_roman.group(1)
+    return ""
+
+
+def _split_at(content: str, regex: re.Pattern[str]) -> list[tuple[str, str]]:
+    """Split text at every regex match. Returns [(marker, body)].
+
+    The first segment may have an empty marker (preamble before the first
+    boundary). Marker is the captured group, NOT the full match — useful for
+    paths like "가" (no trailing dot).
+    """
+    matches = list(regex.finditer(content))
+    if not matches:
+        return [("", content)]
+
+    out: list[tuple[str, str]] = []
+    pre = content[: matches[0].start()].strip()
+    if pre:
+        out.append(("", pre))
+
+    for i, m in enumerate(matches):
+        body_start = m.end()
+        body_end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        body = content[body_start:body_end].strip()
+        if body:
+            out.append((m.group(1), body))
+    return out
+
+
+def _force_sentence_split(text: str, target: int) -> list[str]:
+    """Cap-by-cap split at sentence boundaries; char-split as last resort."""
+    sentences = SENTENCE_END_RE.split(text)
+    out: list[str] = []
+    cur = ""
+    for s in sentences:
+        if not s:
+            continue
+        if len(cur) + len(s) + 1 <= target:
+            cur = f"{cur} {s}".strip() if cur else s
+        else:
+            if cur:
+                out.append(cur)
+            if len(s) > target:
+                # Single sentence longer than target — last-resort char split.
+                for i in range(0, len(s), target):
+                    out.append(s[i : i + target])
+                cur = ""
+            else:
+                cur = s
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _recursive_leaves(content: str, path_prefix: str = "") -> list[tuple[str, str]]:
+    """Recursive splitter. Returns [(sub_path, body)].
+
+    Levels (in order; only deeper levels run if upper level didn't split):
+      1. 가/나/다 split
+      2. ①/②/③ split
+      3. blank-line split
+      4. sentence-boundary force split
+    """
+    if len(content) <= HARD_CAP_CHARS:
+        return [(path_prefix, content)]
+
+    # Level 1: 가/나/다
+    parts = _split_at(content, GA_NA_DA_RE)
+    if len(parts) > 1:
+        out: list[tuple[str, str]] = []
+        for marker, body in parts:
+            new_path = (
+                f"{path_prefix}.{marker}" if path_prefix and marker
+                else (marker or path_prefix)
+            )
+            out.extend(_recursive_leaves(body, new_path))
+        return out
+
+    # Level 2: ①/②/③
+    parts = _split_at(content, CIRCLED_DIGIT_RE)
+    if len(parts) > 1:
+        out = []
+        for marker, body in parts:
+            new_path = (
+                f"{path_prefix}.{marker}" if path_prefix and marker
+                else (marker or path_prefix)
+            )
+            out.extend(_recursive_leaves(body, new_path))
+        return out
+
+    # Level 3: blank-line
+    if "\n\n" in content:
+        blocks = [b.strip() for b in content.split("\n\n") if b.strip()]
+        if len(blocks) > 1:
+            out = []
+            for i, block in enumerate(blocks):
+                new_path = f"{path_prefix}.b{i}" if path_prefix else f"b{i}"
+                out.extend(_recursive_leaves(block, new_path))
+            return out
+
+    # Level 4: sentence-boundary force split
+    parts_text = _force_sentence_split(content, HARD_CAP_CHARS)
+    return [
+        ((f"{path_prefix}.s{i}" if path_prefix else f"s{i}"), p)
+        for i, p in enumerate(parts_text)
+    ]
+
+
+def sub_split_chunks(chunks: list[Chunk]) -> list[LeafChunk]:
+    """Section chunks → leaf chunks at 가/나/다/① granularity.
+
+    Output guarantees:
+      - Every leaf has len(content) ≤ HARD_CAP_CHARS (modulo final fallback).
+      - Adjacent leaves where one is < MIN_LEAF_CHARS are merged into the previous.
+      - Stable order: leaves preserve parent's order, and within a parent, the
+        order in which markers appear in the source.
+      - leaf.id = "{parent.id}#{leaf_idx:02d}" — deterministic Redis key.
+    """
+    leaves: list[LeafChunk] = []
+    for parent in chunks:
+        clause_id = _derive_clause_id(parent)
+
+        # Short parents pass through as a single leaf.
+        if parent.char_len() <= HARD_CAP_CHARS:
+            leaves.append(LeafChunk(
+                id=f"{parent.id}#00",
+                parent_id=parent.id,
+                sub_path="",
+                leaf_idx=0,
+                content=parent.content,
+                chapter=parent.chapter,
+                section=parent.section,
+                subsection=parent.subsection,
+                subsection_title=parent.subsection_title,
+                page_start=parent.page_start,
+                page_end=parent.page_end,
+                section_type=parent.section_type,
+                clause_id=clause_id,
+            ))
+            continue
+
+        raw_leaves = _recursive_leaves(parent.content)
+
+        # Drop empties, merge unders into previous.
+        merged: list[tuple[str, str]] = []
+        for path, body in raw_leaves:
+            body = body.strip()
+            if not body:
+                continue
+            if merged and len(body) < MIN_LEAF_CHARS:
+                prev_path, prev_body = merged[-1]
+                merged[-1] = (prev_path, f"{prev_body}\n\n{body}")
+            else:
+                merged.append((path, body))
+
+        for i, (path, body) in enumerate(merged):
+            leaves.append(LeafChunk(
+                id=f"{parent.id}#{i:02d}",
+                parent_id=parent.id,
+                sub_path=path or "",
+                leaf_idx=i,
+                content=body,
+                chapter=parent.chapter,
+                section=parent.section,
+                subsection=parent.subsection,
+                subsection_title=parent.subsection_title,
+                page_start=parent.page_start,
+                page_end=parent.page_end,
+                section_type=parent.section_type,
+                clause_id=clause_id,
+            ))
+
+    return leaves

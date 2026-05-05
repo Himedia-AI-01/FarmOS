@@ -35,6 +35,49 @@ _KEEP_POS_PREFIXES = ("N", "VV", "VA", "VX", "SL", "SH", "SN")
 _MIN_TOKEN_LEN = 2
 
 
+# Module-level Kiwi singleton — shared by BM25Index instances and the standalone
+# tokenizer used by redis_index.py (Korean BM25 substrate for FT.HYBRID).
+_kiwi_singleton = None  # type: ignore[var-annotated]
+
+
+def _get_kiwi_module():
+    """Lazy-init the module-level Kiwi instance. ~200ms first call, then free."""
+    global _kiwi_singleton
+    if _kiwi_singleton is None:
+        from kiwipiepy import Kiwi
+        logger.info("Kiwi 형태소 분석기 로드 (module-level)")
+        _kiwi_singleton = Kiwi()
+    return _kiwi_singleton
+
+
+def kiwi_tokenize(text: str) -> list[str]:
+    """한국어 텍스트 → BM25용 의미어 토큰 리스트.
+
+    Standalone version of BM25Index.tokenize() for the Redis FT pipeline.
+    Both paths use the same Kiwi POS rules so dense/sparse signals match.
+    """
+    if not text or not text.strip():
+        return []
+    kiwi = _get_kiwi_module()
+    result = kiwi.analyze(text, top_n=1)
+    if not result:
+        return []
+    tokens: list[str] = []
+    for token in result[0][0]:
+        lemma = token.form
+        pos = token.tag
+        if not pos.startswith(_KEEP_POS_PREFIXES):
+            continue
+        if len(lemma) < _MIN_TOKEN_LEN:
+            continue
+        tokens.append(lemma)
+    return tokens
+
+
+# Backwards-compat alias used by redis_index.py imports written before the rename.
+_kiwi_tokenize = kiwi_tokenize
+
+
 class BM25Index:
     """프로세스 단위 한국어 BM25 인덱스.
 

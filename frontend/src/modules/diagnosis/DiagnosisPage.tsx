@@ -1,7 +1,8 @@
 ﻿import { useState, useCallback, useEffect, useRef } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdCameraAlt, MdHistory, MdCheckCircle, MdChat, MdInfoOutline, MdDeleteOutline, MdSearch } from 'react-icons/md';
+import { MdCameraAlt, MdHistory, MdCheckCircle, MdChat, MdInfoOutline, MdDeleteOutline, MdSearch, MdAutoAwesome } from 'react-icons/md';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -54,6 +55,31 @@ const LOADING_MESSAGES = [
 export default function DiagnosisPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { sendAndOpen } = useFarmAgentContext();
+
+  const askAgentForRecord = (e: React.MouseEvent, record: { crop?: string; pest?: string; region?: string }) => {
+    e.stopPropagation();
+    const parts = [
+      record.crop && `${record.crop}`,
+      record.pest && `${record.pest}`,
+    ]
+      .filter(Boolean)
+      .join('의 ');
+    const prompt = parts
+      ? `${parts} 진단 결과를 다시 검토하고, 친환경 방제 우선으로 권장 조치를 단계별로 알려주세요. 현재 기상과 약제 안전사용기준도 함께 고려해주세요.`
+      : '최근 진단 기록을 종합해서 우선순위가 높은 방제 조치를 알려주세요.';
+    void sendAndOpen(prompt);
+  };
+
+  const askAgentGeneral = (variant: 'plan' | 'safe' | 'history') => {
+    const prompt =
+      variant === 'plan'
+        ? `${selectedCrop || '내 작물'} 의 이번 주 예찰·방제 계획을 기상과 함께 짜주세요.`
+        : variant === 'safe'
+          ? `${selectedCrop || '내 작물'} 에 자주 쓰는 농약의 잔류허용기준과 안전사용 시기를 정리해주세요.`
+          : '내 진단 이력을 분석해서 반복되는 해충 패턴이 있는지, 예방책은 무엇인지 알려주세요.';
+    void sendAndOpen(prompt);
+  };
 
   const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedCrop, setSelectedCrop] = useState("");
@@ -61,7 +87,15 @@ export default function DiagnosisPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [randomTip, setRandomTip] = useState(TIPS[0]);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
-  const [history, setHistory] = useState<any[]>([]);
+  type DiagnosisRecord = {
+    id: number;
+    crop?: string;
+    pest?: string;
+    region?: string;
+    date?: string;
+    created_at?: string | number;
+  };
+  const [history, setHistory] = useState<DiagnosisRecord[]>([]);
   // 첫 진입에는 fetch 가 끝나기 전까지 skeleton 을 보여주기 위해 true 로 시작.
   // user 가 없는 경우 useEffect 에서 false 로 내려준다 (fetch 자체가 안 일어나므로).
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -290,13 +324,14 @@ export default function DiagnosisPage() {
       fetchHistory();
       navigate('/diagnosis/chat', { state: { diagnosisContext: savedData } });
       
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
+      if (e?.name === 'AbortError') {
         console.log("Diagnosis aborted by user");
         return;
       }
       console.error("Save error:", err);
-      toast.error(err.message || 'AI 진단 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      toast.error(e?.message || 'AI 진단 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
       setIsAnalyzing(false);
     } finally {
       if (abortControllerRef.current === controller) {
@@ -323,7 +358,7 @@ export default function DiagnosisPage() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [isPostcodeOpen]);
 
-  const onDrop = useCallback((acceptedFiles: File[], fileRejections: any[]) => {
+  const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     if (fileRejections.length > 0) {
       const error = fileRejections[0].errors[0];
       if (error.code === 'file-invalid-type' || error.code === 'invalid-extension') {
@@ -338,6 +373,9 @@ export default function DiagnosisPage() {
       setSelectedFile(acceptedFiles[0]);
       startDiagnosis(false, acceptedFiles[0]);
     }
+    // selectedCrop/Region/testPest are read inside startDiagnosis closure;
+    // intentionally omit startDiagnosis to avoid re-creating onDrop on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCrop, selectedRegion, testPest]);
 
   // 파일 확장자 엄격 검증 함수
@@ -495,6 +533,42 @@ export default function DiagnosisPage() {
         </div>
       </div>
 
+      <div className="card border border-primary/20 bg-primary/[0.03]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MdAutoAwesome className="text-xl" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[color:var(--color-ink)]">에이전트에게 묻기</p>
+              <p className="text-xs text-[color:var(--color-ink-mute)]">
+                기상·약제 안전·진단 이력을 함께 분석해 답합니다.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => askAgentGeneral('plan')}
+              className="rounded-lg border border-primary/30 bg-white px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5 transition"
+            >
+              이번 주 방제 계획 짜기
+            </button>
+            <button
+              onClick={() => askAgentGeneral('safe')}
+              className="rounded-lg border border-[color:var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+            >
+              농약 안전사용 정리
+            </button>
+            <button
+              onClick={() => askAgentGeneral('history')}
+              className="rounded-lg border border-[color:var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+            >
+              내 진단 이력 분석
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="card bg-[color:var(--tint-warning)]/50 border border-amber-100 border-dashed">
         <div className="flex items-center gap-2 mb-4 text-[color:var(--color-accent-dark)] font-bold text-sm">
           <span className="px-2 py-0.5 bg-amber-200 rounded-md text-[10px]">FIXED</span>
@@ -605,13 +679,20 @@ export default function DiagnosisPage() {
                         </span>
                       </div>
                       <p className="text-xs text-[color:var(--color-ink-faint)]">
-                        {record.region} · {record.date ? record.date : new Date(record.created_at).toLocaleDateString()} 
+                        {record.region} · {record.date ? record.date : (record.created_at ? new Date(record.created_at).toLocaleDateString() : '')}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <button 
+                    <button
+                      onClick={(e) => askAgentForRecord(e, record)}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-primary bg-primary/5 border border-primary/15 transition-all cursor-pointer hover:bg-primary/10 hover:border-primary/40"
+                      title="에이전트에게 이 진단 다시 검토하기"
+                    >
+                      <MdAutoAwesome className="text-xl" />
+                    </button>
+                    <button
                       onClick={(e) => deleteOne(e, record.id)}
                       className="w-9 h-9 rounded-xl flex items-center justify-center text-[color:var(--color-danger)] bg-[color:var(--color-danger-light)] border border-[color:var(--color-danger-light)] transition-all cursor-pointer hover:border-red-500"
                       title="기록 삭제"

@@ -38,29 +38,35 @@ const COMMAND_LINKS: CommandLink[] = [
   { to: '/reviews', label: '판매 인사이트', detail: '리뷰·전략', illust: '/illustrations/module-reviews.png' },
 ];
 
+// 다중 에이전트·다중 도구를 동시에 발화시키는 헤비 워크로드. 단일 도구 호출이 아니라
+// orchestrator → 2-3 subagent 체이닝, 병렬 RAG, escalation 게이트를 보여주기 위한 카드.
 const AGENT_ACTIONS = [
   {
-    label: '오늘 작업 계획',
-    detail: '날씨·시세·일지 종합 우선순위',
-    prompt: '오늘 농장에서 해야 할 작업을 우선순위로 정리해줘. 날씨, 최근 IoT 이력, 시세를 함께 고려해서 한국 농민에게 친근한 어투로 알려줘.',
+    label: '이번 주 통합 운영 플랜',
+    detail: '5일 기상·작물 단계·IoT·일지·시세 통합',
+    prompt:
+      '이번 주(오늘부터 5일) 농장 운영 플랜을 종합해줘. 5일치 기상 위험(서리·폭염·강풍·곰팡이병 환경), 내 작물 단계, 최근 7일 IoT 자율 제어 이력, 영농일지 누락 여부, 주작물 시세 흐름을 모두 활용해서 요일별 권장 작업을 짜줘. "비가 목요일에 오면 화요일로 방제 당기기" 같은 조건부 의사결정도 포함해줘.',
     icon: MdAutoAwesome,
   },
   {
-    label: '관수 필요 여부',
-    detail: '센서·예보·작물 상태 판단',
-    prompt: '현재 토양 습도와 예보를 보고 관수가 필요한지 판단해줘. 필요하면 시간과 양을 권장해줘.',
+    label: '방제 의사결정 보조',
+    detail: '병해충 진단 → 안전 검증 → 직불 의무 교차',
+    prompt:
+      '내 작물에서 지금 시기 가장 위험한 병해충을 진단하고, 추천 농약이 안전사용 기준에 맞는지 검증한 다음, 그 농약 사용이 공익직불 8대 준수사항(특히 농약 안전사용·기록보관)과 충돌하지 않는지까지 종합 점검해줘. 병해충 진단 → 농약 검증 → 직불 의무 교차 확인을 한 흐름으로.',
     icon: MdWaterDrop,
   },
   {
-    label: '직불 리스크 점검',
-    detail: '자격 가능 여부·근거 인용',
-    prompt: '내 농장 정보 기준으로 공익직불 자격 가능 여부와 신청 시 주의사항을 알려줘. 시행지침 근거를 함께 인용해줘.',
+    label: '올해 수익 시뮬레이션',
+    detail: '직불금·시세·노동시간·IoT 효율 ROI',
+    prompt:
+      '올해 내 농장 예상 수익을 시뮬레이션해줘. 받을 수 있는 공익직불금 합계, 주작물 KAMIS 시세 추세 기반 매출 추정, 영농일지 노동 시간, IoT 자율 제어 절감 효과를 모두 반영해서 시나리오(보수적/기대/낙관)별 수치로 보여줘. 가정과 출처를 명확히 표기해줘.',
     icon: MdPayments,
   },
   {
-    label: '출하 타이밍 추천',
-    detail: '시세 추세·단기 예보 기반',
-    prompt: '주작물의 최근 KAMIS 시세 변동과 단기 예보를 보고 출하 시기를 추천해줘.',
+    label: '8대 준수사항 자가 점검',
+    detail: '공익직불 의무 8개 병렬 점검 + 일지 교차',
+    prompt:
+      '공익직불 8대 준수사항(경영체등록·농지유지·농약·비료·폐기물·교육·마을활동·영농기록) 각 항목을 시행지침 근거와 함께 점검하고, 내 영농일지·IoT 이력으로 실제 이행 여부를 교차 확인해줘. 미흡한 항목과 보완 방법을 우선순위로 알려줘.',
     icon: MdShowChart,
   },
 ];
@@ -92,9 +98,8 @@ export default function DashboardPage() {
   const { status, decisions, loading: agentLoading } = useAIAgent();
   const { briefing, briefingLoading, fetchBriefing, sendAndOpen } = useFarmAgentContext();
 
-  useEffect(() => {
-    void fetchBriefing(false);
-  }, [fetchBriefing]);
+  // 브리핑 자동 로드는 FarmAgentProvider 가 한 번만 트리거 — 여기서 중복 호출하면
+  // 사이드 콘솔과 동시에 두 번 fetch 되어 화면이 깜박입니다.
 
   const hasData = Boolean(latest);
   const latestDecision = decisions[0] ?? status?.latest_decision ?? null;

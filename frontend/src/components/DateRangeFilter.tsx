@@ -41,6 +41,7 @@ function endOfDay(d: Date): Date {
   return x;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function computePresetRange(
   preset: Exclude<RangePreset, 'custom' | 'all'>,
 ): {

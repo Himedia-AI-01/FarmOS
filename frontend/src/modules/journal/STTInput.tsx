@@ -54,10 +54,15 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
   const [status, setStatus] = useState<STTStatus>("idle");
   const [level, setLevel] = useState<number>(0); // 0~1
   const [elapsed, setElapsed] = useState<number>(0); // seconds
-  // 진행률 보간 — 현재 UI 에 직접 바인딩되어 있지 않으므로 useState 가 아닌 useRef 로 보관.
-  // (state 로 두면 80ms 마다 setState → 리렌더가 발생해 무용 비용 증가.)
-  // 향후 진행률 표시 UI 가 추가되면 useState 로 환원하면 됨.
+  // 진행률 — JSX 의 width 에 직접 바인딩되므로 state 로 관리해야 한다.
+  // (이전 ref 구현은 state 변경이 없는 transcribing/parsing 동안 진행 바가 멈춰 보였다.)
+  // ref 는 보간 setInterval 안에서 latest value 를 동기적으로 읽기 위한 미러.
+  const [progress, setProgress] = useState<number>(0);
   const progressRef = useRef<number>(0);
+  const setProgressBoth = useCallback((value: number) => {
+    progressRef.current = value;
+    setProgress(value);
+  }, []);
   const interpRef = useRef<number | null>(null);
 
   const stopInterp = useCallback(() => {
@@ -71,15 +76,15 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
   const startInterp = useCallback(
     (from: number, to: number, durationMs: number) => {
       stopInterp();
-      progressRef.current = from;
+      setProgressBoth(from);
       const startAt = Date.now();
       interpRef.current = window.setInterval(() => {
         const t = Math.min(1, (Date.now() - startAt) / durationMs);
-        progressRef.current = from + (to - from) * t;
+        setProgressBoth(from + (to - from) * t);
         if (t >= 1) stopInterp();
       }, 80);
     },
-    [stopInterp],
+    [stopInterp, setProgressBoth],
   );
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -125,21 +130,21 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
         cancelledRef.current = false;
         // 1) STT 요청 → 응답
         setStatus("transcribing");
-        progressRef.current = 10;
+        setProgressBoth(10);
         startInterp(15, 55, 12000);
         const text = await transcribeAudio(blob, sttContext);
         stopInterp();
         if (cancelledRef.current) {
-          progressRef.current = 0;
+          setProgressBoth(0);
           setStatus("idle");
           return;
         }
         if (!text) {
-          progressRef.current = 0;
+          setProgressBoth(0);
           setStatus("idle");
           return;
         }
-        progressRef.current = 60;
+        setProgressBoth(60);
 
         // 2) LLM 파싱 요청 → 응답
         setStatus("parsing");
@@ -147,33 +152,33 @@ const STTInput = forwardRef<STTInputHandle, Props>(function STTInput(
         const result = await parseSTT(text, sttContext);
         stopInterp();
         if (cancelledRef.current) {
-          progressRef.current = 0;
+          setProgressBoth(0);
           setStatus("idle");
           return;
         }
-        progressRef.current = 100;
+        setProgressBoth(100);
 
         onParsed(result);
         setTimeout(() => {
-          progressRef.current = 0;
+          setProgressBoth(0);
           setStatus("idle");
         }, 200);
       } catch (e) {
         stopInterp();
-        progressRef.current = 0;
+        setProgressBoth(0);
         setStatus("idle");
         throw e;
       }
     },
-    [transcribeAudio, parseSTT, onParsed, startInterp, stopInterp, sttContext],
+    [transcribeAudio, parseSTT, onParsed, startInterp, stopInterp, sttContext, setProgressBoth],
   );
 
   const handleBusyCancel = useCallback(() => {
     cancelledRef.current = true;
     stopInterp();
-    progressRef.current = 0;
+    setProgressBoth(0);
     setStatus("idle");
-  }, [stopInterp]);
+  }, [stopInterp, setProgressBoth]);
 
   const startRecording = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices) return;

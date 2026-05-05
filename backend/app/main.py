@@ -239,11 +239,22 @@ async def lifespan(app: FastAPI):
     # ── Farm Agent 브리핑 캐시 테이블 보장 ────────────────────────────────
     app.state.briefing_ready = False
     try:
-        from app.services.farm_agent.briefing import ensure_briefing_table
+        from app.services.farm_agent.briefing import (
+            ensure_briefing_table,
+            purge_cache_if_prompt_changed,
+        )
         await ensure_briefing_table()
+        await purge_cache_if_prompt_changed()
         app.state.briefing_ready = True
     except Exception as exc:  # noqa: BLE001 — 브리핑 캐시 실패는 서버 기동 막지 않음
         _log.warning("briefing.table_init_failed err=%s", exc)
+
+    # ── ReasoningBank trajectory 테이블 ──────────────────────────────────
+    try:
+        from app.services.farm_agent.reasoning_bank import ensure_trajectory_table
+        await ensure_trajectory_table()
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("trajectory.table_init_failed err=%s", exc)
 
     # ── FarmOS Deep Agent (LangChain Deep Agents v0.5+) ───────────────────
     # Gemma 4-31B-IT 오케스트레이터 + 4 서브에이전트(diagnosis/subsidy/farm-data/verifier).
@@ -304,6 +315,21 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001 — 에이전트 실패가 BE 기동 막지 않음
         _log.warning("farm_agent.init_failed err=%s", exc, exc_info=True)
 
+    # ── 07:00 KST 브리핑 사전 생성 스케줄러 ───────────────────────────────
+    # 매일 07:00 KST 에 모든 활성 사용자 브리핑을 미리 생성·캐시 → 사용자가 앱 열 때
+    # on-demand LLM 대기 없이 즉시 응답. 캐시 미스 시에는 기존 폴백(on-demand 생성)
+    # 이 동작하므로 스케줄러 실패가 사용자 경험을 깨지 않는다.
+    app.state.briefing_scheduler_task = None
+    if app.state.farm_agent_ready:
+        try:
+            from app.services.farm_agent.scheduler import run_briefing_scheduler
+
+            app.state.briefing_scheduler_task = _asyncio.create_task(
+                run_briefing_scheduler(app)
+            )
+        except Exception as exc:  # noqa: BLE001 — 스케줄러 실패가 BE 기동 막지 않음
+            _log.warning("briefing.scheduler.start_failed err=%s", exc, exc_info=True)
+
     # ── MCP 서버 마운트 (lifespan 안에서 실행 — farm_agent 초기화 이후) ───────
     # 과거: 모듈 import 시점에 mount() 호출 → lifespan 시작 전에 동작 → app.state.farm_agent
     # 가 아직 None 인 상태에서 MCP 클라이언트 요청이 들어와 503 반복.
@@ -340,6 +366,14 @@ async def lifespan(app: FastAPI):
         cleanup_task.cancel()
         try:
             await cleanup_task
+        except (_asyncio.CancelledError, Exception):
+            pass
+
+    briefing_scheduler_task = getattr(app.state, "briefing_scheduler_task", None)
+    if briefing_scheduler_task is not None:
+        briefing_scheduler_task.cancel()
+        try:
+            await briefing_scheduler_task
         except (_asyncio.CancelledError, Exception):
             pass
 

@@ -13,7 +13,7 @@ import {
 } from 'react-icons/md';
 import { FARMOS_BACKEND_ORIGIN } from '@/lib/api';
 import { useFarmAgentContext } from '@/context/FarmAgentContext';
-import type { FarmAgentMessage } from '@/hooks/useFarmAgent';
+import type { FarmAgentMessage, LowConfidence } from '@/hooks/useFarmAgent';
 import { AgentMarkdown } from './AgentMarkdown';
 import { ReasoningTrace } from './ReasoningTrace';
 import { ActionApproval } from './ActionApproval';
@@ -29,28 +29,75 @@ interface FarmAgentConsoleProps {
 // Each preset maps to one or more existing farm-agent tools, so the orchestrator
 // can answer without follow-up clarification. Keep prompts concrete (verbs the
 // model can act on) rather than open questions.
+// 다중 도구·다중 신호 합성을 보여주는 빠른 시작 칩. 단일 도구 wrapper 가 아니라
+// 적어도 2-3 개 데이터 소스를 가로질러 추론하는 시나리오만 큐레이션.
 const STARTER_PROMPTS = [
-  // 오케스트레이터 종합 → 다중 도구 호출
-  { label: '오늘의 작업 우선순위', prompt: '오늘 해야 할 작업을 우선순위로 정리해줘' },
-  // get_recent_iot_decisions / get_current_weather
-  { label: '관수 판단', prompt: '현재 센서 상태에서 관수가 필요한지 판단해줘' },
-  // list_eligible_subsidies / check_eligibility_rule
-  { label: '직불 자격', prompt: '내 농장 기준 공익직불 신청 리스크를 확인해줘' },
-  // get_market_prices_for_crop + get_weather_risk_advisory
-  { label: '출하 타이밍', prompt: '최근 시세와 날씨를 보고 출하 타이밍을 봐줘' },
-  // get_weather_risk_advisory (작물 자동 매칭)
-  { label: '주간 기상 위험', prompt: '이번 주 서리·폭염·호우·강풍 위험을 내 작물 기준으로 분석해줘' },
-  // diagnose_pest 유도 (작물·지역은 프로필에서 자동)
-  { label: '병해충 위험 점검', prompt: '내 작물에 지금 시기 자주 발생하는 병해충과 예방법을 알려줘' },
-  // list_journal_entries + get_journal_daily_summary
-  { label: '영농일지 요약', prompt: '최근 7일 영농일지를 요약하고 누락된 작업이 있는지 알려줘' },
-  // get_recent_iot_decisions
-  { label: 'IoT 제어 이력', prompt: '최근 24시간 자율 IoT 에이전트 판단을 요약해줘' },
-  // search_subsidy_obligation_check (8대 준수사항 매트릭스)
-  { label: '농약 안전사용', prompt: '농약 안전사용 의무사항과 위반 시 직불금 감액 영향을 알려줘' },
-  // get_market_prices_for_crop
-  { label: '내 작물 시세', prompt: '내 주작물 최근 KAMIS 시세 동향과 전일 대비 변화를 알려줘' },
+  { label: 'What-if 시나리오', prompt: '내일 강풍 7m/s 예보가 떨어지면 오늘 예정된 작업을 어떻게 재조정해야 할지, 작물 단계와 어제 IoT 제어 이력까지 고려해서 알려줘' },
+  { label: '출하·수확 골든타임', prompt: '5일 기상 윈도우, 주작물 KAMIS 시세 추세, 영농일지에 기록된 작물 성숙도 신호를 종합해서 향후 3일 안에 출하·수확 최적 타이밍을 알려줘' },
+  { label: '작물 전환 ROI 비교', prompt: '현재 주작물 수익과 후보 대안 작물(같은 면적·지역)의 시세·받을 수 있는 직불금 차이를 비교해서 작물 전환 ROI를 분석해줘' },
+  { label: '이상치 탐지 리포트', prompt: '어제 IoT 제어 이력·영농일지·날씨를 최근 7일 평균과 비교해서 의미있게 다른 점만 골라 리포트해줘' },
+  { label: '주간 기상 위험 + 작물별 영향', prompt: '5일치 기상 위험(서리·폭염·강풍·호우·곰팡이병 환경)을 내 작물 단계와 교차해서 작업 가능 시간대까지 알려줘' },
+  { label: '방제 의사결정 보조', prompt: '내 작물 현재 가장 위험한 병해충을 진단하고, 추천 농약 안전성·8대 준수사항 부합 여부까지 함께 검토해줘' },
+  { label: '8대 준수사항 자가 점검', prompt: '공익직불 8대 준수사항을 영농일지·IoT 이력으로 교차 확인해 미흡한 항목과 보완 방법을 우선순위로 알려줘' },
+  { label: '시즌 회고', prompt: '최근 90일 영농일지·IoT·시세·기상을 종합해 이번 시즌 잘된 점·아쉬운 점·내년 개선점을 정리해줘' },
+  { label: '신규 작물 도입 진단', prompt: '내 지역에서 토마토를 새로 도입하면 어떨지 5일 기상 적합도, 시세 추세, 받을 수 있는 직불금 변화, 시기별 전형 병해충을 종합해 진단해줘' },
 ];
+
+// 낮은 신뢰도 답변에 대한 보정 안내 카드. 단순 hint 한 줄에서, 도메인별 후속 질문
+// 칩까지 같이 보여주도록 확장. 사용자가 다음에 무엇을 물어보면 신뢰도가 올라갈지를
+// 가시화 — 도메인 기반 follow-up 으로 ReasoningBank 트라젝토리도 풍성해진다.
+function LowConfidenceCard({ low }: { low: LowConfidence }) {
+  const { sendAndOpen } = useFarmAgentContext();
+  const followUps =
+    low.domain === 'subsidy'
+      ? [
+          { label: '청년농 대상인지 확인', q: '저는 청년농 (만 39세 이하·영농 3년 이내) 인지 직접 확인해주시고 해당되는 직불금을 다시 매칭해주세요.' },
+          { label: '농업경영체 등록 여부', q: '농업경영체 등록 상태에 따라 자격이 달라지는 직불금을 알려주세요.' },
+          { label: '시행지침 원문 인용', q: '바로 직전 답변의 핵심 주장을 시행지침 조항으로 다시 인용해 정리해주세요.' },
+        ]
+      : low.domain === 'diagnosis'
+        ? [
+            { label: '증상 사진으로 다시 진단', q: '잎 앞·뒷면, 줄기를 모두 보여주는 사진으로 다시 진단해주세요.' },
+            { label: '인근 지역 확산 정보', q: '내 지역에서 비슷한 해충·병징이 최근에 보고된 적이 있는지 확인해주세요.' },
+          ]
+        : [
+            { label: '내 농장 데이터로 재분석', q: '내 농장 프로필과 최근 IoT 데이터를 기반으로 답을 다시 정리해주세요.' },
+            { label: '근거 자료 같이 보기', q: '방금 답변의 근거가 된 출처와 데이터를 함께 보여주세요.' },
+          ];
+
+  return (
+    <div
+      role="note"
+      aria-label="낮은 신뢰도 알림"
+      className="mt-2 rounded-xl border border-[color:var(--color-accent)]/40 bg-[#FBF1D8] p-3.5 text-[13px] text-[#6B5413]"
+    >
+      <div className="flex items-start gap-2">
+        <span aria-hidden className="mt-px text-[color:var(--color-accent-dark)]">⚠</span>
+        <div className="flex-1 space-y-1.5">
+          <p className="font-bold leading-[1.6]">{low.reason || '신뢰도가 낮은 답변입니다.'}</p>
+          <p className="leading-[1.6] opacity-90">{low.hint}</p>
+        </div>
+      </div>
+      {followUps.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-amber-200/60 pt-2.5">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-[#8C6D1E]">
+            보정 질문
+          </span>
+          {followUps.map((f) => (
+            <button
+              key={f.label}
+              type="button"
+              onClick={() => void sendAndOpen(f.q)}
+              className="rounded-full border border-amber-300 bg-white/70 px-2.5 py-0.5 text-[11px] font-bold text-[#6B5413] hover:bg-white transition"
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function MessageBubble({
   message,
@@ -123,14 +170,7 @@ function MessageBubble({
             )}
           </div>
           {message.lowConfidence && (
-            <div
-              role="note"
-              aria-label="낮은 신뢰도 알림"
-              className="mt-2 flex items-start gap-2 rounded-xl border border-[color:var(--color-accent)]/40 bg-[#FBF1D8] px-3.5 py-2.5 text-[13px] text-[#6B5413]"
-            >
-              <span aria-hidden className="mt-px text-[color:var(--color-accent-dark)]">⚠</span>
-              <span className="leading-[1.6]">{message.lowConfidence.hint}</span>
-            </div>
+            <LowConfidenceCard low={message.lowConfidence} />
           )}
           {message.action && (
             <ActionApproval
@@ -173,9 +213,7 @@ export default function FarmAgentConsole({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    void fetchBriefing(false);
-  }, [fetchBriefing]);
+  // 브리핑 자동 로드는 FarmAgentProvider 가 한 번만 트리거 — 중복 fetch 방지.
 
   const lastTick = useMemo(() => {
     const last = messages[messages.length - 1];

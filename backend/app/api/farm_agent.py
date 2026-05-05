@@ -31,7 +31,12 @@ from app.core.config import settings
 from app.core.deps import get_current_user
 from app.core.stt import transcribe_audio
 from app.models.user import User
+from app.services.farm_agent import answer_cache
 from app.services.farm_agent.briefing import get_or_generate_briefing
+from app.services.farm_agent.reasoning_bank import (
+    distill_strategies,
+    record_async as record_trajectory_async,
+)
 from app.services.farm_agent.fast_path import try_fast_path
 from app.services.farm_agent import langcache
 from app.services.farm_agent.verifier_candidates import record_verifier_verdict
@@ -102,12 +107,19 @@ def _agent(request: Request):
 
 
 def _runtime_config(user_id: str, session_id: str) -> dict[str, Any]:
-    """RunnableConfig — checkpointer thread + 도구 런타임 의존성 주입."""
+    """RunnableConfig — checkpointer thread + 도구 런타임 의존성 주입.
+
+    `recursion_limit` raised above LangGraph's default of 25 — the orchestrator
+    plans across 4 sub-agents and can chain 30+ steps on subsidy + diagnosis
+    follow-ups. Sub-agents inherit their own (higher) limit via the patched
+    deepagents middleware in `services.farm_agent.agent`.
+    """
     return {
         "configurable": {
             "thread_id": f"{user_id}:{session_id}",
             "user_id": user_id,
-        }
+        },
+        "recursion_limit": int(settings.FARM_AGENT_RECURSION_LIMIT),
     }
 
 
@@ -173,41 +185,79 @@ import re as _re
 _ROUTING_KEYWORDS = {
     "subsidy-agent": (
         "직불금", "직불", "공익직불", "소농직불", "면적직불", "지원금",
-        "정책자금", "시행지침", "준수사항", "감액", "부정수급", "영농일지",
-        "영농기록", "기본직불", "농업인 자격",
+        "정책자금", "시행지침", "준수사항", "감액", "부정수급",
+        "기본직불", "농업인 자격", "청년농", "가산금",
+        # STT 발음 변이 (Whisper 한국어 농업 도메인 변이) — AGENTS.md 기재 패턴
+        "직물금", "직불검",
     ),
     "diagnosis-agent": (
         "병해충", "노균병", "흰가루병", "탄저병", "응애", "진딧물", "도열병",
+        "잿빛곰팡이", "잎곰팡이", "갈반병", "녹병", "검은별무늬", "역병",
+        "무름병",
         "방제", "약제 추천", "농약 추천", "잎이 노래", "잎이 누렇",
         "흰 가루", "거미줄", "끈적한", "물러졌",
+        # STT 발음 변이
+        "노근병", "노깐병", "옆면살포", "히석",
     ),
     "farm-data-agent": (
-        # Most farm-data flows are already fast-pathed in fast_path.py; this
-        # entry is for queries that escape fast-path (e.g. multi-day journal,
-        # specific IoT control_type filters) but are still pure data lookups.
-        "영농일지 최근", "어제 일지", "오늘 일지", "이번 주 작업",
+        "영농일지", "영농기록", "어제 일지", "오늘 일지", "이번 주 작업",
         "최근 환기", "최근 관수", "최근 차광", "최근 IoT",
+        "일주일 일지", "일지 요약",
     ),
 }
 
-# Multi-domain hints — if ANY of these appear, skip direct routing because the
-# orchestrator likely needs to coordinate multiple subagents.
-_MULTI_DOMAIN_HINTS = ("그리고", "또한", "랑", "이랑", "와", "과", "더해서")
+# Multi-domain hints — 명확한 다중 도메인 접속어만. 한국어 일반 조사 (랑/이랑/와/과)
+# 는 일반 명사 연결에도 흔히 등장하므로 fast-path 를 비활성화시키지 않는다.
+# (예전: "사과**랑** 배 시세" 같은 단순 질의도 fast-path 우회되어 비효율)
+_MULTI_DOMAIN_HINTS = ("그리고", "또한", "더해서", "추가로", "함께")
+
+
+_OBLIGATION_PHRASES = (
+    "꼭 해야", "꼭 써야", "꼭 받아야", "해야 하나", "써야 해",
+    "안 해도 되", "안 써도 되", "안 받아도 되", "안 들어도 되",
+    "안 가도 되", "안 가도 돼", "안 나가도", "더 줘도 되",
+    "그냥 태워도", "그냥 모아", "그냥 버려도",
+    "의무", "준수", "감액", "필수", "의무사항",
+    "버려야", "보관해야", "신고해야",
+)
+_IOT_LOOKUP_PHRASES = (
+    "IoT 제어", "IoT 자율", "자율 제어", "자율제어",
+    "어제 IoT", "최근 IoT", "IoT 이력",
+)
 
 
 def _detect_single_domain(question: str) -> str | None:
     """Return the unambiguous subagent name for this question, or None.
 
-    Returns None when:
-      - Multiple domain keywords match (mixed query → orchestrator decides)
-      - No keyword matches (ambiguous → orchestrator decides)
-      - Multi-domain conjunction word present
+    Decision order (most-specific wins):
+      1. Obligation phrasing ("꼭 해야", "의무사항", "감액") → subsidy-agent
+         even if other domain keywords appear ("농약 의무사항" → subsidy, not diagnosis).
+      2. IoT lookup phrasing ("IoT 자율 제어 이력") → farm-data-agent.
+      3. Single keyword match in _ROUTING_KEYWORDS → that agent.
+      4. Multiple domain keywords or multi-domain conjunction → None (orchestrator).
+      5. No keyword match → None (orchestrator).
     """
     if not question or len(question) > 200:
         return None
     if any(hint in question for hint in _MULTI_DOMAIN_HINTS):
-        # Conjunctions suggest the user wants two things — let orchestrator coordinate.
         return None
+
+    # Tier-1: obligation phrases route to subsidy. Exception: when a competing
+    # *diagnosis* keyword is also present, the question crosses two domains
+    # (e.g. "오늘 진딧물 약 사고 일지도 써야 해") → orchestrator coordinates.
+    # Farm-data overlap (영농기록/일지/관수 etc.) is NOT an exception because
+    # those topics align with subsidy obligations (8대 ⑧ 영농기록, ② 농지 형상,
+    # etc.) — the subsidy subagent answers correctly with citations.
+    if any(phrase in question for phrase in _OBLIGATION_PHRASES):
+        diag_hits = any(kw in question for kw in _ROUTING_KEYWORDS["diagnosis-agent"])
+        if diag_hits:
+            return None
+        return "subsidy-agent"
+
+    # Tier-2: IoT lookup specific phrasing routes to farm-data even though
+    # neither "IoT" nor "어제" alone is in the keyword table.
+    if any(phrase in question for phrase in _IOT_LOOKUP_PHRASES):
+        return "farm-data-agent"
 
     matches: list[str] = []
     for agent, keywords in _ROUTING_KEYWORDS.items():
@@ -343,22 +393,24 @@ def _is_meta_question(question: str) -> bool:
 
 
 def _is_subsidy_domain_answer(question: str, answer: str) -> bool:
-    """True if either the question routed to subsidy or the answer reads as subsidy.
+    """True if the QUESTION is subsidy-domain (citation guard scope tightened).
 
-    The guardrail must be insensitive to whether the routing-hint fired — an
-    answer that introduces 직불/시행지침 content needs citations regardless of
-    how the orchestrator got there.
+    Previously this also returned True if the answer mentioned subsidy keywords —
+    but a market/weather/diagnosis question whose answer happens to mention
+    "직불" tangentially shouldn't trigger 시행지침 citation requirement. The guard
+    must scope to questions where 시행지침 citation is genuinely expected.
 
-    Exemption: meta/capability questions list multiple domains (including
-    "직불금") as part of describing what the agent does. Such answers don't
-    need 시행지침 citations.
+    Rule: question contains an explicit subsidy keyword AND no other domain
+    keyword. Mixed questions (e.g. "직불금 받으면서 농약은 어떻게?") still slip
+    through — that's intentional, those answers do need citation.
     """
     if _is_meta_question(question or ""):
         return False
-    if _detect_single_domain(question or "") == "subsidy-agent":
-        return True
-    text = answer or ""
-    return any(kw in text for kw in _SUBSIDY_ANSWER_HINTS)
+    q = question or ""
+    if not any(kw in q for kw in _SUBSIDY_ANSWER_HINTS):
+        return False
+    # Question explicitly mentions subsidy — guard applies.
+    return True
 
 
 # Directive injected into a follow-up turn when the citation guardrail fires.
@@ -634,13 +686,47 @@ async def ask(
             fast_answer = None
         if fast_answer:
             logger.info("fast_path.hit user=%s session=%s", user.id, session_id)
+            # ReasoningBank: fast-path hits feed the trajectory corpus too —
+            # otherwise the most-frequent simple queries (weather, IoT lookup)
+            # would be invisible to distillation, biasing strategies toward
+            # complex queries only.
+            record_trajectory_async(
+                user_id=user.id,
+                query=payload.question,
+                route="fast_path",
+                response_summary=fast_answer[:300],
+                outcome="success",
+            )
             return AskOut(answer=fast_answer, session_id=session_id, fast_path=True)
 
-    # 2) LangCache 의미 캐시 조회 — hit 시 LLM 호출 우회.
-    #    fast_path 다음, 에이전트 호출 전 — 비용·지연 모두 큰 LLM 호출만 절약.
+    # 2a) Deterministic exact-text 캐시 (Redis) — 모바일 더블탭 / F5 / polling 대응.
+    #     LangCache 보다 먼저 — sub-ms 라 무료에 가까운 fast 경로.
+    exact_cached = await answer_cache.lookup(payload.question, user_id=user.id)
+    if exact_cached:
+        logger.info("answer_cache.ask_hit user=%s session=%s", user.id, session_id)
+        record_trajectory_async(
+            user_id=user.id,
+            query=payload.question,
+            route="answer_cache",
+            response_summary=exact_cached[:300],
+            outcome="success",
+        )
+        return AskOut(answer=exact_cached, session_id=session_id)
+
+    # 2b) LangCache 의미 캐시 조회 — paraphrase hit. ~50-200ms.
+    #     fast_path · exact_cache 다음, 에이전트 호출 전 — 비용·지연 모두 큰 LLM 호출만 절약.
     cached_answer = await langcache.lookup(payload.question, user_id=user.id)
     if cached_answer:
         logger.info("langcache.ask_hit user=%s session=%s", user.id, session_id)
+        # exact-cache 에도 저장해 다음 동일 질의는 ~3ms 로 처리.
+        await answer_cache.store(payload.question, cached_answer, user_id=user.id)
+        record_trajectory_async(
+            user_id=user.id,
+            query=payload.question,
+            route="langcache",
+            response_summary=cached_answer[:300],
+            outcome="success",
+        )
         return AskOut(answer=cached_answer, session_id=session_id)
 
     # 3) 정상 Deep Agent 흐름
@@ -670,8 +756,26 @@ async def ask(
             user_id=user.id,
             session_id=session_id,
         )
-        # 최종 답변(citation 재프롬프트 후 보정본 포함) 캐시 적재.
+        # 최종 답변(citation 재프롬프트 후 보정본 포함)을 두 캐시 모두에 적재:
+        #   - LangCache  : 의미 유사 질의에서 hit 가능 (paraphrase)
+        #   - answer_cache: exact 동일 텍스트에서 sub-ms hit
         await langcache.store(payload.question, answer, user_id=user.id)
+        await answer_cache.store(payload.question, answer, user_id=user.id)
+    # ReasoningBank: trajectory 기록 (fire-and-forget — 사용자 응답 지연 없음).
+    # outcome 휴리스틱: 빈 응답이면 failed, "확인 어려움"·"문의" 같은 escalation 마커
+    # 포함이면 uncertain, 그 외 success.
+    _outcome = (
+        "failed" if not answer
+        else "uncertain" if any(m in (answer or "") for m in ("확인 어려움", "정보 없음", "문의"))
+        else "success"
+    )
+    record_trajectory_async(
+        user_id=user.id,
+        query=payload.question,
+        route="orchestrator",
+        response_summary=(answer or "")[:300],
+        outcome=_outcome,
+    )
     return AskOut(answer=answer or "응답을 생성하지 못했습니다.", session_id=session_id)
 
 
@@ -707,18 +811,23 @@ async def stream(
                 yield {"event": "done", "data": ""}
             return EventSourceResponse(fast_gen())
 
-    # LangCache 의미 캐시 조회 — hit 시 LLM 호출 우회하고 단일 token 으로 흘려보낸다.
-    cached_answer = await langcache.lookup(payload.question, user_id=user.id)
-    if cached_answer:
-        logger.info("langcache.stream_hit user=%s session=%s", user.id, session_id)
+    # 2-tier cache: deterministic (sub-ms) → semantic (50-200ms) → LLM
+    exact_cached = await answer_cache.lookup(payload.question, user_id=user.id)
+    semantic_cached = exact_cached or await langcache.lookup(payload.question, user_id=user.id)
+    if semantic_cached:
+        cache_kind = "exact" if exact_cached else "semantic"
+        logger.info("agent_cache.stream_hit kind=%s user=%s session=%s",
+                    cache_kind, user.id, session_id)
+        # semantic hit 만 적중했으면 다음 동일 질의는 exact hit 로 처리되도록 promote.
+        if not exact_cached:
+            await answer_cache.store(payload.question, semantic_cached, user_id=user.id)
 
         async def cached_gen():
             yield {"event": "session", "data": session_id}
-            yield {"event": "cache", "data": "hit"}
-            yield {"event": "token", "data": cached_answer}
-            # citation chip 도 캐시된 답변에서 재추출 — 프론트엔드 UX 일관성 유지.
+            yield {"event": "cache", "data": cache_kind}
+            yield {"event": "token", "data": semantic_cached}
             try:
-                citations = _extract_citations(cached_answer)
+                citations = _extract_citations(semantic_cached)
                 if citations:
                     yield {
                         "event": "citations",
@@ -732,9 +841,32 @@ async def stream(
     agent = _agent(request)
     config = _runtime_config(user.id, session_id)
 
+    # Per-user agent lock — prevents two open SSE sessions (e.g. two browser
+    # tabs) from racing on the same checkpointer thread_id. Lock is best-effort:
+    # Redis unavailable returns a sentinel and we proceed (the IoT relay's own
+    # idempotency is the second line of defense for actuator-side effects).
+    from app.services.farm_agent.locks import (
+        acquire_user_agent_lock,
+        refresh_user_agent_lock,
+        release_user_agent_lock,
+    )
+
     async def gen():
         import asyncio as _asyncio
         yield {"event": "session", "data": session_id}
+
+        lock_token = await acquire_user_agent_lock(user.id)
+        if lock_token is None:
+            logger.info("stream.lock_busy user=%s session=%s", user.id, session_id)
+            yield {
+                "event": "error",
+                "data": (
+                    "다른 세션에서 에이전트가 실행 중입니다. "
+                    "기존 세션을 닫고 다시 시도해주세요."
+                ),
+            }
+            yield {"event": "done", "data": ""}
+            return
         emitted_tool_call_ids: set[str] = set()
         # heartbeat: 토큰 사이의 idle 시간이 길면 SSE 프록시(nginx 등)가 끊는다.
         # FARM_AGENT_SSE_HEARTBEAT_SEC 마다 ping 이벤트를 송출해 keep-alive 유지.
@@ -816,6 +948,10 @@ async def stream(
                     # 토큰 없이 N초 경과 → 프록시 idle 끊김 방지를 위한 ping.
                     # 중요: shield 없이 wait_for를 쓰면 pending __anext__ task가
                     # 취소되어 LangGraph stream 자체가 중간 종료된다.
+                    # Refresh the per-user lock at the same cadence so a long
+                    # subsidy/diagnosis turn (>90s) doesn't TTL out and let a
+                    # second tab in.
+                    await refresh_user_agent_lock(user.id, lock_token)
                     yield {"event": "ping", "data": ""}
                     continue
                 except StopAsyncIteration:
@@ -1206,13 +1342,18 @@ async def stream(
                 except Exception:  # noqa: BLE001
                     pass
 
-                # LangCache 적재 — citation 재프롬프트 후의 최종(보정) 답변만 저장.
+                # 두 캐시 모두 적재 — citation 재프롬프트 후의 최종(보정) 답변만.
                 # IoT 제어 제안은 HITL 승인 단계가 별도이므로 캐시 적재 대상에서 제외.
                 if not _looks_like_iot_action_proposal(final_text):
                     await langcache.store(payload.question, final_text, user_id=user.id)
+                    await answer_cache.store(payload.question, final_text, user_id=user.id)
         finally:
             # 클라이언트가 done 이벤트를 기다리고 있으므로 예외 여부와 무관하게 반드시 종료 신호 emit.
             yield {"event": "done", "data": ""}
+            # Release the per-user agent lock — Lua compare-and-delete so we
+            # only delete OUR token, never a successor's. No-op if Redis was
+            # unavailable (lock_token is sentinel).
+            await release_user_agent_lock(user.id, lock_token)
 
     return EventSourceResponse(gen())
 
@@ -1253,7 +1394,48 @@ async def briefing(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="브리핑 생성 중 오류가 발생했습니다.",
         )
+    # ReasoningBank: 브리핑 트라젝토리 기록 (cached hit 은 LLM 호출이 없으므로 제외).
+    if not cached:
+        record_trajectory_async(
+            user_id=user.id,
+            query="[briefing]",
+            route="briefing",
+            response_summary=(content or "")[:300],
+            outcome="success" if content and len(content) > 200 else "failed",
+        )
     return BriefingOut(date=today.isoformat(), content=content, cached=cached)
+
+
+class DistillOut(BaseModel):
+    trajectories_read: int = Field(description="distill 에 사용된 트라젝토리 수")
+    new_strategies: int = Field(description="STRATEGIES.md 에 추가된 신규 전략 수")
+    appended: bool = Field(description="파일이 실제로 갱신됐는지")
+
+
+@router.post("/distill-strategies", response_model=DistillOut)
+async def distill_strategies_endpoint(
+    days: int = 7,
+    max_trajectories: int = 50,
+    user: User = Depends(get_current_user),
+) -> DistillOut:
+    """ReasoningBank: 최근 N 일 트라젝토리에서 새 전략을 도출해 STRATEGIES.md 에 append.
+
+    수동 트리거 (또는 cron) — 매 사용자 요청에 동기 실행 금지 (비용 발생).
+    Admin allowlist (settings.FARM_AGENT_ADMIN_USER_IDS, CSV) 에 등록된 사용자만
+    호출 가능. 미설정 시 거부 — LLM cost 가 발생하는 endpoint 라 prod 에서는 명시적
+    화이트리스트가 필수.
+    """
+    raw = (getattr(settings, "FARM_AGENT_ADMIN_USER_IDS", "") or "").strip()
+    allowed = {s.strip() for s in raw.split(",") if s.strip()}
+    if not allowed or str(user.id) not in allowed:
+        logger.warning("distill_strategies.denied user=%s allowlist_set=%s", user.id, bool(allowed))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이 작업은 관리자만 수행할 수 있습니다.",
+        )
+    stats = await distill_strategies(days=days, max_trajectories=max_trajectories)
+    logger.info("distill_strategies user=%s stats=%s", user.id, stats)
+    return DistillOut(**stats)
 
 
 class DiagnoseImageOut(BaseModel):
@@ -1632,12 +1814,21 @@ class ApproveActionIn(BaseModel):
     session_id: str = Field(description="에이전트 제안이 발생한 세션 ID")
     control_type: str = Field(description="ventilation | irrigation | lighting | shading")
     action: dict[str, Any] = Field(description="Relay 가 받는 action payload")
+    # Optional client-supplied idempotency key. If absent we derive one from
+    # (session_id, control_type, action) so a re-click of the same approval
+    # button still collides on the same key.
+    action_id: str | None = Field(
+        default=None,
+        description="멱등성 키 — 동일 키로 두 번째 요청은 409 로 거부됨",
+        max_length=64,
+    )
 
 
 class ApproveActionOut(BaseModel):
     ok: bool
     relay_status: int | None = None
     detail: str | None = None
+    action_id: str | None = None
 
 
 _ALLOWED_CONTROL_TYPES = {"ventilation", "irrigation", "lighting", "shading"}
@@ -1669,6 +1860,30 @@ async def approve_action(
             detail="IoT Relay 가 설정되지 않았습니다.",
         )
 
+    # Idempotency: derive a stable key when the client doesn't supply one,
+    # then claim it in Redis. Re-clicks / SSE replays / network retries that
+    # produce the same action collide here and never reach the relay.
+    from app.services.farm_agent.locks import (
+        claim_actuator_action,
+        derive_action_id,
+    )
+
+    action_id = payload.action_id or derive_action_id(
+        payload.session_id, payload.control_type, payload.action
+    )
+    claimed = await claim_actuator_action(
+        action_id, user_id=user.id, control_type=payload.control_type
+    )
+    if not claimed:
+        logger.info(
+            "approve_action.idempotent_replay user=%s control=%s action_id=%s",
+            user.id, payload.control_type, action_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이미 처리된 요청입니다 (멱등성). 잠시 후 다시 시도해주세요.",
+        )
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.post(
@@ -1678,6 +1893,7 @@ async def approve_action(
                     "action": payload.action,
                     "source": "agent",
                     "user_id": user.id,
+                    "action_id": action_id,  # relay should also dedupe on this
                 },
             )
     except httpx.HTTPError as exc:
@@ -1693,6 +1909,13 @@ async def approve_action(
             detail = (res.json() or {}).get("detail")
         except Exception:  # noqa: BLE001
             detail = res.text[:200]
-        return ApproveActionOut(ok=False, relay_status=res.status_code, detail=detail)
+        return ApproveActionOut(
+            ok=False,
+            relay_status=res.status_code,
+            detail=detail,
+            action_id=action_id,
+        )
 
-    return ApproveActionOut(ok=True, relay_status=res.status_code)
+    return ApproveActionOut(
+        ok=True, relay_status=res.status_code, action_id=action_id
+    )

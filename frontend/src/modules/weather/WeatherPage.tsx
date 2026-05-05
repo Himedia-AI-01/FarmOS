@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MdAccessTime,
+  MdAutoAwesome,
   MdBlock,
   MdCalendarMonth,
   MdCheckCircle,
@@ -9,6 +10,7 @@ import {
   MdWarning,
 } from 'react-icons/md';
 import { FARMOS_API_BASE } from '@/lib/api';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
 import WeatherSkeleton from './WeatherSkeleton';
 
 interface CurrentWeather {
@@ -173,6 +175,7 @@ interface TaskAdvisory {
 }
 
 export default function WeatherPage() {
+  const { sendAndOpen } = useFarmAgentContext();
   const [weather, setWeather] = useState<WeatherPayload | null>(null);
   const [taskAdvisories, setTaskAdvisories] = useState<TaskAdvisory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -248,7 +251,7 @@ export default function WeatherPage() {
     return () => window.removeEventListener('keydown', handler);
   }, [isLoading, loadWeather]);
 
-  const forecasts = weather?.forecasts ?? [];
+  const forecasts = useMemo(() => weather?.forecasts ?? [], [weather?.forecasts]);
   const dailyForecasts = weather?.daily_forecasts ?? [];
   const current = weather?.current;
 
@@ -288,6 +291,19 @@ export default function WeatherPage() {
     return <WeatherSkeleton />;
   }
 
+  const askWeatherAgent = (variant: 'risk' | 'spray' | 'planning') => {
+    const t = current?.temperature;
+    const h = current?.humidity;
+    const ctx = t != null && h != null ? `현재 ${t}°C·습도 ${h}% 기준으로` : '현재 기상 기준으로';
+    const prompt =
+      variant === 'risk'
+        ? `${ctx} 내 작물에 발생 가능한 기상 위험(서리·폭염·강풍·강수)을 분석하고, 농장 데이터와 함께 선제 조치를 추천해주세요.`
+        : variant === 'spray'
+          ? `${ctx} 향후 48시간 내 농약 살포에 적합한 시간대가 언제인지 풍속·강수·습도를 함께 따져 알려주세요.`
+          : `${ctx} 다음 5일 예보를 보고 관수·환기·차광 같은 시설 운영 계획을 제안해주세요.`;
+    void sendAndOpen(prompt);
+  };
+
   return (
     <div className="space-y-5">
       <div className="card">
@@ -309,21 +325,32 @@ export default function WeatherPage() {
               )}
             </p>
           </div>
-          <button
-            ref={refreshButtonRef}
-            type="button"
-            className="btn-secondary inline-flex items-center gap-2 self-start"
-            onClick={() => void loadWeather()}
-            disabled={isLoading}
-            title="새로고침 (R)"
-            aria-keyshortcuts="R"
-          >
-            <MdRefresh className={isLoading ? 'animate-spin' : ''} />
-            새로고침
-            <kbd className="ml-1 hidden rounded border border-[color:var(--color-line)] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[color:var(--color-ink-mute)] sm:inline-block">
-              R
-            </kbd>
-          </button>
+          <div className="flex items-center gap-2 self-start">
+            <button
+              type="button"
+              onClick={() => askWeatherAgent('risk')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition"
+              title="현재 기상으로 농장 위험 분석"
+            >
+              <MdAutoAwesome className="text-base" />
+              AI 기상 위험 분석
+            </button>
+            <button
+              ref={refreshButtonRef}
+              type="button"
+              className="btn-secondary inline-flex items-center gap-2"
+              onClick={() => void loadWeather()}
+              disabled={isLoading}
+              title="새로고침 (R)"
+              aria-keyshortcuts="R"
+            >
+              <MdRefresh className={isLoading ? 'animate-spin' : ''} />
+              새로고침
+              <kbd className="ml-1 hidden rounded border border-[color:var(--color-line)] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[color:var(--color-ink-mute)] sm:inline-block">
+                R
+              </kbd>
+            </button>
+          </div>
         </div>
 
         {error ? (
@@ -357,14 +384,22 @@ export default function WeatherPage() {
       {(alerts.firstRain || alerts.firstWind) && (
         <div className="card border-amber-200 bg-[color:var(--tint-warning)]">
           <div className="flex items-start gap-3">
-            <MdWarning className="mt-0.5 text-2xl text-[color:var(--color-accent-dark)]" />
-            <div>
+            <MdWarning className="mt-0.5 flex-shrink-0 text-2xl text-[color:var(--color-accent-dark)]" />
+            <div className="flex-1">
               <p className="font-bold text-amber-800">작업 전 기상 확인 필요</p>
               <p className="mt-1 text-sm text-amber-800">
                 {alerts.firstRain
                   ? `${formatDateTime(alerts.firstRain.valid_at)} 강수 예보가 있습니다.`
                   : `${formatDateTime(alerts.firstWind?.valid_at)} 풍속이 높아질 수 있습니다.`}
               </p>
+              <button
+                type="button"
+                onClick={() => askWeatherAgent('spray')}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-50 transition"
+              >
+                <MdAutoAwesome className="text-sm" />
+                안전 살포 시간대 분석
+              </button>
             </div>
           </div>
         </div>

@@ -12,7 +12,9 @@ import {
   MdRefresh,
   MdSmartToy,
   MdPerson,
+  MdAutoAwesome,
 } from 'react-icons/md';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
 import {
   type ChatMessage,
   type Citation,
@@ -162,28 +164,6 @@ export default function SubsidyPage() {
 
 // ─── 하위 컴포넌트 ────────────────────────────────────────
 
-function SummaryTile({
-  count,
-  label,
-  tone,
-}: {
-  count: number;
-  label: string;
-  tone: 'green' | 'amber' | 'gray';
-}) {
-  const toneMap = {
-    green: 'bg-[color:var(--color-primary-soft)] border-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
-    amber: 'bg-[color:var(--tint-warning)] border-amber-200 text-[color:var(--color-accent-dark)]',
-    gray: 'bg-[color:var(--color-surface)] border-[color:var(--color-line)] text-[color:var(--color-ink-soft)]',
-  };
-  return (
-    <div className={`border-2 rounded-2xl p-4 text-center ${toneMap[tone]}`}>
-      <div className="text-3xl font-bold">{count}</div>
-      <div className="text-xs font-semibold mt-1">{label}</div>
-    </div>
-  );
-}
-
 function SubsidyCard({
   result,
   onClick,
@@ -193,38 +173,59 @@ function SubsidyCard({
 }) {
   const cfg = STATUS_CONFIG[result.status];
   const Icon = cfg.icon;
+  const { sendAndOpen } = useFarmAgentContext();
+
+  const askAgent = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const prompt =
+      result.status === 'eligible'
+        ? `${result.subsidy_name} 신청하려면 어떤 절차와 서류가 필요한가요?`
+        : result.status === 'needs_review'
+          ? `${result.subsidy_name} 자격에서 무엇이 부족한지, 어떻게 보완할 수 있는지 알려주세요.`
+          : `${result.subsidy_name} 자격이 안 되는 이유가 정확히 무엇이고, 비슷한 다른 직불금이 있나요?`;
+    void sendAndOpen(prompt);
+  };
 
   return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left card border-2 transition-all hover:shadow-md ${cfg.cardClass}`}
-    >
-      <div className="flex items-start gap-3">
-        <Icon className={`text-3xl ${cfg.iconClass} flex-shrink-0`} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-bold text-lg text-[color:var(--color-ink)]">
-              {result.subsidy_name}
-            </h3>
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cfg.badgeClass}`}
-            >
-              {cfg.label}
-            </span>
+    <div className={`card border-2 transition-all hover:shadow-md ${cfg.cardClass}`}>
+      <button onClick={onClick} className="w-full text-left">
+        <div className="flex items-start gap-3">
+          <Icon className={`text-3xl ${cfg.iconClass} flex-shrink-0`} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-lg text-[color:var(--color-ink)]">
+                {result.subsidy_name}
+              </h3>
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cfg.badgeClass}`}
+              >
+                {cfg.label}
+              </span>
+            </div>
+            {result.estimated_amount_krw != null && (
+              <p className="text-primary font-bold mt-1">
+                예상 수령액: {formatKrw(result.estimated_amount_krw)}
+              </p>
+            )}
+            {result.reasons.length > 0 && (
+              <p className="text-sm text-[color:var(--color-ink-soft)] mt-2 line-clamp-2">
+                {result.reasons[0].text}
+              </p>
+            )}
           </div>
-          {result.estimated_amount_krw != null && (
-            <p className="text-primary font-bold mt-1">
-              예상 수령액: {formatKrw(result.estimated_amount_krw)}
-            </p>
-          )}
-          {result.reasons.length > 0 && (
-            <p className="text-sm text-[color:var(--color-ink-soft)] mt-2 line-clamp-2">
-              {result.reasons[0].text}
-            </p>
-          )}
         </div>
+      </button>
+      <div className="mt-3 flex justify-end border-t border-[color:var(--color-line-soft)] pt-2.5">
+        <button
+          onClick={askAgent}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/5 transition"
+          title="에이전트에게 자세히 묻기 — 추론 과정과 도구 사용을 함께 보여줍니다"
+        >
+          <MdAutoAwesome className="text-base" />
+          에이전트에게 자세히 묻기
+        </button>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -235,6 +236,18 @@ function DetailDrawer({
   result: EligibilityResult;
   onClose: () => void;
 }) {
+  const { sendAndOpen } = useFarmAgentContext();
+
+  const handleAskAgent = (variant: 'how' | 'why' | 'similar') => {
+    const prompt =
+      variant === 'how'
+        ? `${result.subsidy_name} 신청하려면 어떤 서류와 절차가 필요한가요? 시행지침 근거와 함께 단계별로 설명해주세요.`
+        : variant === 'why'
+          ? `${result.subsidy_name} 의 ${STATUS_CONFIG[result.status].label} 판정 근거를 시행지침 조항과 함께 다시 검토해주세요.`
+          : `${result.subsidy_name} 외에 제 농장 조건에 맞는 다른 직불·정책이 있는지 찾아주세요.`;
+    onClose();
+    void sendAndOpen(prompt);
+  };
   // /match 는 snippet 을 비워 보내므로 drawer 가 열릴 때 RAG 로 lazy fetch.
   // process-level lru_cache 덕에 같은 subsidy 두 번째 열기는 거의 즉시.
   const [clauses, setClauses] = useState<SourceClause[]>(result.source_clauses);
@@ -353,7 +366,36 @@ function DetailDrawer({
           </div>
         )}
 
-        <div className="mt-6 text-xs text-[color:var(--color-ink-faint)] text-center">
+        <div className="mt-5 border-t border-[color:var(--color-line-soft)] pt-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-[color:var(--color-ink-mute)]">
+            <MdAutoAwesome className="mr-1 inline-block" /> 에이전트에게 묻기
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => handleAskAgent('how')}
+              className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition"
+            >
+              신청 절차 안내받기
+            </button>
+            <button
+              onClick={() => handleAskAgent('why')}
+              className="rounded-lg border border-[color:var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+            >
+              판정 근거 다시 검토
+            </button>
+            <button
+              onClick={() => handleAskAgent('similar')}
+              className="rounded-lg border border-[color:var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+            >
+              비슷한 직불금 찾기
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-[color:var(--color-ink-faint)] leading-relaxed">
+            농장 데이터·시행지침을 함께 조회해 추론 과정과 출처를 보여줍니다.
+          </p>
+        </div>
+
+        <div className="mt-5 text-xs text-[color:var(--color-ink-faint)] text-center">
           실제 지급은 농업경영체 등록·현장 확인 등 정식 절차를 거쳐 확정됩니다.
         </div>
       </div>

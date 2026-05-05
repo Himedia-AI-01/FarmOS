@@ -305,12 +305,15 @@ export default function OnboardingPage() {
   };
 
   const handleAddressSearch = () => {
-    if (typeof (window as any).daum === 'undefined') {
+    type DaumPostcodeData = { zonecode: string; roadAddress: string };
+    type DaumPostcode = new (opts: { oncomplete: (data: DaumPostcodeData) => void }) => { open: () => void };
+    const daum = (window as unknown as { daum?: { Postcode: DaumPostcode } }).daum;
+    if (!daum) {
       toast.error('주소 검색 서비스를 불러올 수 없습니다.');
       return;
     }
-    new (window as any).daum.Postcode({
-      oncomplete(data: any) {
+    new daum.Postcode({
+      oncomplete(data) {
         setFarm(f => ({ ...f, postcode: data.zonecode, roadAddress: data.roadAddress, detailAddress: '' }));
       },
     }).open();

@@ -28,7 +28,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: '데이터',
     items: [
-      { to: '/journal', label: '영농 기록', icon: IconJournal },
+      { to: '/journal', label: '영농일지', icon: IconJournal },
       { to: '/weather', label: '기상', icon: IconWeather },
       { to: '/market', label: '시세', icon: IconMarket },
     ],

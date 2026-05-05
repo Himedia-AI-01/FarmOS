@@ -17,6 +17,71 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+# ── deepagents recursion_limit propagation patch ────────────────────────────
+#
+# deepagents v0.5.x dispatches sub-agents via `subagent.invoke(state)` /
+# `ainvoke(state)` without forwarding the parent run's RunnableConfig — so
+# every sub-agent runs at LangGraph's default recursion_limit (25). The
+# subsidy sub-agent walks 10+ regulatory clauses and routinely overshoots,
+# surfacing as a bare `asyncio.CancelledError` instead of `GraphRecursionError`.
+# Tracked in https://github.com/langchain-ai/deepagents/issues/1698.
+#
+# Workaround: wrap each sub-agent runnable with `.with_config(recursion_limit)`
+# at build time so the limit travels inside the runnable and is applied even
+# when invoke is called without an explicit config arg. We hook the middleware's
+# `_get_subagents` factory so this works for both inline `SubAgent` dicts and
+# `CompiledSubAgent` (already-built) entries.
+def _install_subagent_recursion_patch() -> None:
+    try:
+        from deepagents.middleware import subagents as _sa_mod
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("deepagents.subagent_patch_skipped reason=%s", exc)
+        return
+
+    middleware_cls = getattr(_sa_mod, "SubAgentMiddleware", None) or getattr(
+        _sa_mod, "SubagentMiddleware", None
+    )
+    if middleware_cls is None or not hasattr(middleware_cls, "_get_subagents"):
+        logger.warning(
+            "deepagents.subagent_patch_skipped reason=middleware_class_or_method_missing"
+        )
+        return
+
+    if getattr(middleware_cls, "_farmos_recursion_patched", False):
+        return
+
+    original = middleware_cls._get_subagents
+    sub_limit = int(settings.FARM_AGENT_SUBAGENT_RECURSION_LIMIT)
+
+    def _patched_get_subagents(self):  # type: ignore[no-untyped-def]
+        specs = original(self)
+        for spec in specs:
+            runnable = spec.get("runnable")
+            if runnable is None or not hasattr(runnable, "with_config"):
+                continue
+            try:
+                spec["runnable"] = runnable.with_config(recursion_limit=sub_limit)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "deepagents.subagent_patch_apply_failed name=%s err=%s",
+                    spec.get("name"),
+                    exc,
+                )
+        return specs
+
+    middleware_cls._get_subagents = _patched_get_subagents  # type: ignore[method-assign]
+    middleware_cls._farmos_recursion_patched = True  # type: ignore[attr-defined]
+    logger.info(
+        "deepagents.subagent_patch_installed limit=%d (issue #1698 workaround)",
+        sub_limit,
+    )
+
+
+_install_subagent_recursion_patch()
 from app.services.farm_agent.prompts import (
     DIAGNOSIS_PROMPT,
     FARM_DATA_PROMPT,
@@ -30,8 +95,6 @@ from app.services.farm_agent.tools import (
     ORCHESTRATOR_TOOLS,
     SUBSIDY_TOOLS,
 )
-
-logger = logging.getLogger(__name__)
 
 # 도메인 지식 메모리 — backend/memory/AGENTS.md 자동 로드.
 # 추가 메모리 파일은 settings.FARM_AGENT_MEMORY_PATHS (CSV)로 확장 가능.
@@ -246,6 +309,48 @@ def _build_memory_middleware() -> list[Any]:
         return []
 
 
+def _build_subsidy_subagent_with_escalation() -> dict:
+    """Subsidy 서브에이전트를 escalation 그래프로 빌드.
+
+    Sonnet 4.6 으로 첫 시도, 응답에 UNCLEAR 마커 포함 시 Opus 4.7 로 자동 재시도.
+    deepagents `CompiledSubAgent` 슬롯에 등록 — `runnable` 키가 필수, `model`/`tools`/
+    `system_prompt` 는 그래프 내부에서 처리하므로 제외.
+
+    실패 시 (escalation 모듈 import 오류 등) sonnet-only 일반 SubAgent 로 graceful 폴백.
+    """
+    from app.services.farm_agent.models import build_llm_for
+
+    try:
+        from app.services.farm_agent.subsidy_escalation import (
+            build_subsidy_agent_with_escalation,
+        )
+        compiled = build_subsidy_agent_with_escalation(SUBSIDY_TOOLS)
+        logger.info("farm_agent.subsidy mode=escalation primary=sonnet escalation=opus")
+        return {
+            "name": "subsidy-agent",
+            "description": (
+                "공익직불금·정책자금 자격 매칭과 시행지침 질의응답. "
+                "자격 판정·시행지침 검색·프로그램 상세 모두 처리. "
+                "UNCLEAR 케이스는 자동으로 Opus 모델로 재검토."
+            ),
+            "runnable": compiled,
+        }
+    except Exception as exc:  # noqa: BLE001 — escalation 그래프 빌드 실패 시 plain Sonnet 폴백
+        logger.warning(
+            "farm_agent.subsidy.escalation_disabled err=%s — sonnet-only 폴백", exc,
+        )
+        return {
+            "name": "subsidy-agent",
+            "description": (
+                "공익직불금·정책자금 자격 매칭과 시행지침 질의응답. "
+                "자격 판정·시행지침 검색·프로그램 상세 모두 처리."
+            ),
+            "system_prompt": SUBSIDY_PROMPT,
+            "tools": SUBSIDY_TOOLS,
+            "model": build_llm_for("subsidy"),
+        }
+
+
 def _try_async_verifier_subagent() -> Any | None:
     """Build the verifier as an async subagent if deepagents v0.5+ is available.
 
@@ -310,12 +415,47 @@ def build_farm_agent(
         verifier-agent 는 가능하면 AsyncSubAgent (백그라운드 실행) 으로 등록.
         deepagents<0.5 환경에서는 sync SubAgent 로 fallback.
     """
-    # Grok-specific harness profile (best-effort, no-op on older deepagents).
-    if settings.OPENROUTER_API_KEY:
+    # Grok-specific harness profile — only register when the orchestrator model
+    # actually IS a Grok variant. With tiered routing (balanced profile uses
+    # Gemini Flash for orchestrator), the Grok-specific anti-paraphrase suffix
+    # would inject wrong guidance into a non-Grok model's system prompt.
+    if settings.OPENROUTER_API_KEY and "grok" in (settings.OPENROUTER_MODEL or "").lower():
         _register_grok_harness_profile()
 
-    model = _build_llm()
+    # Tiered routing: orchestrator 는 빠른 라우팅 모델, 각 서브에이전트는 역할별 전용 모델.
+    # build_llm_for(role) 가 settings.FARM_AGENT_PROFILE 에 따라 슬러그를 결정.
+    from app.services.farm_agent.models import build_llm_for
+
+    model = build_llm_for("orchestrator")
     memory_middleware = _build_memory_middleware()
+
+    # Harness guards — tool-result clearing and orchestrator-level token
+    # budget. See app.services.farm_agent.middleware for rationale.
+    from app.services.farm_agent.middleware import (
+        make_subagent_token_budget,
+        make_tool_result_clearing_middleware,
+    )
+
+    harness_middleware: list[Any] = []
+    tool_clear = make_tool_result_clearing_middleware(
+        keep_last_n=settings.FARM_AGENT_KEEP_LAST_TOOL_RESULTS,
+        min_messages_before_clear=settings.FARM_AGENT_CLEAR_TOOLS_AFTER_MSGS,
+    )
+    if tool_clear is not None:
+        harness_middleware.append(tool_clear)
+    if settings.FARM_AGENT_BUDGET_ORCHESTRATOR > 0:
+        budget = make_subagent_token_budget(
+            agent_name="orchestrator",
+            max_input_tokens=settings.FARM_AGENT_BUDGET_ORCHESTRATOR,
+        )
+        if budget is not None:
+            harness_middleware.append(budget)
+
+    def _budget_for(agent_name: str, cap: int) -> list[Any]:
+        if cap <= 0:
+            return []
+        guard = make_subagent_token_budget(agent_name=agent_name, max_input_tokens=cap)
+        return [guard] if guard is not None else []
 
     # Verifier as async subagent if supported, else sync dict (existing behavior).
     async_verifier = _try_async_verifier_subagent()
@@ -328,6 +468,8 @@ def build_farm_agent(
         "system_prompt": VERIFIER_PROMPT,
         # 검증을 위해 동일한 진단 도구를 재호출
         "tools": DIAGNOSIS_TOOLS,
+        # 역할별 모델 — 단순 string-compare 전용 cheapest 모델
+        "model": build_llm_for("verifier"),
     }
     verifier_subagent = async_verifier or sync_verifier
     if async_verifier is not None:
@@ -344,16 +486,10 @@ def build_farm_agent(
             ),
             "system_prompt": DIAGNOSIS_PROMPT,
             "tools": DIAGNOSIS_TOOLS,
+            "model": build_llm_for("diagnosis"),
+            "middleware": _budget_for("diagnosis-agent", settings.FARM_AGENT_BUDGET_DIAGNOSIS),
         },
-        {
-            "name": "subsidy-agent",
-            "description": (
-                "공익직불금·정책자금 자격 매칭과 시행지침 질의응답. "
-                "자격 판정·시행지침 검색·프로그램 상세 모두 처리."
-            ),
-            "system_prompt": SUBSIDY_PROMPT,
-            "tools": SUBSIDY_TOOLS,
-        },
+        _build_subsidy_subagent_with_escalation(),
         {
             "name": "farm-data-agent",
             "description": (
@@ -364,9 +500,20 @@ def build_farm_agent(
             # MCP 도구도 함께 받아 farm-data-agent가 외부 데이터(예: 글로벌 날씨)도 활용 가능.
             # Deep Agents 제약으로 동일 객체를 양쪽에 등록하지만 부작용 없음(읽기 전용).
             "tools": FARM_DATA_TOOLS + list(mcp_tools or []),
+            "model": build_llm_for("farm_data"),
+            "middleware": _budget_for("farm-data-agent", settings.FARM_AGENT_BUDGET_FARM_DATA),
         },
         verifier_subagent,
     ]
+
+    # The verifier sub-agent dict (sync path) also gets a budget; AsyncSubAgent
+    # path runs in a separate process so its budget is enforced via its own
+    # build path elsewhere.
+    if isinstance(verifier_subagent, dict):
+        verifier_subagent.setdefault(
+            "middleware",
+            _budget_for("verifier-agent", settings.FARM_AGENT_BUDGET_VERIFIER),
+        )
 
     top_level_tools = ORCHESTRATOR_TOOLS + list(mcp_tools or [])
 
@@ -376,5 +523,5 @@ def build_farm_agent(
         system_prompt=ORCHESTRATOR_PROMPT,
         subagents=subagents,
         checkpointer=checkpointer,
-        middleware=memory_middleware,  # AGENTS.md 자동 로드
+        middleware=memory_middleware + harness_middleware,  # AGENTS.md + 보호 가드
     )

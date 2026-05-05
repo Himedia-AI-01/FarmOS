@@ -523,24 +523,44 @@ async def search_subsidy_obligation_check(topic: str) -> str:
     ob_top = max((c.similarity or 0.0 for c in obligation_cites), default=0.0)
     op_top = max((c.similarity or 0.0 for c in optional_cites), default=0.0)
 
+    # Evidence-strength gate: extract topic head-words and check whether they
+    # appear in the cited article TITLE (not just the snippet body). Adjacent
+    # parent-category citations (snippet matches but title doesn't) are not
+    # strong enough to claim MANDATORY — they're the over-classification trap.
+    def _topic_in_article_title(cites) -> bool:
+        # Use top-3 chars groups (Korean head-words) to test overlap.
+        head_words = [w for w in topic.split() if len(w) >= 2][:3]
+        if not head_words:
+            return False
+        for c in cites[:3]:
+            article = (getattr(c, "article", "") or "")
+            if any(hw in article for hw in head_words):
+                return True
+        return False
+
+    title_match = _topic_in_article_title(obligation_cites)
+
     # 1) 8대 준수사항은 시행령상 의무 — RAG 점수 무관 단정.
     if _matches_known_mandatory(topic):
         verdict = "MANDATORY"
         verdict_source = "known_8_obligations"
-    # 2) 의무 법령 표현이 본문에 직접 등장 — 단정 가능.
-    elif ob_top >= 0.4 and _has_mandatory_language(obligation_cites):
+    # 2) 의무 법령 표현이 본문에 직접 등장 + 인용 제목에도 주제 등장 → 단정.
+    #    snippet match alone (no title match) = adjacent category → UNCLEAR.
+    elif ob_top >= 0.4 and _has_mandatory_language(obligation_cites) and title_match:
         verdict = "MANDATORY"
-        verdict_source = "mandatory_phrase_in_snippet"
-    # 3) 일반 유사도 격차 휴리스틱.
-    elif ob_top >= 0.5 and ob_top - op_top >= 0.1:
+        verdict_source = "mandatory_phrase_with_title_match"
+    # 3) 일반 유사도 격차 휴리스틱 (title match 추가 요구).
+    elif ob_top >= 0.5 and ob_top - op_top >= 0.1 and title_match:
         verdict = "MANDATORY"
-        verdict_source = "similarity_margin"
+        verdict_source = "similarity_margin_with_title_match"
     elif op_top >= 0.5 and op_top - ob_top >= 0.1:
         verdict = "OPTIONAL"
         verdict_source = "similarity_margin"
     else:
+        # Adjacent-category match (snippet hit but no title) lands here.
+        # Also: balanced or weak signals.
         verdict = "UNCLEAR"
-        verdict_source = "no_signal"
+        verdict_source = "no_signal" if ob_top < 0.4 else "adjacent_match_only"
 
     payload = {
         "topic": topic,
@@ -564,6 +584,91 @@ async def get_subsidy_details(subsidy_code: str) -> str:
     return detail.model_dump_json(exclude_none=True)
 
 
+# ── 2.5. 알려진 RAG 공백 (시행지침 외 출처) ─────────────────────────────────
+# 시행지침 RAG 가 답하지 못하는 자주 묻는 주제들을 운영자가 손으로 큐레이션해서
+# 정답 + 출처 + 콜센터 안내를 제공한다. RAG 결과보다 신뢰성 높음 (시행지침 외 사업
+# 지침서·법령에 근거).
+#
+# 매핑 키워드는 사용자 질문에 등장하는 핵심 토큰. 매칭되면 도구가 검색하지 않고
+# 큐레이션 답변을 즉시 반환 → 에이전트는 그대로 사용자에게 전달.
+
+_KNOWN_GAPS: dict[str, dict[str, str | list[str]]] = {
+    "청년농 가산금": {
+        "keywords": ["청년농 가산금", "청년농업인 가산"],
+        "answer": (
+            "청년농업인 가산금은 공익직불 시행지침이 아닌 별도 **청년농업인 영농정착지원사업** "
+            "예산으로 운영됩니다.\n\n"
+            "**2026년 단가 (참고):** 1년차 월 110만원, 2년차 월 100만원, 3년차 월 90만원 "
+            "(최대 3년 지원).\n\n"
+            "**자격:** 만 39세 이하, 영농경력 3년 이내, 농업경영체 등록.\n\n"
+            "정확한 단가·자격은 농림축산식품부 청년농업인 콜센터 (1644-8778) 또는 "
+            "관할 시·군 농업정책 담당 부서에 문의하시는 것이 가장 정확합니다."
+        ),
+        "source": "농림부 청년농업인 영농정착지원사업 운영지침",
+    },
+    "농외소득 한도": {
+        "keywords": ["농외소득 한도", "농외 소득 얼마", "농외소득 얼마"],
+        "answer": (
+            "공익직불금 농외소득 기준은 두 가지입니다.\n\n"
+            "**① 본인 농외소득:** 직전 연도 종합소득 **2,000만 원 미만**.\n"
+            "**② 농가 합산 농외소득:** 가구 구성원 전체 합계 **4,500만 원 미만**.\n\n"
+            "초과 시 공익직불금 지급 대상에서 제외됩니다. "
+            "국세청 자료로 자동 검증되므로 신고 소득 기준입니다. "
+            "[doc > 9. 공익직불사업의 정보화 및 검증]"
+        ),
+        "source": "공익직불 시행지침 II-3 / 9",
+    },
+    "변경등록 기한": {
+        "keywords": ["변경등록 기한", "변경 등록 언제"],
+        "answer": (
+            "변경 사유 발생 후 **14일 이내**에 관할 읍·면·동에 변경신고하는 것이 원칙입니다. "
+            "현장 여건 고려 시 매년 9월 30일까지 관할 읍·면·동에 변경 요청하면 등록정보를 "
+            "현행화할 수 있습니다. 승계 처리는 매년 12월 31일까지 가능합니다. "
+            "[doc > CHAPTER 1 > III. 사업추진 절차 > 4. 변경등록 및 신청 검증]"
+        ),
+        "source": "공익직불 시행지침 III-4",
+    },
+    "감액률 단계": {
+        "keywords": ["감액률 단계", "반복 위반 감액", "감액 두 배"],
+        "answer": (
+            "공익직불 8대 준수사항 위반 시 감액률은 **1차 10% / 2차 20% / 3차 40%** "
+            "단계별로 가중됩니다 (동일 항목 반복 위반 시).\n\n"
+            "[doc > CHAPTER 1 > II. 6항 공익직불 준수사항]"
+        ),
+        "source": "공익직불 시행지침 II-6",
+    },
+}
+
+
+def _check_known_gaps(query: str) -> dict | None:
+    """Check if query matches a known RAG gap; return curated answer or None."""
+    if not query:
+        return None
+    for gap_id, gap_data in _KNOWN_GAPS.items():
+        if any(kw in query for kw in gap_data["keywords"]):
+            logger.info("subsidy.known_gap_hit gap=%s", gap_id)
+            return {
+                "gap_id": gap_id,
+                "answer": gap_data["answer"],
+                "source": gap_data["source"],
+                "verdict_hint": "OPTIONAL",  # 정보형 응답
+            }
+    return None
+
+
+@tool
+async def lookup_known_subsidy_gap(query: str) -> str:
+    """시행지침 RAG 에 없는 자주 묻는 주제 (청년농 가산금·농외소득 한도 등) 의 큐레이션 답변.
+
+    `search_subsidy_*` 호출 전에 본 도구를 먼저 호출하면 RAG miss 응답을 줄일 수 있다.
+    매칭되지 않으면 빈 JSON 반환 — 그때 정상 RAG 검색 진행.
+    """
+    hit = _check_known_gaps(query)
+    if hit is None:
+        return json.dumps({"matched": False}, ensure_ascii=False)
+    return json.dumps({"matched": True, **hit}, ensure_ascii=False)
+
+
 # ── 3. 농장 데이터 (읽기 전용) ──────────────────────────────────────────────
 
 
@@ -576,7 +681,7 @@ async def get_current_weather() -> str:
 
 @tool
 async def get_weather_risk_advisory(config: RunnableConfig = None) -> str:
-    """앞으로 3일치 기상 위험을 작물 맞춤형으로 결정론적 분석.
+    """앞으로 5일치 기상 위험을 작물 맞춤형으로 결정론적 분석.
 
     LLM 임계 비교 없이 KMA 예보(`get_weather`) 의 daily_forecasts + current 를
     그대로 통과시켜 서리·폭염·강풍·호우·곰팡이병 호조 환경을 플래그한다.
@@ -754,12 +859,12 @@ DIAGNOSIS_TOOLS = [diagnose_pest, get_my_farm_profile]
 
 SUBSIDY_TOOLS = [
     get_my_farm_profile,
+    lookup_known_subsidy_gap,  # RAG 외부 큐레이션 답변 (청년농 가산금·농외소득·변경등록 등)
     list_eligible_subsidies,
     check_eligibility_rule,
     search_subsidy_regulations_fast,
     # search_subsidy_regulations (slow rerank) 는 노출하지 않는다 — `_fast` 가
     # 내부적으로 신뢰도 낮을 때 자동 escalate 하므로 LLM 이 직접 호출할 이유가 없다.
-    # 이전엔 둘 다 노출 → Grok 이 "확신 위해" 둘 다 호출 → 14s 추가 비용 발생.
     search_subsidy_obligation_check,
     get_subsidy_details,
 ]

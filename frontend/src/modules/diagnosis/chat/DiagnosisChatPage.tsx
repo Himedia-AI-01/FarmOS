@@ -10,7 +10,7 @@ interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string;
   type?: 'loading' | 'text' | 'solution';
-  data?: any;
+  data?: unknown;
 }
 
 // 마크다운 렌더러 컴포넌트 (개선된 파서)
@@ -281,7 +281,7 @@ export default function DiagnosisChatPage() {
       if (response.ok) {
         const data = await response.json();
         // DB 메시지를 프론트엔드 형식으로 변환. 첫 번째 메시지는 솔루션 카드로 렌더링.
-        const dbMessages: Message[] = data.map((m: any, idx: number) => ({
+        const dbMessages: Message[] = data.map((m: { id: number | string; role: Message['role']; content: string }, idx: number) => ({
           id: m.id.toString(),
           role: m.role,
           content: m.content,
@@ -304,7 +304,6 @@ export default function DiagnosisChatPage() {
   // 의존성을 stable identifier(`context?.id`)로 좁힌다.
   // 과거 `[context]` 는 location.state 가 매 navigation 마다 새 객체를 만들어
   // fetchChatMessages 가 반복 호출되며 UI 깜빡임의 원인이었다.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!context) {
       navigate('/diagnosis');
@@ -314,6 +313,7 @@ export default function DiagnosisChatPage() {
     // 진단이 막 생성되었거나, 히스토리에서 왔거나 상관없이
     // 이미 백엔드 생성 과정에서 초기 메시지가 DB에 저장되므로 DB에서 불러옴
     fetchChatMessages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [context?.id]);
 
   // 스크롤 하단 이동
@@ -457,7 +457,7 @@ export default function DiagnosisChatPage() {
                     <div className="space-y-4 w-full">
                       {/* 통합된 메인 텍스트 영역 (템플릿 엔진 출력물 - 마크다운 렌더링) */}
                       <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-[color:var(--color-line-soft)] text-sm text-[color:var(--color-ink-soft)] leading-relaxed min-w-[280px] prose prose-sm max-w-none prose-headings:text-[color:var(--color-ink)] prose-h2:text-lg prose-h2:font-bold prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-base prose-h3:font-semibold prose-h3:mt-3 prose-h3:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 markdown-content">
-                        <MarkdownRenderer content={msg.data?.result_text || msg.content || "분석 데이터를 불러오지 못했습니다."} />
+                        <MarkdownRenderer content={(msg.data as { result_text?: string } | undefined)?.result_text || msg.content || "분석 데이터를 불러오지 못했습니다."} />
                       </div>
                     </div>
                   ) : msg.type === 'loading' ? (

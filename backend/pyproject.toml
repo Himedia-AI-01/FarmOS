@@ -34,12 +34,29 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.22",
     "rapidfuzz>=3.10.0",
+    "redis[hiredis]>=5.2.0",
     "ruff>=0.6.0",
     "sentence-transformers>=3.3.0",
     "sqlalchemy[asyncio]>=2.0.48",
     "sse-starlette>=3.3.4",
     "tzdata>=2026.1",
     "uvicorn[standard]>=0.42.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-xdist>=3.6.0",
+    "deepeval>=2.0.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "eval: tier-2 evaluation tests — slower, may call LLMs (run with -m eval)",
+    "integration: tests that hit DB or external services",
 ]
 
 [project.scripts]
@@ -51,6 +68,9 @@ subsidy-parse-pdf = "app.services.subsidy.pdf_ingest:_cli_main"
 # Farm Agent eval harness — 사용: cd backend && uv run farm-agent-eval
 # LangSmith 트레이싱이 활성화돼 있으면 결과가 자동 업로드됨.
 farm-agent-eval = "scripts.eval_farm_agent:main"
+# 통합 평가 (라우팅 + 도구 + 진단 + farm-data + 브리핑 + 트라젝토리 리플레이)
+# 사용: cd backend && uv run farm-agent-eval-all
+farm-agent-eval-all = "scripts.eval_all:main"
 
 [tool.uv]
 exclude-newer = "7 days"

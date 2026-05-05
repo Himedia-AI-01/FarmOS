@@ -39,8 +39,8 @@ type SensorDataSetter = React.Dispatch<React.SetStateAction<SensorData>>;
 type FailRef = { current: number };
 
 let _sharedEs: EventSource | null = null;
-let _sharedSetters: Set<SensorDataSetter> = new Set();
-let _sharedFailRefs: Set<FailRef> = new Set();
+const _sharedSetters: Set<SensorDataSetter> = new Set();
+const _sharedFailRefs: Set<FailRef> = new Set();
 
 function _broadcast(updater: (prev: SensorData) => SensorData): void {
   _sharedSetters.forEach((setter) => setter(updater));

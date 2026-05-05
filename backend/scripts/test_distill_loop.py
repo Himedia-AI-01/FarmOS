@@ -689,9 +689,10 @@ class LangGraphV1MigrationTest(unittest.TestCase):
 
     def test_verifier_graph_compiles_to_state_graph(self) -> None:
         from app.services.farm_agent import verifier_graph
-        # Whatever the import path, the result must still be a compiled graph
-        # that AsyncSubAgent can dispatch to.
-        self.assertEqual(verifier_graph.graph.__class__.__name__, "CompiledStateGraph")
+        # `verifier_graph.graph` is a lazy proxy; force build to inspect the
+        # real compiled graph type that AsyncSubAgent will dispatch to.
+        compiled = verifier_graph.get_graph()
+        self.assertEqual(compiled.__class__.__name__, "CompiledStateGraph")
 
 
 class LangGraphManifestTest(unittest.TestCase):

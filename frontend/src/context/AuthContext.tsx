@@ -129,6 +129,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearRefreshTimer();
   }, [checkAuth, clearRefreshTimer]);
 
+  // setInterval doesn't fire while the tab is backgrounded (browsers throttle
+  // it heavily after 5min). When the user returns, the access token may have
+  // expired before the next tick — proactively refresh on visibilitychange so
+  // the next request doesn't 401.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!refreshTimerRef.current) return; // no active session — nothing to refresh
+      void refreshAccessToken().then((ok) => {
+        if (!ok) {
+          clearRefreshTimer();
+          setUser(null);
+        }
+      });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshAccessToken, clearRefreshTimer]);
+
   const login = async (userId: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
@@ -176,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

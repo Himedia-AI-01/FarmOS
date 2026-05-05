@@ -3,8 +3,9 @@
 // JSON·턴별 trace 등 디버그성 정보는 제외.
 
 import { useEffect, useRef, useState } from 'react';
-import { MdClose, MdContentCopy, MdCheck, MdWarningAmber } from 'react-icons/md';
+import { MdClose, MdContentCopy, MdCheck, MdWarningAmber, MdAutoAwesome, MdSpeed } from 'react-icons/md';
 import type { AIDecision, ReasoningTurn, ToolCallTrace } from '@/types';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
 
 interface Props {
   open: boolean;
@@ -176,6 +177,22 @@ export default function AIDecisionDetailModal({
 }: Props) {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const { sendAndOpen } = useFarmAgentContext();
+
+  const askAgent = (variant: 'why' | 'alt' | 'rerun') => {
+    if (!decision) return;
+    const ctype = CT_LABELS[decision.control_type] ?? decision.control_type;
+    const time = decision.timestamp ? new Date(decision.timestamp).toLocaleString('ko-KR') : '';
+    const idPrefix = (decision.id ?? '').toString().slice(0, 8);
+    const prompt =
+      variant === 'why'
+        ? `${time} 의 ${ctype} 자율 제어 결정(id=${idPrefix})이 왜 내려졌는지, 당시 센서·기상과 함께 다시 설명해주세요.`
+        : variant === 'alt'
+          ? `이 ${ctype} 결정 대신 더 보수적인 대안이 있었는지, 작물 안전성 관점에서 비교해 알려주세요.`
+          : `같은 조건이 다시 발생하면 어떤 제어를 권장하시겠어요? 학습된 패턴이 있다면 함께 알려주세요.`;
+    onClose();
+    void sendAndOpen(prompt);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -323,7 +340,27 @@ export default function AIDecisionDetailModal({
                 )}
               </Section>
 
-              {/* 3. 당시 센서 값 */}
+              {/* 3. 처리 정보 — 응답 속도 / 감사 추적 */}
+              <Section title="처리 정보">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[color:var(--color-ink-mute)] inline-flex items-center gap-1">
+                      <MdSpeed className="text-sm" /> 응답 시간
+                    </span>
+                    <span className="font-mono font-medium text-[color:var(--color-ink)]">
+                      {decision.duration_ms != null ? `${decision.duration_ms} ms` : '-'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[color:var(--color-ink-mute)]">결정 ID</span>
+                    <span className="font-mono text-[color:var(--color-ink)] truncate ml-2" title={decision.id}>
+                      {decision.id.slice(0, 8)}…
+                    </span>
+                  </div>
+                </div>
+              </Section>
+
+              {/* 4. 당시 센서 값 */}
               {snapshot && (
                 <Section title="당시 센서 값">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
@@ -362,6 +399,37 @@ export default function AIDecisionDetailModal({
                   </div>
                 </Section>
               )}
+
+              {/* 5. 에이전트에게 묻기 */}
+              <Section title="에이전트에게 묻기">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => askAgent('why')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs font-bold text-primary hover:bg-primary/10 transition"
+                  >
+                    <MdAutoAwesome className="text-sm" />
+                    이 결정 다시 설명
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => askAgent('alt')}
+                    className="rounded-lg border border-[color:var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-bold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+                  >
+                    더 보수적인 대안
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => askAgent('rerun')}
+                    className="rounded-lg border border-[color:var(--color-line)] bg-white px-2.5 py-1.5 text-xs font-bold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+                  >
+                    같은 조건 권장 제어
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] text-[color:var(--color-ink-faint)]">
+                  당시 센서·기상 컨텍스트로 결정을 다시 검토합니다.
+                </p>
+              </Section>
             </>
           )}
         </div>

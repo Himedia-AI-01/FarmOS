@@ -8,6 +8,7 @@ import ssl
 import httpx
 
 from app.core.config import settings
+from app.core.redis_cache import redis_cached
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,18 @@ class KamisService:
                 raise
 
     # ── API #1: 일별 부류별 도·소매가격정보 ─────────────────
+    #
+    # 캐싱:
+    #   KAMIS 시세는 일 단위로 갱신 (장중 갱신은 거의 없음). TTL 1시간이면
+    #   대시보드 새로고침 100건 → KAMIS 호출 1회로 압축. self 인자는 keygen
+    #   에서 제외 (인스턴스 무관 — API 키만 다르면 캐시 키도 자연스럽게 분리).
 
+    @redis_cached(
+        prefix="kamis:latest",
+        ttl=3600,
+        keygen=lambda self, *, product_cls_code="", item_category_code="", country_code="":
+            f"{product_cls_code}:{item_category_code}:{country_code}",
+    )
     async def get_latest_prices(
         self,
         *,
@@ -101,6 +113,15 @@ class KamisService:
 
     # ── API #2: 일별 품목별 도·소매가격정보 ─────────────────
 
+    @redis_cached(
+        prefix="kamis:daily",
+        ttl=3600,
+        keygen=lambda self, start_date, end_date, item_code, kind_code, rank_code="1",
+                      *, product_cls_code="01", item_category_code="", county_code="",
+                         convert_kg="Y":
+            f"{start_date}:{end_date}:{item_code}:{kind_code}:{rank_code}:"
+            f"{product_cls_code}:{item_category_code}:{county_code}:{convert_kg}",
+    )
     async def get_daily_prices(
         self,
         start_date: str,

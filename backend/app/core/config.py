@@ -88,6 +88,27 @@ class Settings(BaseSettings):
     # 30-70 초 vs 6-14 초 로 5x 차이가 난다. 어려운 질의에만 ON 으로 토글.
     OPENROUTER_REASONING_ENABLED: bool = False
 
+    # ── Tiered model routing (Farm Agent) ──────────────────────────────────
+    # 에이전트별로 다른 모델을 라우팅. "balanced" 가 권장 기본값:
+    #   orchestrator → gemini-3-flash (빠른 라우팅)
+    #   diagnosis    → claude-haiku-4.5 (도구 패스스루 + 한국어)
+    #   subsidy      → claude-sonnet-4.6 (UNCLEAR 시 opus-4.7 escalation)
+    #   farm_data    → claude-haiku-4.5
+    #   verifier     → deepseek-v4-flash (string-compare 전용 cheapest)
+    #   briefing     → claude-sonnet-4.6 (긴 구조화 한국어)
+    #
+    # 비어 있으면 OPENROUTER_MODEL / LITELLM_MODEL 기존 단일 모델로 폴백.
+    # 각 값은 OpenRouter slug ("anthropic/claude-haiku-4.5") 또는 LiteLLM 모델 ID.
+    # OpenRouter 사용 여부는 슬래시(/) 포함 여부로 판단.
+    FARM_AGENT_PROFILE: str = "balanced"  # "balanced" | "premium" | "budget" | "custom"
+    FARM_AGENT_MODEL_ORCHESTRATOR: str = ""
+    FARM_AGENT_MODEL_DIAGNOSIS: str = ""
+    FARM_AGENT_MODEL_SUBSIDY: str = ""
+    FARM_AGENT_MODEL_SUBSIDY_ESCALATION: str = ""
+    FARM_AGENT_MODEL_FARM_DATA: str = ""
+    FARM_AGENT_MODEL_VERIFIER: str = ""
+    FARM_AGENT_MODEL_BRIEFING: str = ""
+
     # Groq (Whisper STT)
     # 영농일지 서버사이드 음성 전사(STT)에 사용
     GROQ_API_KEY: str = ""
@@ -197,6 +218,52 @@ class Settings(BaseSettings):
     LANGCACHE_SIMILARITY_THRESHOLD: float = 0.85
     LANGCACHE_ENABLED: bool = True
 
+    # LangGraph recursion limits for the deepagents stack.
+    #
+    # Why explicit: deepagents v0.5.x sub-agents inherit LangGraph's default of
+    # 25, which silently aborts subsidy-agent runs that walk 10+ regulatory
+    # clauses (failure surfaces as `asyncio.CancelledError` with no clear
+    # message — see deepagents issue #1698). We raise both ceilings and pass
+    # them through `.with_config()` on every sub-agent runnable so the parent
+    # limit propagates correctly.
+    FARM_AGENT_RECURSION_LIMIT: int = 60
+    FARM_AGENT_SUBAGENT_RECURSION_LIMIT: int = 50
+
+    # Tool-result clearing — prevents the subsidy agent's accumulated PDF
+    # chunks from bloating each subsequent LLM call. After
+    # FARM_AGENT_CLEAR_TOOLS_AFTER_MSGS messages, only the most recent
+    # FARM_AGENT_KEEP_LAST_TOOL_RESULTS ToolMessages are retained; older
+    # ones are replaced with a single placeholder summary.
+    #
+    # Defaults are deliberately conservative — too aggressive eviction can
+    # erase tool results the model still needs. Tuned for Grok 4.1 Fast's
+    # 131K context: 3 retained tool results × ~3K tokens each = 9K, well
+    # under the budget while cutting bloat by ~70% on long subsidy turns.
+    # Loosened for "trust the model" mode: keep more recent tool context so the agent
+    # can chain reasoning across more tool calls without losing earlier evidence.
+    FARM_AGENT_CLEAR_TOOLS_AFTER_MSGS: int = 20
+    FARM_AGENT_KEEP_LAST_TOOL_RESULTS: int = 6
+
+    # Per-sub-agent input token budget. Each sub-agent will short-circuit
+    # with a graceful abort if its prompt exceeds this. Subsidy is highest
+    # because regulatory PDF lookups are large; verifier is smallest
+    # because it only re-reads diagnose-pest output. Setting a value to 0
+    # disables the guard for that sub-agent.
+    # +50% across the board (trust-the-model mode): agents can pull more context
+    # before the budget guard kicks in. Verifier kept tight — its job is narrow.
+    FARM_AGENT_BUDGET_ORCHESTRATOR: int = 120_000
+    FARM_AGENT_BUDGET_SUBSIDY: int = 90_000
+    FARM_AGENT_BUDGET_DIAGNOSIS: int = 60_000
+    FARM_AGENT_BUDGET_FARM_DATA: int = 45_000
+    FARM_AGENT_BUDGET_VERIFIER: int = 25_000
+
+    # 07:00 KST 사전 생성 스케줄러 동시성·타임아웃.
+    # CONCURRENCY: 한 번에 동시에 LLM 호출하는 사용자 수 (semaphore 폭).
+    #   너무 높으면 OpenRouter rate-limit, 너무 낮으면 N=1000 직렬 처리 시 8h+.
+    # USER_TIMEOUT_SEC: 사용자 1명당 LLM 호출 최대 대기. 초과 시 fail 카운트 + 다음 사용자.
+    FARM_AGENT_PREGEN_CONCURRENCY: int = 4
+    FARM_AGENT_PREGEN_USER_TIMEOUT_SEC: int = 180
+
     # LangSmith 트레이싱 (Deep Agent + 서브에이전트 + 도구 호출 전체 추적).
     # API 키가 비어 있으면 자동 비활성. shopping_mall과 동일 키 공유 가능.
     LANGCHAIN_TRACING_V2: str = "false"
@@ -224,6 +291,70 @@ class Settings(BaseSettings):
     SUBSIDY_RERANKER_MODEL: str = "dragonkue/bge-reranker-v2-m3-ko"
     SUBSIDY_PDF_PATH: str = "data/gov/2026_공익직불_시행지침.pdf"
     SUBSIDY_MARKDOWN_CACHE_PATH: str = "data/gov/2026_공익직불_시행지침.md"
+    # Contextual Retrieval prefix 생성용 LLM — OpenRouter 경유 Claude Haiku 4.5.
+    # 답변 생성용 SUBSIDY_LLM_MODEL 과 분리 — prefix 작성은 단일 청크 분류 작업이라
+    # Haiku 가 충분(빠르고 저렴), 답변은 더 큰 모델이 유리할 수 있어서 분리.
+    # OPENROUTER_API_KEY 가 비면 LiteLLM 폴백.
+    SUBSIDY_CONTEXTUAL_LLM_MODEL: str = "anthropic/claude-haiku-4-5"
+
+    # ── Agentic RAG (PR2-5) — opt-in ─────────────────────────────────────────
+    # Implementation lives in app/services/subsidy/agentic.py. Capabilities are
+    # disabled by default because the 100-Q eval showed the heuristic baseline
+    # (synonyms + title boost + dedup-by-parent) outperforms full agentic on
+    # this Korean legal corpus: hit@3 0.89 vs 0.81, latency p50 113ms vs 2.2s.
+    # Enable selectively when:
+    #   - corpus expands beyond a single PDF (planner's open-vocab rewriting helps)
+    #   - hallucination guards become a regulatory requirement (CRAG verifier)
+    #   - reviewer asks for cross-reference expansion in answers (recursive refs)
+    #
+    # CRAG (Corrective RAG) — Haiku rates retrieved leaves on 0/1/2 relevance,
+    # drops 0s, optionally reformulates+retries when all are 0.
+    SUBSIDY_CRAG_ENABLED: bool = False
+    # Skip CRAG when top-3 leaves agree on clause_id (retriever is confident).
+    # No effect when CRAG_ENABLED is False.
+    SUBSIDY_CRAG_CONFIDENT_GAP: float = 0.15
+    # Query planner — Haiku decomposes query into sub-queries + rewrites.
+    # When True, replaces static QUERY_SYNONYMS table.
+    SUBSIDY_PLANNER_ENABLED: bool = False
+    # Recursive cross-reference following — auto-fetch 별표 N referenced in
+    # retrieved leaves. Cheap (one extra Redis FT call per ref). Default ON
+    # because it has no downside on the eval and is genuinely useful for
+    # questions that span 별표 attachments.
+    SUBSIDY_RECURSIVE_REFS_ENABLED: bool = True
+    # LLM model for planner + CRAG. Reuses Haiku 4.5 (same as contextual prefix).
+    # Separate from SUBSIDY_LLM_MODEL (which is for answer-time generation).
+    SUBSIDY_AGENTIC_LLM_MODEL: str = "anthropic/claude-haiku-4-5"
+
+    # ── Redis (subsidy RAG backend + caches) ────────────────────────────────
+    # Redis Cloud Stack 8.4+ 사용. 비어 있으면 Redis 비활성 (Chroma fallback 유지).
+    # 형식: redis://default:<password>@<host>:<port>/<db>  (TLS 는 rediss://)
+    REDIS_URL: str = ""
+    # 풀 사이즈 — 동시 처리 한계. RAG 한 요청당 대략 emb cache + 인덱스 검색
+    # 두 클라이언트(text/bin)가 ~2 connection 사용. 4 worker × 16 = 64 도 여유.
+    REDIS_POOL_MAX_CONNECTIONS: int = 16
+    # Connect/socket timeout — Cloud 인스턴스가 잠시 둔할 때 startup 을 막지 않도록 보수적.
+    REDIS_SOCKET_TIMEOUT_SEC: float = 5.0
+    REDIS_CONNECT_TIMEOUT_SEC: float = 5.0
+
+    # 공익직불 RAG 백엔드 선택 — 마이그레이션 안전망.
+    #   chroma  : 기존 ChromaDB + in-memory BM25 (default during cutover)
+    #   redis   : Redis Stack 8.4+ HASH+VECTOR + FT.HYBRID
+    SUBSIDY_RAG_BACKEND: str = "chroma"
+    # FT.HYBRID 의 score 융합 방식 — RRF (rank-only) 또는 LINEAR (score weighted).
+    # 한국어 법령 텍스트에서는 RRF 가 안전 default. LINEAR 로 dense 비중 높이려면 ALPHA↑.
+    SUBSIDY_HYBRID_FUSION: str = "rrf"
+    # LINEAR 융합 시 ALPHA(dense) + BETA(bm25) = 1.0. ALPHA=0.7 → Solar 임베딩 70% 가중.
+    SUBSIDY_HYBRID_ALPHA: float = 0.7
+
+    # Redis 키 프리픽스 — 다른 모듈 키와 격리 + 컬렉션 버전 관리에 사용.
+    # 인덱스 스키마 breaking change 시 v3, v4... 로 올려 무중단 마이그레이션.
+    REDIS_SUBSIDY_PREFIX: str = "sub:gov:"
+    REDIS_SUBSIDY_INDEX_NAME: str = "idx:gov_subsidy_v2"
+
+    # 캐시 TTL — Redis 의 EXPIRE 로 자동 만료. 0 이면 만료 없음.
+    REDIS_EMBEDDING_TTL_DAYS: int = 30          # Solar 임베딩 (deterministic, long TTL)
+    REDIS_QUERY_CACHE_TTL_SEC: int = 900        # search() / search_fast() 결과 (15m)
+    REDIS_EXCERPT_CACHE_TTL_SEC: int = 3600     # eligibility/clause 발췌 (1h)
 
     # ── 영농일지 Vision 입력 (사진 → AI 자동 작성) ─────────────────────────────
     # LiteLLM 프록시에 등록된 vision-capable 모델 ID. 기존 LITELLM_URL/LITELLM_API_KEY 재사용.

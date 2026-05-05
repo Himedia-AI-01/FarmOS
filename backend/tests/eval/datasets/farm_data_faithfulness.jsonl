@@ -1,0 +1,18 @@
+{"q":"오늘 영주 기온 알려줘","mock_tool":"get_current_weather","mock_response":"{\"temp_min\":5,\"temp_max\":27,\"region\":\"경북 영주\"}","expected_numbers_in_answer":["5","27"]}
+{"q":"벼 시세 알려줘","mock_tool":"get_market_prices_for_crop","mock_response":"{\"crop\":\"벼\",\"price\":62255,\"unit\":\"20kg\",\"direction\":\"보합\"}","expected_numbers_in_answer":["62255","62,255"]}
+{"q":"어제 IoT 제어","mock_tool":"get_recent_iot_decisions","mock_response":"{\"hours\":24,\"irrigation\":3,\"ventilation\":1}","expected_numbers_in_answer":["3","1"]}
+{"q":"풍속 어떨까","mock_tool":"get_current_weather","mock_response":"{\"wind_speed\":3.1,\"warning\":\"임계 도달\"}","expected_numbers_in_answer":["3.1"],"expected_keywords":["풍속"]}
+{"q":"강수 확률","mock_tool":"get_current_weather","mock_response":"{\"precipitation_prob\":35,\"warning\":\"30% 이상\"}","expected_numbers_in_answer":["35"]}
+{"q":"이번 주 위험 분석","mock_tool":"get_weather_risk_advisory","mock_response":"{\"risk\":\"서리\",\"min_temp\":-1.5,\"day\":\"5/8\"}","expected_numbers_in_answer":["-1.5"]}
+{"q":"고추 시세","mock_tool":"get_market_prices_for_crop","mock_response":"{\"crop\":\"고추\",\"price\":24800,\"prev\":23100,\"direction\":\"상승\"}","expected_numbers_in_answer":["24800","23100","24,800","23,100"]}
+{"q":"마늘 시세","mock_tool":"get_market_prices_for_crop","mock_response":"{\"crop\":\"마늘\",\"price\":8200,\"unit\":\"kg\"}","expected_numbers_in_answer":["8200","8,200"]}
+{"q":"오늘 일지 요약","mock_tool":"get_journal_daily_summary","mock_response":"{\"date\":\"2026-05-06\",\"entries\":2,\"hours_worked\":4.5}","expected_numbers_in_answer":["2","4.5"]}
+{"q":"최근 관수 횟수","mock_tool":"get_recent_iot_decisions","mock_response":"{\"hours\":24,\"irrigation\":7,\"control_type\":\"irrigation\"}","expected_numbers_in_answer":["7"]}
+{"q":"환기 이력","mock_tool":"get_recent_iot_decisions","mock_response":"{\"hours\":48,\"ventilation\":12}","expected_numbers_in_answer":["12"]}
+{"q":"채소류 시세","mock_tool":"get_market_prices","mock_response":"[{\"item_name\":\"배추\",\"dpr1\":3500},{\"item_name\":\"무\",\"dpr1\":1800}]","expected_numbers_in_answer":["3500","3,500","1800","1,800"]}
+{"q":"기온 변동","mock_tool":"get_current_weather","mock_response":"{\"temp_min\":2,\"temp_max\":24,\"swing\":22}","expected_numbers_in_answer":["2","24","22"]}
+{"q":"오늘 이슬점과 습도 알려줘","mock_tool":"get_current_weather","mock_response":"{\"dew_point\":12.3,\"humidity\":68}","expected_numbers_in_answer":["12.3","68"]}
+{"q":"내 농장 면적 알려줘","mock_tool":"get_my_farm_profile","mock_response":"{\"farm_name\":\"김사과 사과농장\",\"area_ha\":0.3306,\"location\":\"경북 영주시\"}","expected_numbers_in_answer":["0.3306","3,306","3306","0.33"]}
+{"q":"5일 위험","mock_tool":"get_weather_risk_advisory","mock_response":"{\"days\":[{\"date\":\"5/7\",\"wind_max\":4.7},{\"date\":\"5/8\",\"wind_max\":5.0}]}","expected_numbers_in_answer":["4.7","5.0"]}
+{"q":"일지 7일치","mock_tool":"list_journal_entries","mock_response":"{\"days\":7,\"entries\":12,\"missing_days\":2}","expected_numbers_in_answer":["12","2"]}
+{"q":"내가 받을 수 있는 직불금 매칭 결과 보여줘","mock_tool":"list_eligible_subsidies","mock_response":"{\"matches\":[{\"code\":\"BASIC_AREA\",\"amount\":710790}]}","expected_numbers_in_answer":["710790","710,790"]}

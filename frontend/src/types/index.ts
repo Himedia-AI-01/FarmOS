@@ -249,7 +249,6 @@ export interface MonthlySummary {
   totalIrrigations: number;
   totalDiagnoses: number;
   weatherAlertsHandled: number;
-  documentsGenerated: number;
   journalEntries: number;
   highlights: string[];
 }

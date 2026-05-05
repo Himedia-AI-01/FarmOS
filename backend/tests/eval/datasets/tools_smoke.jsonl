@@ -1,0 +1,36 @@
+{"tool":"get_current_weather","args":{},"expect_keys":["temp","forecast"]}
+{"tool":"get_weather_risk_advisory","args":{},"expect_substrings":["일"],"note":"위험 분석 출력은 날짜 포함 보장. 풍속·서리 등은 그날 위험에 따라 다름"}
+{"tool":"get_market_prices","args":{"category_name":"채소류"},"expect_keys":["item_name","unit"]}
+{"tool":"get_market_prices","args":{"category_name":"과일류"},"expect_keys":["item_name"]}
+{"tool":"get_market_prices","args":{"category_name":""},"expect_keys":["item_name"]}
+{"tool":"get_market_prices_for_crop","args":{"crop":"벼"},"expect_keys":["matched_terms","items"],"note":"실제 스키마: items 배열 안에 dpr1 가격"}
+{"tool":"get_market_prices_for_crop","args":{"crop":"사과"},"expect_keys":["matched_terms"]}
+{"tool":"get_market_prices_for_crop","args":{"crop":"존재하지않는작물xyz"},"allow_empty":true,"note":"unknown crop edge case"}
+{"tool":"list_eligible_subsidies","args":{},"allow_empty":true,"note":"requires user_id from RunnableConfig — empty when unauth"}
+{"tool":"check_eligibility_rule","args":{"subsidy_code":"소농직불금"},"allow_empty":true,"note":"requires user_id config"}
+{"tool":"check_eligibility_rule","args":{"subsidy_code":"INVALID_CODE"},"allow_empty":true}
+{"tool":"search_subsidy_regulations_fast","args":{"query":"영농기록 보관 의무","top_k":3},"expect_substrings":["article"],"note":"JSON: article/chapter/snippet"}
+{"tool":"search_subsidy_regulations_fast","args":{"query":"농약 안전사용","top_k":3},"expect_substrings":["article"]}
+{"tool":"search_subsidy_regulations_fast","args":{"query":"공익기능 교육","top_k":3},"expect_substrings":["article"]}
+{"tool":"search_subsidy_regulations","args":{"query":"마을공동체 활동","top_k":3},"expect_substrings":["article"],"note":"slow path"}
+{"tool":"search_subsidy_obligation_check","args":{"topic":"영농기록 작성 보관"},"expect_substrings":["verdict_hint","MANDATORY"]}
+{"tool":"search_subsidy_obligation_check","args":{"topic":"비닐하우스 설치"},"expect_substrings":["verdict_hint"]}
+{"tool":"search_subsidy_obligation_check","args":{"topic":"공익기능 교육 이수"},"expect_substrings":["verdict_hint","MANDATORY"]}
+{"tool":"get_subsidy_details","args":{"subsidy_code":"소농직불금"},"expect_substrings":["소농"]}
+{"tool":"get_subsidy_details","args":{"subsidy_code":"INVALID"},"allow_empty":true}
+{"tool":"get_journal_daily_summary","args":{"target_date":"2026-05-05"},"allow_empty":true}
+{"tool":"get_journal_daily_summary","args":{"target_date":"2025-01-01"},"allow_empty":true}
+{"tool":"list_journal_entries","args":{"days":7},"allow_empty":true}
+{"tool":"list_journal_entries","args":{"days":30,"crop":"벼"},"allow_empty":true}
+{"tool":"list_journal_entries","args":{"days":1},"allow_empty":true}
+{"tool":"get_recent_iot_decisions","args":{"hours":24},"allow_empty":true}
+{"tool":"get_recent_iot_decisions","args":{"hours":1},"allow_empty":true}
+{"tool":"get_recent_iot_decisions","args":{"hours":168},"allow_empty":true}
+{"tool":"get_recent_iot_decisions","args":{"hours":24,"control_type":"irrigation"},"allow_empty":true}
+{"tool":"get_recent_iot_decisions","args":{"hours":24,"control_type":"ventilation"},"allow_empty":true}
+{"tool":"get_my_farm_profile","args":{},"allow_empty":true,"note":"requires user_id"}
+{"tool":"diagnose_pest","args":{"pest":"노균병","crop":"토마토","region":"경북 영주"},"expect_substrings":["배"]}
+{"tool":"diagnose_pest","args":{"pest":"진딧물","crop":"고추","region":"경남 진주"},"expect_substrings":["배"]}
+{"tool":"diagnose_pest","args":{"pest":"도열병","crop":"벼","region":"경기 여주"},"expect_substrings":["배"]}
+{"tool":"diagnose_pest","args":{"pest":"존재안하는병xyz","crop":"토마토","region":"경북"},"allow_empty":true}
+{"tool":"get_weather_risk_advisory","args":{},"expect_substrings":["일"]}

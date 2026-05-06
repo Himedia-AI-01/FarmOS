@@ -426,7 +426,7 @@ interface Review {
       "name": "유기농 사과 3kg",
       "price": 25000,
       "discountRate": 10,
-      "thumbnail": "https://picsum.photos/seed/apple/400/400",
+      "thumbnail": "https://loremflickr.com/400/400/red-apple,fruit?lock=101",
       "rating": 4.5,
       "reviewCount": 12,
       "salesCount": 150,
@@ -451,10 +451,10 @@ interface Review {
   "description": "충북 충주산 유기농 사과...",
   "price": 25000,
   "discountRate": 10,
-  "thumbnail": "https://picsum.photos/seed/apple/400/400",
+  "thumbnail": "https://loremflickr.com/400/400/red-apple,fruit?lock=101",
   "images": [
-    "https://picsum.photos/seed/apple1/800/800",
-    "https://picsum.photos/seed/apple2/800/800"
+    "https://loremflickr.com/600/600/red-apple,fruit?lock=101",
+    "https://loremflickr.com/600/600/red-apple,fruit?lock=201"
   ],
   "options": [
     {"name": "중량", "values": ["3kg", "5kg", "10kg"]}
@@ -523,7 +523,7 @@ interface Review {
         "name": "유기농 사과 3kg",
         "price": 25000,
         "discountRate": 10,
-        "thumbnail": "https://picsum.photos/seed/apple/400/400",
+        "thumbnail": "https://loremflickr.com/400/400/red-apple,fruit?lock=101",
         "stock": 100
       }
     }
@@ -846,9 +846,14 @@ raise HTTPException(status_code=400, detail="유효하지 않은 수량입니다
 ### 7.2 Frontend (TanStack Query)
 
 ```typescript
+// lib/serviceUrls.ts
+export const SHOP_API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+export const FARMOS_API_URL = import.meta.env.VITE_FARMOS_API_URL ?? "http://localhost:8000/api/v1";
+export const FARMOS_LOGIN_URL = import.meta.env.VITE_FARMOS_LOGIN_URL ?? "http://localhost:5173/login";
+
 // lib/api.ts
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:4000",
+  baseURL: SHOP_API_URL,
   headers: { "X-User-Id": "1" },  // 더미 인증
 });
 

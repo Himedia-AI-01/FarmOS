@@ -346,12 +346,6 @@ export default function ChatbotPage() {
                     warning
                   </span>
                   <p className="text-xs font-medium text-rose-900 flex-1">상담원 개입 권장</p>
-                  <button
-                    type="button"
-                    className="shrink-0 px-2.5 py-1 border border-rose-300 text-rose-700 bg-white text-[11px] font-semibold rounded-md hover:bg-rose-500 hover:border-rose-500 hover:text-white transition-colors"
-                  >
-                    직접 상담 전환
-                  </button>
                 </div>
               )}
 

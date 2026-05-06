@@ -3,15 +3,18 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.order import Order, OrderItem
 from app.models.cart import CartItem
 from app.models.product import Product
+from app.services.revenue_sync import create_order_revenue_entries
 
 logger = logging.getLogger(__name__)
+
+BANK_TRANSFER_PAYMENT_METHOD = "무통장입금"
 
 
 def create_order(
     db: Session,
     user_id: int,
     shipping_address: str | None = None,
-    payment_method: str = "card",
+    payment_method: str = BANK_TRANSFER_PAYMENT_METHOD,
 ):
     """장바구니 기반 주문 생성.
 
@@ -63,8 +66,7 @@ def create_order(
     order_items: list[OrderItem] = []
     for ci in cart_items:
         product = locked_products[ci.product_id]
-        discounted = product.price * (100 - product.discount_rate) // 100
-        item_total = discounted * ci.quantity
+        item_total = product.price * ci.quantity
         total_price += item_total
         order_items.append(
             OrderItem(
@@ -79,9 +81,9 @@ def create_order(
     order = Order(
         user_id=user_id,
         total_price=total_price,
-        status="pending",
+        status="paid",
         shipping_address=shipping_address,
-        payment_method=payment_method,
+        payment_method=BANK_TRANSFER_PAYMENT_METHOD,
     )
     db.add(order)
     db.flush()  # order.id 확보
@@ -109,6 +111,7 @@ def create_order(
             )
 
     db.query(CartItem).filter(CartItem.user_id == user_id).delete()
+    create_order_revenue_entries(db, order)
     db.commit()
     db.refresh(order)
     return order

@@ -36,6 +36,8 @@
 - 쇼핑몰 백엔드: `http://localhost:4000`
 - 쇼핑몰 프론트엔드: `http://localhost:5174`
 
+쇼핑몰 프론트엔드는 `VITE_API_URL`, `VITE_FARMOS_API_URL`, `VITE_FARMOS_LOGIN_URL`이 있으면 그 값을 쓰고, 없으면 각각 `http://localhost:4000`, `http://localhost:8000/api/v1`, `http://localhost:5173/login`으로 fallback한다.
+
 ### 4) 강제 스키마 재구성(주의)
 
 - 실행 방법: `bootstrap.cmd`에 인자 전달
@@ -168,6 +170,7 @@ python bootstrap.py --initialize --verbose-table-info
 - 데이터가 부족하면 `bootstrap/insert_data.py` 실행
 - 쇼핑몰 FAQ DB 시딩과 RAG 인덱싱
 - 기존 DB에 `shop_tickets.flags` 컬럼이 없으면 안전하게 추가
+- FAQ 인용 테이블의 FK/유니크 제약과 Management 운영 인덱스 보강
 - 쇼핑몰 상품 이미지 URL 보정
 
 쇼핑몰 후속 보강만 다시 적용하려면 루트에서 실행한다.

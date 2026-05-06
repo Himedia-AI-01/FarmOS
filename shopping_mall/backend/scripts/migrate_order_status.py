@@ -8,8 +8,7 @@
   picked_up                    → shipped
   in_transit                   → shipped
   shipping                     → shipped
-  paid                         → pending  (비표준값 정리)
-  pending / delivered / cancelled → 변경 없음
+  pending / paid / delivered / cancelled / returned → 변경 없음
 
 사용법:
   # 변환 대상 미리 확인 (변경 없음)
@@ -107,16 +106,6 @@ def run(dry_run: bool = False) -> None:
                     f"{old_status} → shipped",
                     f"UPDATE shop_orders SET status = 'shipped' WHERE status = '{old_status}'",
                 ))
-
-        # 4. paid → pending (비표준값 정리)
-        result = conn.execute(text("SELECT COUNT(*) FROM shop_orders WHERE status = 'paid'"))
-        cnt = result.scalar()
-        logger.info("%s paid → pending: %d건", mode, cnt)
-        if cnt > 0:
-            migrations.append((
-                "paid → pending",
-                "UPDATE shop_orders SET status = 'pending' WHERE status = 'paid'",
-            ))
 
         # ── 실행 ──────────────────────────────────────────────────────────────
         if not migrations:

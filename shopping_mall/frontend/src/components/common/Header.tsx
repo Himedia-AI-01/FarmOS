@@ -2,8 +2,7 @@ import { Link } from 'react-router-dom';
 import SearchBar from './SearchBar';
 import { useCart } from '@/hooks/useCart';
 import { useUserStore } from '@/stores/userStore';
-
-const FARMOS_LOGIN_URL = import.meta.env.VITE_FARMOS_LOGIN_URL || 'http://localhost:5173/login';
+import { FARMOS_LOGIN_URL } from '@/lib/serviceUrls';
 
 export default function Header() {
   const { data: cart } = useCart();

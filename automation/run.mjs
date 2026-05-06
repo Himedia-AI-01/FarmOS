@@ -217,6 +217,8 @@ function applySafeSchemaPatches() {
   section("안전 스키마 보강");
   const sql = `
 DO $$
+DECLARE
+  target_table text;
 BEGIN
   IF to_regclass('public.shop_tickets') IS NOT NULL
      AND NOT EXISTS (
@@ -229,10 +231,94 @@ BEGIN
   THEN
     ALTER TABLE public.shop_tickets ADD COLUMN flags TEXT NOT NULL DEFAULT '[]';
   END IF;
+
+  IF to_regclass('public.shop_faq_citations') IS NOT NULL
+     AND to_regclass('public.shop_faq_docs') IS NOT NULL
+  THEN
+    SELECT referred.relname
+      INTO target_table
+      FROM pg_constraint con
+      JOIN pg_class local ON local.oid = con.conrelid
+      JOIN pg_class referred ON referred.oid = con.confrelid
+     WHERE con.conname = 'shop_faq_citations_faq_doc_id_fkey'
+       AND local.relname = 'shop_faq_citations';
+
+    IF target_table IS DISTINCT FROM 'shop_faq_docs' THEN
+      ALTER TABLE public.shop_faq_citations
+      DROP CONSTRAINT IF EXISTS shop_faq_citations_faq_doc_id_fkey;
+
+      DELETE FROM public.shop_faq_citations citation
+       WHERE NOT EXISTS (
+          SELECT 1
+            FROM public.shop_faq_docs doc
+           WHERE doc.id = citation.faq_doc_id
+       );
+
+      ALTER TABLE public.shop_faq_citations
+      ADD CONSTRAINT shop_faq_citations_faq_doc_id_fkey
+      FOREIGN KEY (faq_doc_id)
+      REFERENCES public.shop_faq_docs(id)
+      ON DELETE CASCADE;
+    END IF;
+  END IF;
+
+  IF to_regclass('public.shop_faq_citations') IS NOT NULL THEN
+    DELETE FROM public.shop_faq_citations current
+     USING public.shop_faq_citations duplicate
+     WHERE current.id > duplicate.id
+       AND current.chat_log_id = duplicate.chat_log_id
+       AND current.faq_doc_id = duplicate.faq_doc_id;
+
+    IF NOT EXISTS (
+      SELECT 1
+        FROM pg_constraint
+       WHERE conname = 'uq_faq_citation_log_doc'
+         AND conrelid = 'public.shop_faq_citations'::regclass
+    ) THEN
+      ALTER TABLE public.shop_faq_citations
+      ADD CONSTRAINT uq_faq_citation_log_doc
+      UNIQUE (chat_log_id, faq_doc_id);
+    END IF;
+  END IF;
+
+  IF to_regclass('public.shop_tickets') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1
+        FROM pg_indexes
+       WHERE schemaname = 'public'
+         AND indexname = 'uq_shop_tickets_active'
+    ) AND NOT EXISTS (
+      SELECT 1
+        FROM (
+          SELECT order_id, action_type
+            FROM public.shop_tickets
+           WHERE status = 'received'
+           GROUP BY order_id, action_type
+          HAVING count(*) > 1
+        ) duplicates
+    ) THEN
+      CREATE UNIQUE INDEX uq_shop_tickets_active
+          ON public.shop_tickets (order_id, action_type)
+      WHERE status = 'received';
+    END IF;
+  END IF;
+
+  IF to_regclass('public.shop_tool_metrics') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS ix_shop_tool_metrics_tool_created
+        ON public.shop_tool_metrics (tool_name, created_at);
+
+    CREATE INDEX IF NOT EXISTS ix_shop_tool_metrics_created_at
+        ON public.shop_tool_metrics (created_at);
+  END IF;
+
+  IF to_regclass('public.shop_shipments') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS ix_shop_shipments_related_ticket_id
+        ON public.shop_shipments (related_ticket_id);
+  END IF;
 END $$;
 `;
   psqlExec(sql);
-  info("additive schema patch 확인 완료 — shop_tickets.flags");
+  info("additive schema patch 확인 완료 — tickets/FAQ citations/shipments/tool metrics");
 }
 
 /** psql 결과를 행/필드 2차원 배열로. 빈 줄 무시.

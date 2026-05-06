@@ -25,23 +25,16 @@ engine = create_engine(settings.database_url)
 |------|----------|------|
 | `database_url` | `DATABASE_URL` | PostgreSQL 접속 URL |
 | `jwt_secret_key` | `JWT_SECRET_KEY` | FarmOS 공유 JWT 시크릿 |
-| `ollama_base_url` | `OLLAMA_BASE_URL` | Ollama 서버 주소 (임베딩 전용) |
-| `ollama_embed_model` | `OLLAMA_EMBED_MODEL` | ChromaDB 임베딩 모델 |
-| `utility_llm_base_url` | `UTILITY_LLM_BASE_URL` | 리포트/비용분류용 LLM 엔드포인트 |
-| `utility_llm_api_key` | `UTILITY_LLM_API_KEY` | 리포트/비용분류용 LLM API 키 |
-| `utility_llm_model` | `UTILITY_LLM_MODEL` | 리포트/비용분류용 LLM 모델명 |
-| `primary_llm_base_url` | `PRIMARY_LLM_BASE_URL` | 에이전트 Primary LLM 엔드포인트 |
-| `primary_llm_api_key` | `PRIMARY_LLM_API_KEY` | Primary LLM API 키 |
-| `primary_llm_model` | `PRIMARY_LLM_MODEL` | Primary LLM 모델명 |
-| `anthropic_api_key` | `ANTHROPIC_API_KEY` | Claude Fallback API 키 |
-| `claude_fallback_model` | `CLAUDE_FALLBACK_MODEL` | Claude Fallback 모델명 |
+| `litellm_url` | `LITELLM_URL` | OpenAI 호환 LLM 엔드포인트 |
+| `litellm_api_key` | `LITELLM_API_KEY` | LLM API 키 |
+| `litellm_model` | `LITELLM_MODEL` | LLM 모델명 |
 | `agent_max_iterations` | `AGENT_MAX_ITERATIONS` | 에이전트 최대 반복 횟수 |
 | `anniversary_api_key` | `ANNIVERSARY_API_KEY` | 공공데이터 공휴일 API 키 |
 | `reranker_model` | `RERANKER_MODEL` | Cross-Encoder 재랭킹 모델 (기본: `dragonkue/bge-reranker-v2-m3-ko`) |
 | `rag_distance_threshold` | `RAG_DISTANCE_THRESHOLD` | Dense 벡터 검색 거리 임계값 — FAQ·정책 공통 (기본: `0.50`) |
 | `rag_storage_distance_threshold` | `RAG_STORAGE_DISTANCE_THRESHOLD` | 보관법 첫 번째 검색 임계값 (기본: `0.35`) |
 | `rag_storage_retry_threshold` | `RAG_STORAGE_RETRY_THRESHOLD` | 보관법 재시도 임계값 (기본: `0.40`) |
-| `embed_provider` | `EMBED_PROVIDER` | 임베딩 provider (`ollama` / `openrouter` / `sentence_transformers` / `openai`) |
+| `embed_provider` | `EMBED_PROVIDER` | 임베딩 provider (`openrouter` / `sentence_transformers` / `openai`) |
 | `embed_model` | `EMBED_MODEL` | 임베딩 모델명 — 비우면 provider 기본값 사용 |
 | `langgraph_postgres_url` | *(computed)* | `database_url`에서 SQLAlchemy 드라이버 접미사 제거한 psycopg3 전용 URL |
 

@@ -27,7 +27,7 @@ POST /api/admin/faq-analytics/generate-draft
       → LLM이 JSON 출력 → _parse_result() → FaqDraftResult
 ```
 
-최대 6회 반복 (`_MAX_ITERATIONS = 6`). Primary LLM 실패 시 `with_fallbacks([Claude])` 자동 전환.
+최대 6회 반복 (`_MAX_ITERATIONS = 6`). Fallback LLM이 주입된 경우 LangChain `with_fallbacks()`로 자동 전환.
 
 ---
 

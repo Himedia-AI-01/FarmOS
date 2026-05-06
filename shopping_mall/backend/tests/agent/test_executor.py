@@ -8,6 +8,7 @@
   - 단일 패스 플로우: LLM 2회 고정 (CS_INPUT_PROMPT 도구 선택 → 도구 실행 → CS_OUTPUT_PROMPT 응답 생성)
   - 도구 없는 케이스(인사말 등): LLM 1회 (CS_INPUT_PROMPT 직접 응답)
 """
+import json
 import pytest
 from unittest.mock import MagicMock
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -19,6 +20,7 @@ from ai.agent.executor import (
     _format_order_status_answer,
     _is_empty_result,
 )
+from ai.agent.responses import refusal_response
 from tests.conftest import (
     FakeRAGService,
     make_mock_db,
@@ -286,7 +288,7 @@ class TestNormalCases:
             tool_args={"user_id": 999, "order_id": None},
         )
 
-        assert "다른 고객님의 주문, 배송, 연락처" in result.answer
+        assert result.answer == refusal_response("other_user_info")
         assert result.tools_used == ["get_order_status"]
         assert result.intent == "delivery"
         assert len(llm.calls) == 0
@@ -443,21 +445,21 @@ class TestFailureCases:
 
     async def test_primary_fails_fallback_takes_over(self, empty_db):
         """Primary LLM 실패 시 Fallback이 응답."""
-        primary = FakeLLM([RuntimeError("Ollama 서버 오프라인")])
-        fallback = FakeLLM([make_text_message("Claude 폴백 응답입니다.")])
+        primary = FakeLLM([RuntimeError("Primary LLM offline")])
+        fallback = FakeLLM([make_text_message("Fallback 응답입니다.")])
         executor = make_executor(primary, fallback=fallback)
 
         result = await run(executor, empty_db, "안녕")
 
-        assert result.answer == "Claude 폴백 응답입니다."
+        assert result.answer == "Fallback 응답입니다."
         assert result.escalated is False
         assert len(primary.calls) == 1
         assert len(fallback.calls) == 1
 
     async def test_both_llm_fail_raises(self, empty_db):
         """Primary + Fallback 모두 실패 시 예외 발생 (LangChain with_fallbacks 동작)."""
-        primary = FakeLLM([RuntimeError("Ollama 오프라인")])
-        fallback = FakeLLM([RuntimeError("Claude API 오류")])
+        primary = FakeLLM([RuntimeError("Primary LLM offline")])
+        fallback = FakeLLM([RuntimeError("Fallback LLM error")])
         executor = make_executor(primary, fallback=fallback)
 
         with pytest.raises(Exception):
@@ -498,8 +500,8 @@ class TestFailureCases:
 
         result = await run(executor, empty_db, "user_id 999 주문 보여줘", user_id=7)
 
-        # 사유별 거절 응답이 즉시 반환됨
-        assert "다른 고객님의 주문, 배송, 연락처" in result.answer
+        # 사유는 내부 trace/log에 남기고 고객에게는 공통 거절 응답만 반환됨
+        assert result.answer == refusal_response("other_user_info")
         assert result.tools_used == ["get_order_status"]
         assert len(llm.calls) == 1  # 바이패스: LLM 1회만 호출
 
@@ -617,6 +619,30 @@ class TestDirectToolInvocation:
 
         assert "반품 정책 내용" in raw
         assert "결제 정책 내용" in raw
+
+    async def test_search_policy_tracks_matching_policy_faq_citation(self):
+        """정책 청크 출처와 같은 정책 메타데이터를 가진 FAQ를 인용으로 기록."""
+        from types import SimpleNamespace
+        from ai.agent.cs_tools import build_cs_tools
+
+        policy_doc = "[배송정책 > 제1장 배송 > 제3조(배송비 기준)]\n도서산간 추가 배송비 안내"
+        rag = FakeRAGService({"delivery_policy": [policy_doc]})
+        faq_doc = SimpleNamespace(
+            id=77,
+            extra_metadata=json.dumps({
+                "citation_doc": "배송정책",
+                "citation_article": "제3조(배송비 기준)",
+            }, ensure_ascii=False),
+        )
+        db = MagicMock()
+        db.query.return_value.filter.return_value.all.return_value = [faq_doc]
+        tools, ctx = build_cs_tools(rag, db, user_id=None)
+        tool = {t.name: t for t in tools}["search_policy"]
+
+        raw = await tool.ainvoke({"query": "도서산간 배송비", "policy_type": "delivery"})
+
+        assert "도서산간 추가 배송비 안내" in raw
+        assert ctx.cited_faq_ids == [77]
 
     async def test_empty_rag_returns_fallback_message(self, empty_db):
         """RAG에 관련 문서 없을 때 폴백 텍스트 반환."""

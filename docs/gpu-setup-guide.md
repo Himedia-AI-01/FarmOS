@@ -109,6 +109,14 @@ npm run dev
 
 확인: http://localhost:5174
 
+URL 환경변수는 선택 사항입니다. 값이 없으면 쇼핑몰 프론트엔드가 아래 `localhost` fallback을 사용합니다.
+
+```ts
+VITE_API_URL ?? 'http://localhost:4000'
+VITE_FARMOS_API_URL ?? 'http://localhost:8000/api/v1'
+VITE_FARMOS_LOGIN_URL ?? 'http://localhost:5173/login'
+```
+
 ---
 
 ## 7단계: 백오피스 Frontend 실행 (port 5175)

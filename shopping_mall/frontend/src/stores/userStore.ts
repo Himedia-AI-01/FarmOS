@@ -1,7 +1,8 @@
 import { create } from 'zustand';
+import { FARMOS_API_URL, SHOP_API_URL } from '@/lib/serviceUrls';
 
-const FARMOS_API = import.meta.env.VITE_FARMOS_API || 'http://localhost:8000/api/v1';
-const SHOP_API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const FARMOS_API = FARMOS_API_URL;
+const SHOP_API = SHOP_API_URL;
 
 interface AuthUser {
   login_id: string;
@@ -50,7 +51,7 @@ export const useUserStore = create<UserState>((set) => ({
   },
 
   logout: async () => {
-    // FarmOS 쿠키 삭제 (같은 localhost 도메인)
+    // FarmOS 쿠키 삭제
     try {
       await fetch(`${FARMOS_API}/auth/logout`, {
         method: 'POST',

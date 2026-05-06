@@ -50,7 +50,7 @@ CS 도구는 읽기 전용 + 독립적이므로 병렬 실행이 안전합니다
 ```python
 SupervisorExecutor(
     primary,                  # ChatOpenAI — Primary LLM
-    fallback,                 # ChatAnthropic | None — Fallback LLM
+    fallback,                 # fallback model | None
     cs_executor: AgentExecutor,
     cs_input_prompt: str,     # CS 에이전트 도구 선택용 프롬프트
     cs_output_prompt: str,    # CS 에이전트 답변 합성용 프롬프트

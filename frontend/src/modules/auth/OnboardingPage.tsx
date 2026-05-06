@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { CROP_OPTIONS, FARMLAND_TYPES, FARMER_TYPES, safeAreaConvert } from '@/constants/farming';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = '/api/v1';
 const STEP_LABELS = ['계정', '농장', '작물', '영농', '완료'];
 
 /* ────────────── 타입 ────────────── */

@@ -5,7 +5,7 @@ import { MdCheckCircle } from 'react-icons/md';
 import toast from 'react-hot-toast';
 import { Spinner } from '@/components/ui';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = '/api/v1';
 
 export default function FindIdPage() {
   const [name, setName] = useState('');

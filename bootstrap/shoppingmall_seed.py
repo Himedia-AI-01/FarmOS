@@ -746,7 +746,6 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 question="제 주문 배송 어디까지 왔나요?",
                 answer="주문#2: CJ대한통운 6300123456789 (상태: delivered) - 배송이 완료되었습니다.",
                 escalated=False,
-                rating=5,
                 created_at=now - timedelta(days=5),
             ),
             ChatLog(
@@ -755,7 +754,6 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 question="사과 보관 방법이 궁금해요",
                 answer="사과는 비닐봉지에 넣어 냉장 보관하세요. 에틸렌 가스를 많이 배출하므로 다른 과일과 분리 보관이 좋습니다.",
                 escalated=False,
-                rating=4,
                 created_at=now - timedelta(days=4),
             ),
             ChatLog(
@@ -764,7 +762,6 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 question="어제 받은 고구마가 상한 것 같아요. 교환 가능한가요?",
                 answer="상품 하자 시 수령 후 24시간 이내에 사진과 함께 고객센터로 연락해 주세요. 확인 후 교환 또는 환불 처리해 드리겠습니다.",
                 escalated=False,
-                rating=3,
                 created_at=now - timedelta(days=3),
             ),
             ChatLog(
@@ -773,7 +770,6 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 question="농장 견학 프로그램이 있나요?",
                 answer="해당 문의는 상담원 연결이 필요합니다. 고객센터(1588-0000)로 전화해 주시거나, 잠시만 기다려 주시면 상담원이 연결됩니다.",
                 escalated=True,
-                rating=None,
                 created_at=now - timedelta(days=2),
             ),
             ChatLog(
@@ -782,7 +778,6 @@ def seed_backoffice_data(db, state: SeedState) -> None:
                 question="지금 제철인 과일이 뭐가 있나요?",
                 answer="봄철(3-5월)에는 딸기가 가장 인기 있으며, 4월부터는 참외도 출하됩니다. 감귤류(한라봉, 천혜향)도 아직 맛있게 드실 수 있습니다.",
                 escalated=False,
-                rating=5,
                 created_at=now - timedelta(days=1),
             ),
         ]

@@ -860,9 +860,16 @@ if __name__ == "__main__":
 
         import shutil
         if os.path.exists(CHROMA_DIR):
+            # Clear *contents* rather than the directory itself — when CHROMA_DIR
+            # is a docker volume mountpoint, rmtree on the dir fails with EBUSY.
             try:
-                shutil.rmtree(CHROMA_DIR)
-                print(f"기존 ChromaDB 삭제: {CHROMA_DIR}")
+                for entry in os.listdir(CHROMA_DIR):
+                    path = os.path.join(CHROMA_DIR, entry)
+                    if os.path.isdir(path) and not os.path.islink(path):
+                        shutil.rmtree(path, ignore_errors=False)
+                    else:
+                        os.unlink(path)
+                print(f"기존 ChromaDB 내용 삭제: {CHROMA_DIR}")
             except PermissionError as e:
                 print(f"[오류] ChromaDB 디렉터리를 삭제할 수 없습니다: {e}")
                 print("  → 백엔드 서버(uvicorn)를 종료한 후 다시 실행하세요.")

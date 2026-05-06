@@ -25,7 +25,7 @@ import json
 from sqlalchemy import desc, select
 
 from app.core import review_singletons as _singletons
-from app.core.database import async_session
+from app.core.database import async_session, shop_async_session
 from app.core.review_helpers import get_seller_product_ids, stratified_sample
 from app.mcp.auth import get_current_user_from_ctx
 from app.mcp.schemas import AnalysisDetail, PdfReport
@@ -125,7 +125,8 @@ def _register_embed_and_search(mcp: FastMCP) -> None:
         """
         async with async_session() as db:
             await get_current_user_from_ctx(db)
-            added = await _singletons.rag.sync_from_db(db)
+        async with shop_async_session() as shop_db:
+            added = await _singletons.rag.sync_from_db(shop_db)
         total = _singletons.rag.get_count()
         logger.info(
             "mcp.embed_reviews ok added=%d total=%d", added, total,
@@ -159,7 +160,8 @@ def _register_embed_and_search(mcp: FastMCP) -> None:
 
             # empty-new-collection window 완화 — 라우터와 동일 패턴
             if _singletons.rag.get_count() == 0:
-                await _singletons.rag.sync_from_db(db)
+                async with shop_async_session() as shop_db:
+                    await _singletons.rag.sync_from_db(shop_db)
 
             filter_dict: dict[str, Any] | None = None
             if filters:

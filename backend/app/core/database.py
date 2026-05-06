@@ -1,5 +1,7 @@
 """SQLAlchemy async engine & session 관리."""
 
+import re
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -18,13 +20,52 @@ engine = create_async_engine(
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+def _resolve_shop_database_url() -> str:
+    """SHOP_DATABASE_URL 명시값 우선, 없으면 DATABASE_URL 의 dbname 을 'shop' 으로 치환."""
+    if settings.SHOP_DATABASE_URL:
+        return settings.SHOP_DATABASE_URL
+    if not settings.DATABASE_URL:
+        return ""
+    # postgresql+asyncpg://user:pass@host:port/dbname[?params]
+    return re.sub(r"/[^/?]+(\?|$)", r"/shop\1", settings.DATABASE_URL, count=1)
+
+
+_shop_url = _resolve_shop_database_url()
+if _shop_url:
+    shop_engine = create_async_engine(
+        _shop_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
+        pool_recycle=settings.DB_POOL_RECYCLE,
+    )
+    shop_async_session = async_sessionmaker(
+        shop_engine, class_=AsyncSession, expire_on_commit=False
+    )
+else:  # pragma: no cover — only hit during local boot without a DATABASE_URL
+    shop_engine = None  # type: ignore[assignment]
+    shop_async_session = None  # type: ignore[assignment]
+
+
 class Base(DeclarativeBase):
     pass
 
 
 async def get_db():
-    """FastAPI Depends용 DB 세션 제공."""
+    """FastAPI Depends용 DB 세션 제공 (FarmOS DB)."""
     async with async_session() as session:
+        yield session
+
+
+async def get_shop_db():
+    """FastAPI Depends용 Shop DB 세션 제공 (cross-database 읽기 전용 권장)."""
+    if shop_async_session is None:
+        raise RuntimeError(
+            "SHOP_DATABASE_URL 미설정 — DATABASE_URL 도 비어 있어 자동 치환 불가."
+        )
+    async with shop_async_session() as session:
         yield session
 
 

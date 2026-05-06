@@ -161,6 +161,24 @@ export interface AnalysisSettings {
   default_batch_size: number;
 }
 
+// shop_reviews 페이지네이션 — RAG 검색과 별개의 단순 brows 용
+export interface ReviewListItem {
+  id: number;
+  product_id: number | null;
+  product_name: string | null;
+  rating: number;
+  content: string;
+  created_at: string | null;
+}
+
+export interface ReviewListResponse {
+  items: ReviewListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
 // Documents
 export interface DocumentTemplate {
   id: string;

@@ -32,6 +32,7 @@ import logging
 import os
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 
 from fpdf import FPDF
 from fpdf.errors import FPDFException
@@ -39,6 +40,15 @@ from fpdf.errors import FPDFException
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# 저장소에 번들된 한글 폰트 — config.py 의 default 와 같은 위치.
+# .env 에 FONT_PATH= (빈 값) 으로 default 가 덮어쓰여도 여기서 직접 폴백되도록 분리.
+_BUNDLED_FONT_REGULAR = (
+    Path(__file__).resolve().parent.parent / "assets" / "fonts" / "Pretendard-Regular.ttf"
+)
+_BUNDLED_FONT_BOLD = (
+    Path(__file__).resolve().parent.parent / "assets" / "fonts" / "Pretendard-Bold.ttf"
+)
 
 
 class ReviewReportGenerator:
@@ -130,14 +140,35 @@ class ReviewReportGenerator:
     ]
 
     def _resolve_font_paths(self) -> tuple[str, str | None] | None:
-        """settings.FONT_PATH > OS 별 후보 순으로 한글 폰트 경로를 찾는다.
+        """한글 폰트 경로를 탐색한다.
+
+        우선순위:
+            1. settings.FONT_PATH (사용자가 .env 로 명시 + 실제 파일 존재)
+            2. 저장소에 번들된 Pretendard (assets/fonts/) — 항상 git 에 포함되므로
+               EC2/Docker 등 OS 폰트가 없는 환경에서도 동작 보장.
+            3. OS 별 표준 한글 폰트 (Windows Malgun, macOS Apple SD Gothic, Linux Nanum/Noto)
+
+        EC2 500 회귀 방지:
+            과거에는 .env 의 FONT_PATH= (빈 값) 이 pydantic default(번들 경로) 를
+            덮어써서 OS 후보 폴백으로 빠졌다. EC2 Amazon Linux 기본 이미지에
+            한글 폰트가 없어 None 반환 → Helvetica 폴백 → 한글 cell() 시
+            FPDFUnicodeEncodingException → 500.
+            번들 Pretendard 를 명시 폴백 2순위로 두어 .env 오버라이드와 무관하게
+            항상 한글 렌더가 가능하게 한다.
 
         Returns:
-            (regular, bold|None) 튜플 또는 None (어떤 폰트도 못 찾음).
+            (regular, bold|None) 튜플 또는 None (모든 후보 부재 — 거의 발생 안 함).
         """
         configured = settings.FONT_PATH
         if configured and os.path.exists(configured):
-            return (configured, None)
+            configured_bold = settings.FONT_BOLD_PATH
+            bold_path = configured_bold if (configured_bold and os.path.exists(configured_bold)) else None
+            return (configured, bold_path)
+
+        # 번들 Pretendard — repo 에 항상 존재하므로 OS 폰트 탐색보다 우선.
+        if _BUNDLED_FONT_REGULAR.exists():
+            bold_path = str(_BUNDLED_FONT_BOLD) if _BUNDLED_FONT_BOLD.exists() else None
+            return (str(_BUNDLED_FONT_REGULAR), bold_path)
 
         for regular, bold in self._FALLBACK_FONT_CANDIDATES:
             if os.path.exists(regular):

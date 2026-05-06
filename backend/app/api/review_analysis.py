@@ -56,6 +56,8 @@ from app.schemas.review_analysis import (
     EmbedRequest,
     EmbedResponse,
     KeywordItem,
+    ReviewListItem,
+    ReviewListResponse,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -149,10 +151,20 @@ async def analyze_reviews_stream(
         async for update in _analyzer.analyze_batch_with_progress(analysis_reviews, batch_size=batch_size):
             if "result" in update:
                 final_result = update["result"]
-            yield {"data": json.dumps(
-                {k: v for k, v in update.items() if k != "result"},
-                ensure_ascii=False,
-            )}
+            payload = {k: v for k, v in update.items() if k != "result"}
+            # Race-condition guard:
+            #   analyzer 의 마지막 yield 는 progress=100 이지만, 이 시점에는 아직
+            #   DB commit 이 실행되지 않았다. 클라이언트(useReviewAnalysis.analyzeReviews)
+            #   는 progress>=100 수신 즉시 EventSource 를 close() 하고 fetchAnalysis() 를
+            #   호출하므로:
+            #     1) commit 도중 connection cancel → DB 미저장
+            #     2) commit 직전에 GET /analysis 가 stale/404 응답 → UI 미반영
+            #   따라서 commit 전까지는 95% 로 다운그레이드해서 클라이언트가 연결을
+            #   끊지 않게 하고, commit 완료 후에만 진짜 100% 를 emit 한다.
+            if payload.get("progress", 0) >= 100 and "error" not in payload:
+                payload["progress"] = 95
+                payload["message"] = "결과 집계 완료, DB 저장 중..."
+            yield {"data": json.dumps(payload, ensure_ascii=False)}
             await asyncio.sleep(0)
 
         # DB 저장 (review_count는 전체 수 기록)
@@ -168,9 +180,12 @@ async def analyze_reviews_stream(
                 analysis_type="manual", target_scope="all",
                 review_count=total_count,
                 sentiment_summary=final_result.get("sentiment_summary"),
-                keywords=final_result.get("keywords", []),
+                # dict 가드 — /analyze (POST) 와 동일 정규화. JSONB 컬럼이지만 LLM 응답이
+                # str/None 을 섞어 보낼 수 있어 읽는 쪽 isinstance(dict) 필터와 맞춰야 한다.
+                keywords=[kw for kw in final_result.get("keywords", []) if isinstance(kw, dict)],
                 summary=json.dumps(summary_data, ensure_ascii=False) if summary_data else None,
-                trends=trends, anomalies=anomalies,
+                trends=[t for t in trends if isinstance(t, dict)],
+                anomalies=[a for a in anomalies if isinstance(a, dict)],
                 llm_provider=final_result.get("llm_provider", ""),
                 llm_model=final_result.get("llm_model", ""),
                 processing_time_ms=final_result.get("processing_time_ms", 0),
@@ -181,6 +196,13 @@ async def analyze_reviews_stream(
             yield {"data": json.dumps({
                 "progress": 100,
                 "message": f"분석 완료! ({len(sampled)}/{total_count}건 샘플 분석, DB 저장됨)",
+            }, ensure_ascii=False)}
+        else:
+            # final_result 가 없으면(모든 배치 실패 등) 100% 를 보내야 클라이언트가
+            # spinner 를 멈춘다. error 필드로 사용자에게 원인을 알린다.
+            yield {"data": json.dumps({
+                "progress": 100,
+                "error": "분석 결과를 생성하지 못했습니다 (LLM 응답 실패).",
             }, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
@@ -423,6 +445,81 @@ async def download_report(
         pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=review-analysis-report.pdf"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /reviews/list — shop_reviews 페이지네이션 조회
+# ---------------------------------------------------------------------------
+
+@router.get("/list", response_model=ReviewListResponse)
+async def list_reviews(
+    page: int = Query(1, ge=1, description="1-based 페이지 번호"),
+    page_size: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
+    rating_min: float | None = Query(None, ge=1, le=5, description="최소 평점 (포함)"),
+    rating_max: float | None = Query(None, ge=1, le=5, description="최대 평점 (포함)"),
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """shop_reviews 테이블에서 리뷰 목록을 페이지네이션으로 조회합니다.
+
+    UI 의 "리뷰 목록" 섹션 전용. RAG 의미 검색(/search)과 역할 분리:
+        - /search : 자연어 질의 → 유사도 정렬 (top_k 제한)
+        - /list   : 단순 페이지네이션 → 최신순 정렬 (전체 brows)
+
+    shop_products 와 LEFT JOIN 해 product_name 을 함께 반환한다.
+    """
+    from sqlalchemy import text as sa_text
+
+    where_clauses = ["r.content IS NOT NULL", "r.content != ''"]
+    params: dict = {}
+    if rating_min is not None:
+        where_clauses.append("r.rating >= :rmin")
+        params["rmin"] = rating_min
+    if rating_max is not None:
+        where_clauses.append("r.rating <= :rmax")
+        params["rmax"] = rating_max
+    where_sql = " AND ".join(where_clauses)
+
+    count_result = await db.execute(
+        sa_text(f"SELECT COUNT(*) FROM shop_reviews r WHERE {where_sql}"),
+        params,
+    )
+    total = int(count_result.scalar() or 0)
+
+    offset = (page - 1) * page_size
+    list_result = await db.execute(
+        sa_text(f"""
+            SELECT r.id, r.product_id, r.rating, r.content, r.created_at,
+                   p.name AS product_name
+            FROM shop_reviews r
+            LEFT JOIN shop_products p ON p.id = r.product_id
+            WHERE {where_sql}
+            ORDER BY r.created_at DESC NULLS LAST, r.id DESC
+            LIMIT :limit OFFSET :offset
+        """),
+        {**params, "limit": page_size, "offset": offset},
+    )
+    rows = list_result.fetchall()
+
+    items = [
+        ReviewListItem(
+            id=row.id,
+            product_id=row.product_id,
+            product_name=row.product_name,
+            rating=float(row.rating) if row.rating is not None else 0.0,
+            content=row.content,
+            created_at=row.created_at.isoformat() if row.created_at else None,
+        )
+        for row in rows
+    ]
+
+    return ReviewListResponse(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=(offset + len(items)) < total,
     )
 
 

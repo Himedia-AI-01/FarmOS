@@ -30,6 +30,8 @@ export function useReviewAnalysis() {
   const [isSearching, setIsSearching] = useState(false);
   const [trends, setTrends] = useState<TrendData[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyAlert[]>([]);
+  // 완료 알림 — SSE 가 즉시 끝나는 경우(이미 임베딩됨 등)에도 사용자에게 결과를 보여주려고 별도 보관.
+  const [notice, setNotice] = useState<string | null>(null);
   const [settings, setSettings] = useState<AnalysisSettings>({
     auto_batch_enabled: false,
     batch_trigger_count: 10,
@@ -41,6 +43,19 @@ export function useReviewAnalysis() {
   const analyzeEsRef = useRef<EventSource | null>(null);
   const embedEsRef = useRef<EventSource | null>(null);
   const mountedRef = useRef(true);
+  const noticeTimerRef = useRef<number | null>(null);
+
+  // notice 자동 소거 — 4초 후 사라짐. 새 알림이 오면 이전 타이머 취소.
+  const showNotice = useCallback((message: string) => {
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    setNotice(message);
+    noticeTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) setNotice(null);
+      noticeTimerRef.current = null;
+    }, 4000);
+  }, []);
 
   // 최신 분석 결과 조회 (초기 로드 시 실패해도 에러 표시 안함 — Mock 폴백)
   const fetchAnalysis = useCallback(async () => {
@@ -76,7 +91,10 @@ export function useReviewAnalysis() {
           if (data.progress >= 100) {
             es.close();
             analyzeEsRef.current = null;
-            if (mountedRef.current) fetchAnalysis();
+            if (mountedRef.current) {
+              fetchAnalysis();
+              showNotice(data.message || '분석 완료');
+            }
             resolve();
           }
           if (data.error) {
@@ -103,7 +121,7 @@ export function useReviewAnalysis() {
         setProgressMessage('');
       }
     }
-  }, [fetchAnalysis]);
+  }, [fetchAnalysis, showNotice]);
 
   // RAG 의미 검색
   const searchReviews = useCallback(async (
@@ -177,6 +195,9 @@ export function useReviewAnalysis() {
           if (data.progress >= 100) {
             es.close();
             embedEsRef.current = null;
+            if (mountedRef.current) {
+              showNotice(data.message || '임베딩 완료');
+            }
             resolve();
           }
         };
@@ -197,7 +218,7 @@ export function useReviewAnalysis() {
         setProgressMessage('');
       }
     }
-  }, []);
+  }, [showNotice]);
 
   // 설정 조회
   const fetchSettings = useCallback(async () => {
@@ -240,6 +261,10 @@ export function useReviewAnalysis() {
       analyzeEsRef.current = null;
       embedEsRef.current?.close();
       embedEsRef.current = null;
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -251,6 +276,7 @@ export function useReviewAnalysis() {
     embedProgress,
     analyzeProgress,
     progressMessage,
+    notice,
     error,
     analyzeReviews,
     fetchAnalysis,

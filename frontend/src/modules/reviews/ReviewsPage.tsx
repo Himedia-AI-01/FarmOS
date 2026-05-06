@@ -2,7 +2,7 @@
 // ts/06-reviews-pipeline-state-analysis.md §5 기준: mock 폴백 제거, 빈 상태는 placeholder.
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { MdTrendingUp, MdPlayArrow, MdSettings, MdDownload, MdWarning, MdStorage, MdInfoOutline } from 'react-icons/md';
+import { MdTrendingUp, MdPlayArrow, MdSettings, MdDownload, MdWarning, MdStorage, MdInfoOutline, MdCheckCircle } from 'react-icons/md';
 import { useReviewAnalysis } from '@/hooks/useReviewAnalysis';
 import RAGSearchPanel from './RAGSearchPanel';
 import AnalysisSettingsModal from './AnalysisSettingsModal';
@@ -36,7 +36,7 @@ export default function ReviewsPage() {
 
   const {
     analysis, isAnalyzing, isEmbedding,
-    embedProgress, analyzeProgress, progressMessage,
+    embedProgress, analyzeProgress, progressMessage, notice,
     error, analyzeReviews, searchResults, isSearching, searchReviews,
     trends, anomalies, downloadReport, embedReviews,
     settings, updateSettings,
@@ -122,6 +122,14 @@ export default function ReviewsPage() {
         <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-[color:var(--color-info)]/20 bg-[color:var(--tint-info)] px-4 py-3 text-[14px] text-[color:var(--color-info)]">
           <Spinner size={16} tone="mute" label="" />
           {progressMessage}
+        </div>
+      )}
+
+      {/* 완료/이미 처리됨 알림 — 4초 후 자동 소거 (즉시 종료된 SSE 도 사용자에게 보이도록) */}
+      {notice && !isEmbedding && !isAnalyzing && (
+        <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-[color:var(--color-success)]/30 bg-[color:var(--color-success)]/10 px-4 py-3 text-[14px] text-[color:var(--color-success)]">
+          <MdCheckCircle aria-hidden className="text-[18px]" />
+          {notice}
         </div>
       )}
 

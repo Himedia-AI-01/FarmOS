@@ -30,7 +30,7 @@ interface Props {
   refreshToken?: number;
 }
 
-const JOURNAL_API = "http://localhost:8000/api/v1/journal";
+const JOURNAL_API = "/api/v1/journal";
 
 const SOURCE_LABEL: Record<string, string> = {
   llm: "AI 생성",

@@ -7,8 +7,8 @@
  *   GET  /api/v1/subsidy/detail/{code}      지원금 상세 정보
  */
 
-const API_BASE = 'http://localhost:8000/api/v1/subsidy';
-const AUTH_BASE = 'http://localhost:8000/api/v1/auth';
+const API_BASE = '/api/v1/subsidy';
+const AUTH_BASE = '/api/v1/auth';
 
 /**
  * 만료된 access_token 을 refresh_token 으로 갱신.

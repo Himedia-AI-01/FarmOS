@@ -24,7 +24,7 @@ const PESTS = [
   "톱다리개미허리노린재", "파밤나방", "홍비단노린재"
 ];
 
-const API_BASE = 'http://localhost:8000/api/v1/diagnosis';
+const API_BASE = '/api/v1/diagnosis';
 
 const TIPS = [
   "작물의 잎 이면까지 꼼꼼히 촬영하면 더 정확한 해충 진단이 가능합니다.",

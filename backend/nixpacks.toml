@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python312", "uv", "gcc", "stdenv.cc.cc.lib"]
+
+[phases.install]
+cmds = ["uv sync --frozen --no-dev"]
+
+[phases.build]
+cmds = ["echo 'no build step'"]
+
+[start]
+cmd = "uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'"

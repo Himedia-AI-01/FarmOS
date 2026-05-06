@@ -11,20 +11,28 @@ from app.core.pesticide_crawl_service import (
     trigger_crawl,
 )
 from app.core.pesticide_sync import get_pesticide_count, sync_pesticides
+from app.core.redis_cache import redis_cached
 from app.models.pesticide import PesticideProduct
 from app.models.user import User
 
 router = APIRouter(prefix="/pesticide", tags=["pesticide"])
 
 
-@router.get("/search")
-async def search_pesticide(
-    q: str = Query(..., min_length=1, description="검색어"),
-    limit: int = Query(10, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """농약 제품명/브랜드명 검색 (자동완성용)."""
+# 자동완성 검색은 같은 prefix 로 매우 자주 호출됨 ("디", "디메", "디메토" ...).
+# DB row 변경은 크롤링 트리거(/pesticide/crawl) 후 재시작 시에만 발생하므로
+# TTL 1시간이 안전. 외부 데이터 (PostgreSQL)이지만 본 cache layer 가 막아주는
+# 비용은 중복 ILIKE 쿼리 (~5-30ms 각각)이라 적용 가치 있음.
+@redis_cached(
+    prefix="pesticide:search",
+    ttl=3600,
+    # The wrapper passes through every positional arg to keygen; accept all of
+    # them and ignore the AsyncSession (`db`) — the cache key must be the same
+    # regardless of which session executed the read-only query.
+    keygen=lambda q, limit=10, *_: f"{q.strip().lower()}:{limit}",
+)
+async def _search_pesticide_cached(q: str, limit: int, db: AsyncSession) -> dict:
+    """캐시 가능한 검색 본문. db 인자는 keygen 에서 제외 — 같은 q+limit 은
+    어떤 세션이든 동일 결과."""
     result = await db.execute(
         select(
             distinct(PesticideProduct.ingredient_or_formulation_name),
@@ -43,8 +51,6 @@ async def search_pesticide(
     )
     products = result.all()
     return {
-        # TODO: 응답 키를 모델/DB 컬럼명 기준으로 정렬 필요.
-        # NOTE: backend 응답 스키마와 frontend 타입/사용처를 함께 수정해야 함.
         "results": [
             {
                 "product_name": product_name,
@@ -57,6 +63,17 @@ async def search_pesticide(
         ],
         "total": len(products),
     }
+
+
+@router.get("/search")
+async def search_pesticide(
+    q: str = Query(..., min_length=1, description="검색어"),
+    limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """농약 제품명/브랜드명 검색 (자동완성용)."""
+    return await _search_pesticide_cached(q, limit, db)
 
 
 @router.post("/sync")

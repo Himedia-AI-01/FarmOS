@@ -28,10 +28,10 @@ import DateRangeFilter, {
 
 function PriorityBadge({ priority }: { priority: string }) {
   const colors: Record<string, string> = {
-    emergency: 'bg-red-100 text-red-700',
+    emergency: 'bg-[color:var(--color-danger-light)] text-[color:var(--color-danger)]',
     high: 'bg-orange-100 text-orange-700',
-    medium: 'bg-blue-100 text-blue-700',
-    low: 'bg-gray-100 text-gray-600',
+    medium: 'bg-blue-100 text-[color:var(--color-info)]',
+    low: 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)]',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[priority] || colors.low}`}>
@@ -43,9 +43,9 @@ function PriorityBadge({ priority }: { priority: string }) {
 function SourceBadge({ source }: { source: string }) {
   const colors: Record<string, string> = {
     rule: 'bg-yellow-100 text-yellow-700',
-    llm: 'bg-purple-100 text-purple-700',
-    tool: 'bg-indigo-100 text-indigo-700',
-    manual: 'bg-green-100 text-green-700',
+    llm: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
+    tool: 'bg-[color:var(--tint-info)] text-[color:var(--color-info)]',
+    manual: 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
   };
   const labels: Record<string, string> = {
     rule: '규칙',
@@ -54,7 +54,7 @@ function SourceBadge({ source }: { source: string }) {
     manual: '수동',
   };
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[source] || 'bg-gray-100 text-gray-600'}`}>
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[source] || 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)]'}`}>
       {labels[source] || source}
     </span>
   );
@@ -73,12 +73,12 @@ function ControlCard({
     <div className="bg-white rounded-xl border p-4 space-y-2">
       <div className="flex items-center gap-2">
         {icon}
-        <span className="font-semibold text-gray-800 text-sm">{title}</span>
-        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200 font-medium">
+        <span className="font-semibold text-[color:var(--color-ink)] text-sm">{title}</span>
+        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-[color:var(--tint-warning)] text-[color:var(--color-accent-dark)] border border-amber-200 font-medium">
           가상 제어
         </span>
       </div>
-      <div className="text-sm text-gray-600">{children}</div>
+      <div className="text-sm text-[color:var(--color-ink-mute)]">{children}</div>
     </div>
   );
 }
@@ -111,25 +111,25 @@ function DecisionRow({
       type="button"
       data-testid="ai-decision-row"
       onClick={() => onOpen(decision.id)}
-      className="w-full text-left py-2.5 border-b border-gray-100 last:border-0 hover:bg-white/60 rounded px-1 transition-colors"
+      className="w-full text-left py-2.5 border-b border-[color:var(--color-line-soft)] last:border-0 hover:bg-white/60 rounded px-1 transition-colors"
     >
       <div className="flex items-start gap-3">
         <div className="shrink-0 w-[88px] mt-0.5 leading-tight">
-          <div className="text-[11px] text-gray-500 font-mono">{dateStr}</div>
-          <div className="text-[11px] text-gray-400 font-mono">{timeStr}</div>
+          <div className="text-[11px] text-[color:var(--color-ink-mute)] font-mono">{dateStr}</div>
+          <div className="text-[11px] text-[color:var(--color-ink-faint)] font-mono">{timeStr}</div>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-gray-800">
+            <span className="text-sm font-medium text-[color:var(--color-ink)]">
               {typeLabels[decision.control_type] || decision.control_type}
             </span>
             <PriorityBadge priority={decision.priority} />
             <SourceBadge source={decision.source} />
             {toolCount > 0 && (
-              <span className="text-[10px] text-indigo-500">· 도구 {toolCount}</span>
+              <span className="text-[10px] text-[color:var(--color-info)]">· 도구 {toolCount}</span>
             )}
           </div>
-          <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-2">
+          <p className="text-xs text-[color:var(--color-ink-mute)] mt-1 leading-relaxed line-clamp-2">
             {decision.reason}
           </p>
         </div>
@@ -226,8 +226,8 @@ export default function AIAgentPanel() {
   if (loading) {
     return (
       <div className="card animate-pulse">
-        <div className="h-6 bg-gray-200 rounded w-48 mb-4" />
-        <div className="h-32 bg-gray-100 rounded" />
+        <div className="h-6 bg-[color:var(--color-surface-deep)] rounded w-48 mb-4" />
+        <div className="h-32 bg-[color:var(--color-surface-deep)] rounded" />
       </div>
     );
   }
@@ -235,7 +235,7 @@ export default function AIAgentPanel() {
   if (!status) {
     return (
       <div className="card">
-        <div className="flex items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-2 text-[color:var(--color-ink-faint)]">
           <MdSmartToy className="text-2xl" />
           <h3 className="font-semibold">AI Agent 제어</h3>
           <span className="ml-auto text-xs">IoT 서버 연결 대기중...</span>
@@ -252,7 +252,7 @@ export default function AIAgentPanel() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <MdSmartToy className="text-2xl text-purple-600" />
+            <MdSmartToy className="text-2xl text-[color:var(--color-primary-dark)]" />
             <h3 className="section-title !mb-0">AI Agent 제어</h3>
             {status.enabled && (
               <span className="relative flex h-2.5 w-2.5">
@@ -264,7 +264,7 @@ export default function AIAgentPanel() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setProfileOpen(true)}
-              className="p-2 hover:bg-gray-100 rounded-lg text-gray-500"
+              className="p-2 hover:bg-[color:var(--color-surface-deep)] rounded-lg text-[color:var(--color-ink-mute)]"
               title="작물 프로필 설정"
             >
               <MdSettings className="text-lg" />
@@ -273,8 +273,8 @@ export default function AIAgentPanel() {
               onClick={toggle}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                 status.enabled
-                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  ? 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)] hover:bg-green-200'
+                  : 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)] hover:bg-[color:var(--color-surface-deep)]'
               }`}
             >
               {status.enabled ? 'ON' : 'OFF'}
@@ -283,7 +283,7 @@ export default function AIAgentPanel() {
         </div>
 
         {/* Crop Info */}
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-[color:var(--color-ink-mute)]">
           <MdAutoAwesome className="text-green-500" />
           <span>
             {crop_profile.name} / {crop_profile.growth_stage} / 적정 {crop_profile.optimal_temp[0]}~{crop_profile.optimal_temp[1]}C
@@ -307,14 +307,14 @@ export default function AIAgentPanel() {
             >
               <div className="flex justify-between">
                 <span>창문 개방</span>
-                <span className="font-semibold text-gray-800">{cs.ventilation.window_open_pct}%</span>
+                <span className="font-semibold text-[color:var(--color-ink)]">{cs.ventilation.window_open_pct}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+              <div className="w-full bg-[color:var(--color-surface-deep)] rounded-full h-1.5 mt-1">
                 <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${cs.ventilation.window_open_pct}%` }} />
               </div>
               <div className="flex justify-between mt-1.5">
                 <span>팬 속도</span>
-                <span className="font-semibold text-gray-800">{cs.ventilation.fan_speed} RPM</span>
+                <span className="font-semibold text-[color:var(--color-ink)]">{cs.ventilation.fan_speed} RPM</span>
               </div>
             </ControlCard>
 
@@ -324,63 +324,63 @@ export default function AIAgentPanel() {
             >
               <div className="flex justify-between">
                 <span>밸브</span>
-                <span className={`font-semibold ${cs.irrigation.valve_open ? 'text-cyan-600' : 'text-gray-400'}`}>
+                <span className={`font-semibold ${cs.irrigation.valve_open ? 'text-cyan-600' : 'text-[color:var(--color-ink-faint)]'}`}>
                   {cs.irrigation.valve_open ? '열림' : '닫힘'}
                 </span>
               </div>
               <div className="flex justify-between mt-1">
                 <span>금일 급수량</span>
-                <span className="font-semibold text-gray-800">{cs.irrigation.daily_total_L.toFixed(1)}L</span>
+                <span className="font-semibold text-[color:var(--color-ink)]">{cs.irrigation.daily_total_L.toFixed(1)}L</span>
               </div>
               <div className="flex justify-between mt-1">
                 <span>N:P:K</span>
-                <span className="font-semibold text-gray-800">
+                <span className="font-semibold text-[color:var(--color-ink)]">
                   {cs.irrigation.nutrient.N}:{cs.irrigation.nutrient.P}:{cs.irrigation.nutrient.K}
                 </span>
               </div>
             </ControlCard>
 
             <ControlCard
-              icon={<MdLightMode className="text-xl text-amber-500" />}
+              icon={<MdLightMode className="text-xl text-[color:var(--color-accent)]" />}
               title="조명"
             >
               <div className="flex justify-between">
                 <span>상태</span>
-                <span className={`font-semibold ${cs.lighting.on ? 'text-amber-600' : 'text-gray-400'}`}>
+                <span className={`font-semibold ${cs.lighting.on ? 'text-[color:var(--color-accent-dark)]' : 'text-[color:var(--color-ink-faint)]'}`}>
                   {cs.lighting.on ? 'ON' : 'OFF'}
                 </span>
               </div>
               <div className="flex justify-between mt-1">
                 <span>밝기</span>
-                <span className="font-semibold text-gray-800">{cs.lighting.brightness_pct}%</span>
+                <span className="font-semibold text-[color:var(--color-ink)]">{cs.lighting.brightness_pct}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+              <div className="w-full bg-[color:var(--color-surface-deep)] rounded-full h-1.5 mt-1">
                 <div className="bg-amber-400 h-1.5 rounded-full transition-all" style={{ width: `${cs.lighting.brightness_pct}%` }} />
               </div>
             </ControlCard>
 
             <ControlCard
-              icon={<MdShield className="text-xl text-emerald-500" />}
+              icon={<MdShield className="text-xl text-[color:var(--color-success)]" />}
               title="차광/보온"
             >
               <div className="flex justify-between">
                 <span>차광막</span>
-                <span className="font-semibold text-gray-800">{cs.shading.shade_pct}%</span>
+                <span className="font-semibold text-[color:var(--color-ink)]">{cs.shading.shade_pct}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                <div className="bg-emerald-400 h-1.5 rounded-full transition-all" style={{ width: `${cs.shading.shade_pct}%` }} />
+              <div className="w-full bg-[color:var(--color-surface-deep)] rounded-full h-1.5 mt-1">
+                <div className="bg-[color:var(--color-primary)] h-1.5 rounded-full transition-all" style={{ width: `${cs.shading.shade_pct}%` }} />
               </div>
               <div className="flex justify-between mt-1.5">
                 <span>보온커튼</span>
-                <span className="font-semibold text-gray-800">{cs.shading.insulation_pct}%</span>
+                <span className="font-semibold text-[color:var(--color-ink)]">{cs.shading.insulation_pct}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+              <div className="w-full bg-[color:var(--color-surface-deep)] rounded-full h-1.5 mt-1">
                 <div className="bg-orange-400 h-1.5 rounded-full transition-all" style={{ width: `${cs.shading.insulation_pct}%` }} />
               </div>
             </ControlCard>
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-400">
+          <div className="text-center py-8 text-[color:var(--color-ink-faint)]">
             <MdSmartToy className="text-4xl mx-auto mb-2 opacity-30" />
             <p className="text-sm">AI Agent가 비활성 상태입니다</p>
             <p className="text-xs mt-1">ON 버튼을 눌러 활성화하세요</p>
@@ -391,17 +391,17 @@ export default function AIAgentPanel() {
         <div>
           <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
             <div className="flex items-center gap-2">
-              <MdHistory className="text-gray-400" />
-              <span className="text-sm font-semibold text-gray-700">최근 판단</span>
-              <span className="text-xs text-gray-400">
+              <MdHistory className="text-[color:var(--color-ink-faint)]" />
+              <span className="text-sm font-semibold text-[color:var(--color-ink-soft)]">최근 판단</span>
+              <span className="text-xs text-[color:var(--color-ink-faint)]">
                 (표시 {decisions.length}건)
               </span>
             </div>
             <DateRangeFilter value={decisionRange} onChange={handleRangeChange} />
           </div>
-          <div className="bg-gray-50 rounded-xl p-2 max-h-96 overflow-y-auto">
+          <div className="bg-[color:var(--color-surface)] rounded-xl p-2 max-h-96 overflow-y-auto">
             {decisions.length === 0 ? (
-              <p className="py-6 text-xs text-gray-400 text-center">
+              <p className="py-6 text-xs text-[color:var(--color-ink-faint)] text-center">
                 아직 기록된 판단 내역이 없습니다.
               </p>
             ) : (
@@ -415,7 +415,7 @@ export default function AIAgentPanel() {
                       data-testid="ai-more-btn"
                       onClick={() => fetchMore()}
                       disabled={listLoading || loading}
-                      className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 disabled:text-gray-400"
+                      className="inline-flex items-center gap-1 text-xs text-[color:var(--color-info)] hover:text-[color:var(--color-info)] disabled:text-[color:var(--color-ink-faint)]"
                     >
                       <MdExpandMore className="text-base" />
                       {listLoading ? '불러오는 중…' : '더보기'}
@@ -423,7 +423,7 @@ export default function AIAgentPanel() {
                   </div>
                 )}
                 {!hasMore && decisions.length > 5 && (
-                  <p className="pt-2 pb-1 text-[11px] text-gray-400 text-center">
+                  <p className="pt-2 pb-1 text-[11px] text-[color:var(--color-ink-faint)] text-center">
                     모든 이력을 불러왔습니다
                   </p>
                 )}

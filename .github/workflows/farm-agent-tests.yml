@@ -1,0 +1,73 @@
+# Farm-agent regression suite — pins iter 1–22 of the ralph-agent-upgrade
+# loop (ReasoningBank memory wiring, eval candidate-writer schema, distill
+# parser/emitter, citation guardrail, verdict calibration, fast-path safety
+# BLOCKLIST, eval CLI filters, JSON summary builder, briefing sanitizer,
+# verifier FAIL/UNKNOWN runtime queue, diagnosis analyzer + distillation,
+# and the verifier-prompt PASS/FAIL/UNKNOWN contract).
+#
+# Stdlib `unittest` only — no pytest, no OpenRouter quota, no LangSmith.
+# Live eval is in farm-agent-eval.yml (separate, manual-dispatch only).
+
+name: farm-agent-tests
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'backend/app/services/farm_agent/**'
+      - 'backend/app/api/farm_agent.py'
+      - 'backend/app/core/config.py'
+      - 'backend/scripts/eval_farm_agent.py'
+      - 'backend/scripts/distill_strategies.py'
+      - 'backend/scripts/test_distill_loop.py'
+      - 'backend/memory/**'
+      - 'backend/pyproject.toml'
+      - 'backend/uv.lock'
+      - '.github/workflows/farm-agent-tests.yml'
+  pull_request:
+    paths:
+      - 'backend/app/services/farm_agent/**'
+      - 'backend/app/api/farm_agent.py'
+      - 'backend/app/core/config.py'
+      - 'backend/scripts/eval_farm_agent.py'
+      - 'backend/scripts/distill_strategies.py'
+      - 'backend/scripts/test_distill_loop.py'
+      - 'backend/memory/**'
+      - 'backend/pyproject.toml'
+      - 'backend/uv.lock'
+      - '.github/workflows/farm-agent-tests.yml'
+
+jobs:
+  regression:
+    name: regression suite (stdlib unittest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: pin python version (matches pyproject `requires-python = ">=3.12"`)
+        run: uv python install 3.12
+
+      - name: install backend deps
+        run: uv sync --frozen
+
+      - name: compile-check farm-agent + scripts
+        run: |
+          uv run python -m compileall \
+            app/services/farm_agent \
+            app/api/farm_agent.py \
+            app/core/config.py \
+            scripts/eval_farm_agent.py \
+            scripts/distill_strategies.py \
+            scripts/test_distill_loop.py \
+            -q
+
+      - name: regression tests (53 cases pinning iter 1–27)
+        run: uv run python scripts/test_distill_loop.py

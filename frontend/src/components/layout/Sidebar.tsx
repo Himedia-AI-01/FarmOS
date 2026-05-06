@@ -1,19 +1,55 @@
-﻿import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import {
+  IconCommand,
+  IconSensors,
+  IconDiagnosis,
+  IconJournal,
+  IconWeather,
+  IconMarket,
+  IconSubsidy,
+  IconReviews,
+  IconProfile,
+  IconSignOut,
+} from '@/components/icons/AppIcon';
+import { cn } from '@/lib/cn';
 
-const NAV_ITEMS = [
-  { to: '/', icon: '/images/icons/dashboard.jpg', label: '대시보드' },
-  { to: '/diagnosis', icon: '/images/icons/diagnosis.jpg', label: '해충 진단' },
-  { to: '/iot', icon: '/images/icons/iot-sensors.jpg', label: 'IoT 센서' },
-  { to: '/reviews', icon: '/images/icons/reviews.jpg', label: '리뷰 분석' },
-  { to: '/documents', icon: '/images/icons/documents.jpg', label: '행정 서류' },
-  { to: '/weather', icon: '/images/icons/weather.jpg', label: '기상 스케줄' },
-  { to: '/harvest', icon: '/images/icons/harvest.jpg', label: '수확 예측' },
-  { to: '/journal', icon: '/images/icons/journal.jpg', label: '영농일지' },
-  { to: '/market', icon: '/images/icons/harvest.jpg', label: '시세 정보' },
-  { to: '/subsidy', icon: '/images/icons/documents.jpg', label: '공익직불' },
-  { to: '/scenario', icon: '/images/icons/scenario.jpg', label: '시나리오' },
+type NavItem = { to: string; label: string; icon: React.ElementType };
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: '운영',
+    items: [
+      { to: '/', label: '커맨드', icon: IconCommand },
+      { to: '/iot', label: '시설 제어', icon: IconSensors },
+      { to: '/diagnosis', label: '진단', icon: IconDiagnosis },
+    ],
+  },
+  {
+    label: '데이터',
+    items: [
+      { to: '/journal', label: '영농일지', icon: IconJournal },
+      { to: '/weather', label: '기상', icon: IconWeather },
+      { to: '/market', label: '시세', icon: IconMarket },
+    ],
+  },
+  {
+    label: '비즈니스',
+    items: [
+      { to: '/subsidy', label: '공익직불', icon: IconSubsidy },
+      { to: '/reviews', label: '판매', icon: IconReviews },
+    ],
+  },
 ];
+
+function LeafMark({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" fill="none" className={className} aria-hidden>
+      <path d="M5 27c0-11 7-19 22-22-1 13-7 22-19 22-1 0-3 0-3 0z" fill="currentColor" opacity="0.92" />
+      <path d="M7 25C13 18 19 13 26 9" stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.65" />
+    </svg>
+  );
+}
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
@@ -25,67 +61,105 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-[280px] bg-white border-r border-gray-200 h-screen sticky top-0 flex flex-col overflow-y-auto">
-      {/* User Card + 프로필 버튼 */}
-      <div className="p-5 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-2xl">
-            🧑‍🌾
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-lg text-gray-900">{user?.name}</p>
-            <p className="text-sm text-gray-500">{user?.user_id}</p>
-          </div>
+    <aside className="sticky top-0 flex h-screen w-[260px] flex-col border-r border-[color:var(--color-line)] bg-[color:var(--color-card)]">
+      <div className="px-6 pt-7 pb-5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--color-primary)] text-white shadow-[var(--shadow-xs)]">
+            <LeafMark className="h-5 w-5" />
+          </span>
+          <span className="text-[1.125rem] font-bold tracking-tight text-[color:var(--color-ink)]">
+            FarmOS
+          </span>
         </div>
-        <NavLink
-          to="/profile"
-          className={({ isActive }) =>
-            `mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              isActive
-                ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
-                : 'bg-primary/5 text-primary hover:bg-primary/15'
-            }`
-          }
-        >
-          <span>👤</span>
-          <span>내 프로필</span>
-        </NavLink>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-2">
-        {NAV_ITEMS.map(({ to, icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `flex items-center gap-4 px-5 py-3 min-h-[52px] text-lg transition-colors ${
-                isActive
-                  ? 'bg-primary/10 text-primary font-bold border-l-4 border-primary'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900 border-l-4 border-transparent'
-              }`
-            }
-          >
-            <img src={icon} alt={label} className="w-7 h-7 rounded-md object-cover flex-shrink-0" />
-            <span>{label}</span>
-          </NavLink>
+      <NavLink
+        to="/profile"
+        className={({ isActive }) =>
+          cn(
+            'mx-4 flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors',
+            isActive
+              ? 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]'
+              : 'text-[color:var(--color-ink-soft)] hover:bg-[color:var(--color-surface)]',
+          )
+        }
+        aria-label="농장 프로필"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-surface-deep)] text-[color:var(--color-primary-dark)]">
+          <IconProfile size={20} strokeWidth={1.7} />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-[14.5px] font-bold leading-tight text-[color:var(--color-ink)]">
+            {user?.name ?? '농장 관리자'}
+          </p>
+          <p className="mt-0.5 truncate text-[12.5px] text-[color:var(--color-ink-mute)]">
+            {user?.farmname || user?.main_crop || user?.user_id}
+          </p>
+        </div>
+      </NavLink>
+
+      <nav aria-label="주 메뉴" className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-2">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="mb-6 last:mb-0">
+            <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-ink-faint)]">
+              {group.label}
+            </p>
+            <ul className="space-y-0.5">
+              {group.items.map(({ to, label, icon: Icon }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    end={to === '/'}
+                    className={({ isActive }) =>
+                      cn(
+                        'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors',
+                        isActive
+                          ? 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]'
+                          : 'text-[color:var(--color-ink-soft)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-ink)]',
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {/* Left rail accent — quieter than the dot */}
+                        <span
+                          aria-hidden
+                          className={cn(
+                            'absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[color:var(--color-primary)] transition-opacity',
+                            isActive ? 'opacity-100' : 'opacity-0',
+                          )}
+                        />
+                        <Icon
+                          aria-hidden
+                          size={20}
+                          strokeWidth={isActive ? 1.85 : 1.6}
+                          className={cn(
+                            'shrink-0 transition-colors',
+                            isActive
+                              ? 'text-[color:var(--color-primary)]'
+                              : 'text-[color:var(--color-ink-mute)] group-hover:text-[color:var(--color-primary)]',
+                          )}
+                        />
+                        <span className="text-[14.5px] font-semibold">{label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-gray-100">
-        {user && (
-          <button
-            onClick={handleLogout}
-            className="w-full mb-2 px-4 py-2.5 text-base text-gray-600 hover:text-danger hover:bg-danger/5 rounded-xl transition flex items-center justify-center gap-2"
-          >
-            <span>🚪</span>
-            <span>로그아웃</span>
-          </button>
-        )}
-        <p className="text-xs text-gray-400 text-center">FarmOS 2.0 POC</p>
-        <p className="text-xs text-gray-300 text-center">Harness Engineering</p>
+      <div className="border-t border-[color:var(--color-line-soft)] px-4 py-3">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-[14px] font-semibold text-[color:var(--color-ink-mute)] transition hover:bg-[color:var(--color-danger-light)] hover:text-[color:var(--color-danger)]"
+        >
+          <IconSignOut aria-hidden size={17} />
+          로그아웃
+        </button>
       </div>
     </aside>
   );

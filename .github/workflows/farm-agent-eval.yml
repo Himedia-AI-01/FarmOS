@@ -1,0 +1,89 @@
+# Live agent eval — runs the 6-example farm-agent regression set against the
+# real Deep Agent stack (Grok 4.1 Fast via OpenRouter) and gates on
+# `pass_ratio == 1.0` via `jq -e .all_passed`.
+#
+# **Manually triggered only** (`workflow_dispatch`). Auto-triggering on every
+# push would burn OpenRouter quota and is unnecessary while iter-15's stdlib
+# regression suite catches structural breakage. Run this when an operator
+# wants a behavioural check before merging a prompt or routing change.
+#
+# Setup:
+#   1. Add a repo secret `OPENROUTER_API_KEY` (required).
+#   2. Optional secrets: `LANGCHAIN_API_KEY` (LangSmith tracing of each run).
+#   3. Trigger from the Actions tab → "farm-agent-eval" → Run workflow.
+#
+# The job is non-blocking on PRs by default (no `pull_request` trigger). To
+# require a green eval before merge, add a branch-protection rule that
+# requires this workflow's status check.
+
+name: farm-agent-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      example:
+        description: "Optional: index or tag to run only one example (e.g. '0' or 'subsidy')"
+        required: false
+        default: ""
+      concurrency:
+        description: "Parallel agent invocations (keep low to avoid rate limits)"
+        required: false
+        default: "2"
+
+jobs:
+  eval:
+    name: live eval (gated on OPENROUTER_API_KEY)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      LANGCHAIN_API_KEY: ${{ secrets.LANGCHAIN_API_KEY }}
+      LANGCHAIN_TRACING_V2: ${{ secrets.LANGCHAIN_API_KEY && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: guard — secret must be set
+        run: |
+          if [ -z "${OPENROUTER_API_KEY}" ]; then
+            echo "::error::OPENROUTER_API_KEY repo secret is missing." \
+                 "Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: pin python 3.12
+        run: uv python install 3.12
+
+      - name: install backend deps
+        run: uv sync --frozen
+
+      - name: run live eval (writes results.json)
+        run: |
+          uv run python scripts/eval_farm_agent.py \
+            --summary-json results.json \
+            --no-candidates \
+            ${{ inputs.example && format('--example {0}', inputs.example) || '' }} \
+            --concurrency ${{ inputs.concurrency || '2' }}
+
+      - name: gate — fail if any check regressed
+        run: |
+          # `jq -e` exits non-zero when the filter outputs false/null, which
+          # surfaces as a workflow failure with a clear log line.
+          jq -e '.all_passed' results.json
+          echo "pass_ratio=$(jq -r '.pass_ratio' results.json)"
+          jq '.examples[] | {tags, all_passed, scores}' results.json
+
+      - name: upload results.json as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-agent-eval-${{ github.run_id }}
+          path: backend/results.json
+          retention-days: 30

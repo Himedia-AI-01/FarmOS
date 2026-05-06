@@ -79,14 +79,13 @@ test('U4: clicking decision row opens detail modal', async ({ page }: { page: Pa
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('aria-modal', 'true');
-  await expect(dialog.getByText('판단 사유', { exact: false })).toBeVisible();
-  await expect(dialog.getByText('Action (제어 변경)', { exact: false })).toBeVisible();
-  await expect(dialog.getByText(/도구 호출/)).toBeVisible();
+  await expect(dialog.getByText(/AI 판단 결과|판단 근거|규칙 기반 판단/)).toBeVisible();
+  await expect(dialog.getByText('적용된 제어', { exact: false })).toBeVisible();
 });
 
 // ── U5: Copy 버튼 → clipboard 에 action JSON ──────────────────────────────
 
-test('U5: copy button writes action json to clipboard', async ({
+test('U5: copy button writes decision id to clipboard', async ({
   page,
   context,
 }: {
@@ -98,10 +97,9 @@ test('U5: copy button writes action json to clipboard', async ({
   await page.getByTestId('ai-decision-row').first().click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: /Copy action JSON/ }).click();
+  await dialog.getByRole('button', { name: /Copy decision id/ }).click();
   const clipText = await page.evaluate(() => navigator.clipboard.readText());
   expect(clipText.length).toBeGreaterThan(0);
-  expect(() => JSON.parse(clipText)).not.toThrow();
 });
 
 // ── U6: Esc → Modal close + focus 원복 ────────────────────────────────────
@@ -150,7 +148,7 @@ test('E1: full flow — load → summary → list → more → detail → copy �
   await rows.first().click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: /Copy action JSON/ }).click();
+  await dialog.getByRole('button', { name: /Copy decision id/ }).click();
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
 });

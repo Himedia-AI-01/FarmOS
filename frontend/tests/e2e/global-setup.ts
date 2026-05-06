@@ -25,6 +25,5 @@ export default async function globalSetup(): Promise<void> {
   await ctx.storageState({ path: STATE_PATH });
   await ctx.dispose();
 
-  // eslint-disable-next-line no-console
   console.log(`[globalSetup] Login OK — session saved to ${STATE_PATH}`);
 }

@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "verifier-agent": "./app/services/farm_agent/verifier_graph.py:graph"
+  },
+  "env": ".env",
+  "python_version": "3.12"
+}

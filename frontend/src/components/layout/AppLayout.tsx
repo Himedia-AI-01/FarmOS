@@ -1,53 +1,131 @@
-﻿import { Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileNav from './MobileNav';
+import FarmAgentConsole from '@/components/agent/FarmAgentConsole';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useScrollLock } from '@/hooks/useScrollLock';
 
 const PAGE_TITLES: Record<string, string> = {
-  '/': '대시보드',
-  '/diagnosis': '해충 AI 진단',
-  '/iot': 'IoT 센서 대시보드',
-  '/reviews': '리뷰 분석 리포트',
-  '/documents': '행정 서류 자동 생성',
-  '/weather': '기상 연동 스케줄링',
-  '/harvest': '수확량 예측',
+  '/': '커맨드',
+  '/diagnosis': '진단 워크벤치',
+  '/diagnosis/chat': '진단 상담',
+  '/iot': '시설 제어',
+  '/reviews': '판매 인사이트',
+  '/weather': '기상',
   '/journal': '영농일지',
-  '/market': '농산물 시세 정보',
-  '/subsidy': '공익직불사업 매칭',
-  '/scenario': '사과 농장 한 달 시나리오',
-  '/profile': '내 프로필',
+  '/market': '시세 정보',
+  '/subsidy': '공익직불',
+  '/profile': '농장 프로필',
 };
 
 export default function AppLayout() {
   const { pathname } = useLocation();
-  const title = PAGE_TITLES[pathname] || 'FarmOS 2.0';
+  const { agentOpen, openAgent, closeAgent } = useFarmAgentContext();
+  const title = PAGE_TITLES[pathname] || 'FarmOS';
+
+  const drawerRef = useFocusTrap<HTMLDivElement>(agentOpen);
+  useScrollLock(agentOpen);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Reset main scroll on route change (browser default doesn't help for our
+  // overflow-y-auto main; sub-pages otherwise inherit prior scroll position).
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [pathname]);
+
+  // ESC closes the agent drawer
+  useEffect(() => {
+    if (!agentOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeAgent();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [agentOpen, closeAgent]);
 
   return (
-    <div className="flex min-h-screen">
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
-        <Sidebar />
+    <div className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-ink)]">
+      <a href="#main-content" className="skip-link">
+        본문 바로가기
+      </a>
+      <div className="grid min-h-screen lg:grid-cols-[260px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)_420px]">
+        <div className="hidden lg:block">
+          <Sidebar />
+        </div>
+
+        <div className="flex min-w-0 flex-col">
+          <TopBar title={title} onOpenAgent={openAgent} />
+          <main
+            ref={mainRef}
+            id="main-content"
+            tabIndex={-1}
+            aria-label="본문"
+            className="min-h-0 flex-1 overflow-y-auto px-4 pb-[100px] pt-5 sm:px-6 sm:pt-6 lg:px-10 lg:pb-10 lg:pt-8"
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={pathname}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -3 }}
+                transition={{ duration: 0.2, ease: [0.2, 0.7, 0.2, 1] }}
+                className="mx-auto w-full max-w-[1240px]"
+              >
+                <Outlet />
+              </motion.div>
+            </AnimatePresence>
+          </main>
+          <MobileNav onOpenAgent={openAgent} />
+        </div>
+
+        <aside
+          aria-label="Farm Agent"
+          className="hidden min-h-screen border-l border-[color:var(--color-line)] bg-[color:var(--color-card)] 2xl:block"
+        >
+          <div className="sticky top-0 h-screen">
+            <FarmAgentConsole />
+          </div>
+        </aside>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar title={title} />
-        <main className="flex-1 overflow-y-auto bg-surface p-3 sm:p-4 lg:p-8 pb-[80px] lg:pb-8">
-          <AnimatePresence mode="wait">
+      <AnimatePresence>
+        {agentOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[70] flex justify-end bg-[color:var(--color-ink)]/45 backdrop-blur-sm 2xl:hidden"
+            role="presentation"
+          >
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              className="absolute inset-0 cursor-default"
+              onClick={closeAgent}
+            />
             <motion.div
-              key={pathname}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
+              ref={drawerRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Farm Agent"
+              tabIndex={-1}
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 320, damping: 34 }}
+              className="relative h-full w-full max-w-[460px] bg-[color:var(--color-card)] shadow-[var(--shadow-lg)]"
             >
-              <Outlet />
+              <FarmAgentConsole surface="drawer" onClose={closeAgent} />
             </motion.div>
-          </AnimatePresence>
-        </main>
-        <MobileNav />
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

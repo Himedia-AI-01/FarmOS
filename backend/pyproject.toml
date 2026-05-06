@@ -8,14 +8,24 @@ dependencies = [
     "asyncpg>=0.31.0",
     "chromadb>=1.5.5",
     "defusedxml>=0.7.1",
+    "deepagents>=0.5.3",
     "fastapi>=0.135.2",
+    "fastapi-mcp>=0.4.0",
     "fastmcp>=3.2.0",
     "fpdf2>=2.8.0",
     "httpx>=0.28.0",
+    "kiwipiepy>=0.18.0",
+    "langchain>=1.0.0",
     "langchain-core>=1.2.27",
+    "langchain-mcp-adapters>=0.2.2",
     "langchain-openai>=1.1.12",
     "langchain-upstage>=0.7.0",
     "langgraph>=1.1.6",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "langsmith>=0.4.0",
+    "langcache>=0.5.0",
+    "psycopg[binary,pool]>=3.2",
+    "rank-bm25>=0.2.2",
     "passlib[bcrypt]>=1.7.4",
     "Pillow>=12.2.0",
     "psycopg2-binary>=2.9.11",
@@ -24,6 +34,7 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "python-multipart>=0.0.22",
     "rapidfuzz>=3.10.0",
+    "redis[hiredis]>=5.2.0",
     "ruff>=0.6.0",
     "sentence-transformers>=3.3.0",
     "sqlalchemy[asyncio]>=2.0.48",
@@ -32,12 +43,34 @@ dependencies = [
     "uvicorn[standard]>=0.42.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-xdist>=3.6.0",
+    "deepeval>=2.0.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "eval: tier-2 evaluation tests — slower, may call LLMs (run with -m eval)",
+    "integration: tests that hit DB or external services",
+]
+
 [project.scripts]
 # 공익직불 시행지침 PDF 인덱싱 CLI (팀원 신규 셋업 시 자동 실행되지만, 수동 재인덱싱용 편의 명령)
 # 사용: cd backend && uv run subsidy-ingest
 subsidy-ingest = "app.services.subsidy.gov_rag:run_ingest_pipeline"
 # PDF → Markdown 변환만 (Upstage Parse 호출, 최초 1회 또는 PDF 교체 시)
 subsidy-parse-pdf = "app.services.subsidy.pdf_ingest:_cli_main"
+# Farm Agent eval harness — 사용: cd backend && uv run farm-agent-eval
+# LangSmith 트레이싱이 활성화돼 있으면 결과가 자동 업로드됨.
+farm-agent-eval = "scripts.eval_farm_agent:main"
+# 통합 평가 (라우팅 + 도구 + 진단 + farm-data + 브리핑 + 트라젝토리 리플레이)
+# 사용: cd backend && uv run farm-agent-eval-all
+farm-agent-eval-all = "scripts.eval_all:main"
 
 [tool.uv]
 exclude-newer = "7 days"
@@ -45,6 +78,7 @@ exclude-newer = "7 days"
 package = true
 
 [tool.setuptools.packages.find]
-# data/, chroma_data/, logs/ 같은 런타임 산출물 디렉터리를 패키지 탐색에서 배제
-include = ["app*"]
+# data/, chroma_data/, logs/ 같은 런타임 산출물 디렉터리를 패키지 탐색에서 배제.
+# scripts* 는 [project.scripts] 콘솔 엔트리포인트가 의존하므로 포함.
+include = ["app*", "scripts*"]
 exclude = ["data*", "chroma_data*", "logs*", ".ruff_cache*"]

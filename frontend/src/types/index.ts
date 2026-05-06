@@ -231,35 +231,6 @@ export interface FarmTask {
   blockReason?: string;
 }
 
-// Harvest
-export interface GrowthData {
-  date: string;
-  fruitSize: number;
-  colorIndex: number;
-  sugarContent: number;
-}
-
-export interface YieldPrediction {
-  predictedYield: number;
-  unit: string;
-  confidence: number;
-  comparisonText: string;
-  factors: string[];
-}
-
-export interface MarketPrice {
-  date: string;
-  price: number;
-  volume: number;
-}
-
-export interface ShipTiming {
-  optimalDate: string;
-  expectedPrice: number;
-  reasoning: string;
-  alternativeDates: { date: string; price: number }[];
-}
-
 // Journal
 export interface JournalEntry {
   id: string;
@@ -278,25 +249,8 @@ export interface MonthlySummary {
   totalIrrigations: number;
   totalDiagnoses: number;
   weatherAlertsHandled: number;
-  documentsGenerated: number;
   journalEntries: number;
   highlights: string[];
-}
-
-// Scenario
-export interface ScenarioEvent {
-  day: number;
-  module:
-    | "iot"
-    | "diagnosis"
-    | "weather"
-    | "reviews"
-    | "documents"
-    | "harvest"
-    | "journal";
-  title: string;
-  description: string;
-  route: string;
 }
 
 // Notification

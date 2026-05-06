@@ -1,7 +1,7 @@
 // Design Ref §5.3 — 오늘/7일/30일 집계 카드.
 // Plan SC-2 커버: 제어 타입/소스/우선순위 분포와 평균 duration.
 
-import { MdBarChart, MdCategory, MdBolt } from 'react-icons/md';
+import { MdBarChart, MdCategory, MdBolt, MdSpeed } from 'react-icons/md';
 import type { ActivitySummary } from '@/types';
 
 interface Props {
@@ -52,12 +52,12 @@ function Card({
 }) {
   return (
     <div className="bg-white rounded-xl border p-3 flex flex-col gap-0.5">
-      <div className="flex items-center gap-1.5 text-xs text-gray-500">
+      <div className="flex items-center gap-1.5 text-xs text-[color:var(--color-ink-mute)]">
         {icon}
         <span>{label}</span>
       </div>
-      <div className="text-lg font-bold text-gray-800 mt-0.5 leading-tight">{value}</div>
-      {sub && <div className="text-[11px] text-gray-400 truncate">{sub}</div>}
+      <div className="text-lg font-bold text-[color:var(--color-ink)] mt-0.5 leading-tight">{value}</div>
+      {sub && <div className="text-[11px] text-[color:var(--color-ink-faint)] truncate">{sub}</div>}
     </div>
   );
 }
@@ -75,7 +75,7 @@ export default function AIActivitySummaryCards({
     <div className="space-y-2">
       {/* 탭 */}
       <div
-        className="inline-flex rounded-lg bg-gray-100 p-0.5"
+        className="inline-flex rounded-lg bg-[color:var(--color-surface-deep)] p-0.5"
         role="tablist"
         aria-label="집계 기간 선택"
       >
@@ -88,7 +88,7 @@ export default function AIActivitySummaryCards({
               aria-selected={active}
               onClick={() => onRangeChange(r)}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                active ? 'bg-white text-[color:var(--color-ink)] shadow-sm' : 'text-[color:var(--color-ink-mute)] hover:text-[color:var(--color-ink-soft)]'
               }`}
             >
               {RANGE_LABELS[r]}
@@ -97,10 +97,10 @@ export default function AIActivitySummaryCards({
         })}
       </div>
 
-      {/* 카드 3개 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {/* 카드 4개 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Card
-          icon={<MdBarChart className="text-indigo-500" />}
+          icon={<MdBarChart className="text-[color:var(--color-info)]" />}
           label="총 판단"
           value={
             loading && !summary
@@ -123,10 +123,19 @@ export default function AIActivitySummaryCards({
           sub={topCt ? `${topCt[1]}건` : undefined}
         />
         <Card
-          icon={<MdBolt className="text-amber-500" />}
+          icon={<MdBolt className="text-[color:var(--color-accent)]" />}
           label="최다 소스"
           value={topSrc ? `${SRC_LABELS[topSrc[0]] ?? topSrc[0]}` : '-'}
           sub={topSrc ? `${topSrc[1]}건` : undefined}
+        />
+        <Card
+          icon={<MdSpeed className="text-[color:var(--color-success)]" />}
+          label="평균 판단시간"
+          value={
+            summary?.avg_duration_ms != null
+              ? `${Math.round(summary.avg_duration_ms)}ms`
+              : '-'
+          }
         />
       </div>
     </div>

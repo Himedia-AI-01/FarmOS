@@ -3,6 +3,7 @@ import { MdWaterDrop, MdThermostat, MdOpacity, MdWbSunny, MdWarning, MdWifiOff, 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from 'recharts';
 import { useSensorData } from '@/hooks/useSensorData';
 import AIAgentPanel from './AIAgentPanel';
+import IoTSkeleton from './IoTSkeleton';
 import ManualControlPanel from './ManualControlPanel';
 import DateRangeFilter, {
   type DateRangeValue,
@@ -24,50 +25,63 @@ function filterByDateRange<T>(
   });
 }
 
-function SensorCard({ icon: Icon, label, value, unit, color, threshold, warning, disabled }: {
+function SensorCard({ icon: Icon, label, value, unit, tintClass, iconClass, threshold, warning, disabled }: {
   icon: React.ElementType; label: string; value: number | null; unit: string;
-  color: string; threshold?: number; warning?: boolean; disabled?: boolean;
+  tintClass: string; iconClass: string;
+  threshold?: number; warning?: boolean; disabled?: boolean;
 }) {
   return (
-    <div className={`card !p-4 sm:!p-6 ${
-      disabled ? 'opacity-50 grayscale' :
-      warning ? 'ring-2 ring-warning/60 bg-yellow-50/30' : ''
-    }`}>
+    <div
+      className={`rounded-2xl border bg-[color:var(--color-card)] p-5 transition sm:p-6 ${
+        disabled
+          ? 'border-[color:var(--color-line-soft)] opacity-60'
+          : warning
+            ? 'border-[color:var(--color-accent)]/45 bg-[#FBF5E5]'
+            : 'border-[color:var(--color-line)]'
+      }`}
+    >
       <div className="flex items-center justify-between">
-        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center ${disabled ? 'bg-gray-300' : color}`}>
-          <Icon className="text-xl sm:text-2xl text-white" />
-        </div>
+        <span
+          aria-hidden
+          className={`flex h-11 w-11 items-center justify-center rounded-xl sm:h-12 sm:w-12 ${
+            disabled ? 'tint-neutral text-[color:var(--color-ink-faint)]' : `${tintClass} ${iconClass}`
+          }`}
+        >
+          <Icon className="text-[22px] sm:text-[24px]" />
+        </span>
         {!disabled && warning && (
-          <span className="flex items-center gap-1 text-warning text-xs sm:text-sm font-semibold">
-            <MdWarning className="text-base sm:text-lg" /> 주의
+          <span className="inline-flex items-center gap-1 text-[12.5px] font-bold text-[color:var(--color-accent-dark)]">
+            <MdWarning aria-hidden className="text-base" /> 주의
           </span>
         )}
         {disabled && (
-          <span className="flex items-center gap-1 text-gray-400 text-xs font-semibold">
-            <MdWifiOff className="text-base" /> 비활성
+          <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[color:var(--color-ink-faint)]">
+            <MdWifiOff aria-hidden className="text-base" /> 비활성
           </span>
         )}
       </div>
-      <p className={`text-sm sm:text-base mt-2 sm:mt-3 font-medium ${disabled ? 'text-gray-400' : 'text-gray-600'}`}>{label}</p>
-      <p className={`text-2xl sm:text-4xl font-bold mt-1 tracking-tight ${disabled ? 'text-gray-300' : 'text-gray-900'}`}>
+      <p className={`mt-4 text-[14px] font-semibold ${disabled ? 'text-[color:var(--color-ink-faint)]' : 'text-[color:var(--color-ink-mute)]'}`}>
+        {label}
+      </p>
+      <p className={`mt-1 num text-[1.875rem] font-bold leading-[1.05] tracking-[-0.025em] sm:text-[2.25rem] ${disabled ? 'text-[color:var(--color-ink-faint)]' : 'text-[color:var(--color-ink)]'}`}>
         {value !== null ? value.toFixed(1) : '--.-'}
-        <span className="text-base sm:text-xl text-gray-400 ml-0.5">{unit}</span>
+        <span className="ml-1 text-[15px] font-semibold text-[color:var(--color-ink-mute)] sm:text-[17px]">{unit}</span>
       </p>
       {threshold && !disabled && value !== null && (
-        <div className="mt-2 flex items-center gap-2">
-          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="mt-3 flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]">
             <div
-              className={`h-full rounded-full transition-all ${value < threshold ? 'bg-warning' : 'bg-success'}`}
+              className={`h-full rounded-full transition-all ${value < threshold ? 'bg-[color:var(--color-warning)]' : 'bg-[color:var(--color-success)]'}`}
               style={{ width: `${Math.min(100, (value / 100) * 100)}%` }}
             />
           </div>
-          <span className="text-xs text-gray-400 whitespace-nowrap">기준 {threshold}{unit}</span>
+          <span className="num whitespace-nowrap text-[11.5px] font-semibold text-[color:var(--color-ink-mute)]">기준 {threshold}{unit}</span>
         </div>
       )}
       {threshold && disabled && (
-        <div className="mt-2 flex items-center gap-2">
-          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden" />
-          <span className="text-xs text-gray-300 whitespace-nowrap">기준 {threshold}{unit}</span>
+        <div className="mt-3 flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]" />
+          <span className="num whitespace-nowrap text-[11.5px] font-semibold text-[color:var(--color-ink-faint)]">기준 {threshold}{unit}</span>
         </div>
       )}
     </div>
@@ -81,7 +95,7 @@ const IoTCharts = memo(function IoTCharts({ chartData }: { chartData: ChartData 
 
   if (chartData.length === 0) {
     return (
-      <div className="card !p-8 text-center text-gray-400">
+      <div className="card !p-8 text-center text-[color:var(--color-ink-faint)]">
         <p className="text-lg">센서 데이터가 아직 없습니다</p>
         <p className="text-sm mt-1">ESP8266에서 데이터를 전송하면 차트가 표시됩니다</p>
       </div>
@@ -185,11 +199,11 @@ function IrrigationModal({ irrigations, onClose }: IrrigationModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">관수 이력 상세</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[color:var(--color-line-soft)]">
+          <h2 className="text-lg font-bold text-[color:var(--color-ink)]">관수 이력 상세</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-soft)] hover:bg-[color:var(--color-surface-deep)] transition-colors"
             aria-label="닫기"
           >
             <MdClose className="text-xl" />
@@ -198,7 +212,7 @@ function IrrigationModal({ irrigations, onClose }: IrrigationModalProps) {
 
         {/* 그래프 영역 */}
         <div className="px-6 pt-5 pb-2">
-          <p className="text-sm font-medium text-gray-600 mb-3">관수 지속 시간 (분)</p>
+          <p className="text-sm font-medium text-[color:var(--color-ink-mute)] mb-3">관수 지속 시간 (분)</p>
           {mounted && chartData.length > 0 ? (
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -234,11 +248,11 @@ function IrrigationModal({ irrigations, onClose }: IrrigationModalProps) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-[200px] flex items-center justify-center text-gray-300 text-sm">
+            <div className="h-[200px] flex items-center justify-center text-[color:var(--color-ink-disabled)] text-sm">
               데이터 없음
             </div>
           )}
-          <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
+          <div className="flex items-center gap-4 mt-1 text-xs text-[color:var(--color-ink-mute)]">
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" />
               밸브 열림
@@ -252,14 +266,14 @@ function IrrigationModal({ irrigations, onClose }: IrrigationModalProps) {
 
         {/* 리스트 영역 (스크롤) */}
         <div className="px-6 pb-6 overflow-y-auto flex-1 mt-2">
-          <p className="text-sm font-medium text-gray-600 mb-2">전체 이력 ({irrigations.length}건)</p>
+          <p className="text-sm font-medium text-[color:var(--color-ink-mute)] mb-2">전체 이력 ({irrigations.length}건)</p>
           <div className="space-y-2">
             {irrigations.map((e) => (
-              <div key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
+              <div key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--color-surface)]">
                 <span className={`w-3 h-3 rounded-full flex-shrink-0 ${e.valveAction === '열림' ? 'bg-blue-500' : 'bg-gray-400'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{e.reason}</p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-sm font-medium text-[color:var(--color-ink)] truncate">{e.reason}</p>
+                  <p className="text-xs text-[color:var(--color-ink-faint)]">
                     {new Date(e.triggeredAt).toLocaleString('ko-KR', {
                       month: 'short',
                       day: 'numeric',
@@ -324,22 +338,22 @@ function AlertsModal({
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">센서 알림 상세</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[color:var(--color-line-soft)]">
+          <h2 className="text-lg font-bold text-[color:var(--color-ink)]">센서 알림 상세</h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-soft)] hover:bg-[color:var(--color-surface-deep)] transition-colors"
             aria-label="닫기"
           >
             <MdClose className="text-xl" />
           </button>
         </div>
         <div className="px-6 py-4 overflow-y-auto flex-1">
-          <p className="text-sm font-medium text-gray-600 mb-2">
+          <p className="text-sm font-medium text-[color:var(--color-ink-mute)] mb-2">
             전체 알림 ({alerts.length}건)
           </p>
           {alerts.length === 0 ? (
-            <p className="text-center text-gray-400 text-sm py-8">
+            <p className="text-center text-[color:var(--color-ink-faint)] text-sm py-8">
               해당 기간에 알림이 없습니다
             </p>
           ) : (
@@ -349,10 +363,10 @@ function AlertsModal({
                   key={a.id}
                   className={`flex items-center gap-3 p-3 rounded-xl ${
                     a.severity === '위험' || a.severity === '경고'
-                      ? 'bg-red-50'
+                      ? 'bg-[color:var(--color-danger-light)]'
                       : a.severity === '주의'
-                      ? 'bg-yellow-50'
-                      : 'bg-blue-50'
+                      ? 'bg-[color:var(--tint-warning)]'
+                      : 'bg-[color:var(--tint-info)]'
                   }`}
                 >
                   <span
@@ -367,8 +381,8 @@ function AlertsModal({
                     {a.severity}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800">{a.message}</p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-sm text-[color:var(--color-ink)]">{a.message}</p>
+                    <p className="text-xs text-[color:var(--color-ink-faint)]">
                       {new Date(a.timestamp).toLocaleString('ko-KR', {
                         month: 'short',
                         day: 'numeric',
@@ -378,7 +392,7 @@ function AlertsModal({
                     </p>
                   </div>
                   {a.resolved && (
-                    <span className="text-xs text-green-600 flex-shrink-0">해결됨</span>
+                    <span className="text-xs text-[color:var(--color-primary)] flex-shrink-0">해결됨</span>
                   )}
                 </div>
               ))}
@@ -391,7 +405,7 @@ function AlertsModal({
 }
 
 export default function IoTDashboardPage() {
-  const { latest, history, alerts, irrigations, connected } = useSensorData();
+  const { latest, history, alerts, irrigations, connected, loading } = useSensorData();
   const hasData = !!latest;
   const inactive = !connected || !hasData;
 
@@ -446,34 +460,38 @@ export default function IoTDashboardPage() {
     })),
   [history]);
 
+  // iter-22 — 첫 fetchAll 응답 전엔 shape skeleton 으로 "연결 시도 중" 을 명시적으로
+  // 표시. 응답 후엔 (성공이든 실패든) 기존 분기(연결됨/대기/끊김)가 의미 있는 상태를
+  // 보여준다. iter-15/17/19/20/21 과 동일한 패턴.
+  if (loading && !latest && !connected) {
+    return <IoTSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Connection status */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px]">
         {connected && hasData ? (
           <>
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-success"></span>
-            </span>
-            <span className="font-medium text-success">연결됨</span>
-            <span>
-              마지막 수신: {new Date(latest!.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            <span className="live-dot" />
+            <span className="font-bold text-[color:var(--color-success)]">연결됨</span>
+            <span className="text-[color:var(--color-ink-mute)]">
+              마지막 수신 · {new Date(latest!.timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           </>
         ) : connected && !hasData ? (
           <>
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-400"></span>
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[color:var(--color-accent)] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[color:var(--color-accent)]" />
             </span>
-            <span className="font-medium text-yellow-600">서버 연결됨 · 센서 데이터 대기 중</span>
+            <span className="font-bold text-[color:var(--color-accent-dark)]">서버 연결됨 · 센서 데이터 대기 중</span>
           </>
         ) : (
           <>
-            <MdWifiOff className="text-lg text-gray-400" />
-            <span className="font-medium text-gray-400">백엔드 연결 안 됨</span>
-            <span className="text-xs text-gray-300">http://localhost:8000</span>
+            <MdWifiOff className="text-[18px] text-[color:var(--color-ink-mute)]" />
+            <span className="font-bold text-[color:var(--color-ink-mute)]">백엔드 연결 안 됨</span>
+            <span className="text-[12px] text-[color:var(--color-ink-faint)]">http://localhost:8000</span>
           </>
         )}
       </div>
@@ -483,27 +501,28 @@ export default function IoTDashboardPage() {
         <SensorCard
           icon={MdWaterDrop} label="토양 습도"
           value={hasData ? latest!.soilMoisture : null} unit="%"
-          color="bg-blue-500" threshold={55}
+          tintClass="tint-info" iconClass="text-[color:var(--color-info)]"
+          threshold={55}
           warning={hasData && latest!.soilMoisture < 55}
           disabled={inactive}
         />
         <SensorCard
           icon={MdThermostat} label="온도"
           value={hasData ? latest!.temperature : null} unit="°C"
-          color="bg-red-400"
+          tintClass="tint-danger" iconClass="text-[color:var(--color-danger)]"
           disabled={inactive}
         />
         <SensorCard
           icon={MdOpacity} label="대기 습도"
           value={hasData ? latest!.humidity : null} unit="%"
-          color="bg-teal-500"
+          tintClass="tint-success" iconClass="text-[color:var(--color-primary)]"
           warning={hasData && latest!.humidity > 90}
           disabled={inactive}
         />
         <SensorCard
           icon={MdWbSunny} label="조도"
           value={hasData ? latest!.lightIntensity : null} unit=" lux"
-          color="bg-amber-500"
+          tintClass="tint-warning" iconClass="text-[color:var(--color-accent-dark)]"
           disabled={inactive}
         />
       </div>
@@ -521,7 +540,7 @@ export default function IoTDashboardPage() {
             />
           </div>
           {filteredIrrigations.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">
+            <p className="text-[color:var(--color-ink-faint)] text-sm text-center py-4">
               {irrigations.length === 0
                 ? '관수 이력이 없습니다'
                 : '해당 기간에 관수 이력이 없습니다'}
@@ -529,12 +548,12 @@ export default function IoTDashboardPage() {
           ) : (
             <>
               <div className="space-y-2">
-                {filteredIrrigations.slice(0, INITIAL_COUNT).map((e: any) => (
-                  <div key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
+                {filteredIrrigations.slice(0, INITIAL_COUNT).map((e) => (
+                  <div key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--color-surface)]">
                     <span className={`w-3 h-3 rounded-full ${e.valveAction === '열림' ? 'bg-blue-500' : 'bg-gray-400'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{e.reason}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm font-medium text-[color:var(--color-ink)] truncate">{e.reason}</p>
+                      <p className="text-xs text-[color:var(--color-ink-faint)]">
                         {new Date(e.triggeredAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         {e.duration > 0 && ` · ${e.duration}분`}
                       </p>
@@ -549,7 +568,7 @@ export default function IoTDashboardPage() {
                 <div className="flex gap-2 mt-3">
                   <button
                     onClick={handleOpenIrrigationModal}
-                    className="text-xs font-medium px-3 py-1.5 rounded-lg border border-[#2D5F2D] text-[#2D5F2D] hover:bg-[#2D5F2D] hover:text-white transition-colors"
+                    className="text-[12.5px] font-semibold px-3.5 py-2 rounded-full border border-[color:var(--color-line)] text-[color:var(--color-primary-dark)] hover:bg-[color:var(--color-primary-soft)] hover:border-[color:var(--color-primary)] transition-colors"
                   >
                     더보기 ({filteredIrrigations.length - INITIAL_COUNT}건 더)
                   </button>
@@ -566,7 +585,7 @@ export default function IoTDashboardPage() {
             <DateRangeFilter value={alertsRange} onChange={setAlertsRange} />
           </div>
           {filteredAlerts.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">
+            <p className="text-[color:var(--color-ink-faint)] text-sm text-center py-4">
               {alerts.length === 0
                 ? '알림이 없습니다'
                 : '해당 기간에 알림이 없습니다'}
@@ -574,10 +593,10 @@ export default function IoTDashboardPage() {
           ) : (
             <>
               <div className="space-y-2">
-                {filteredAlerts.slice(0, INITIAL_COUNT).map((a: any) => (
+                {filteredAlerts.slice(0, INITIAL_COUNT).map((a) => (
                   <div key={a.id} className={`flex items-center gap-3 p-3 rounded-xl ${
-                    a.severity === '위험' || a.severity === '경고' ? 'bg-red-50' :
-                    a.severity === '주의' ? 'bg-yellow-50' : 'bg-blue-50'
+                    a.severity === '위험' || a.severity === '경고' ? 'bg-[color:var(--color-danger-light)]' :
+                    a.severity === '주의' ? 'bg-[color:var(--tint-warning)]' : 'bg-[color:var(--tint-info)]'
                   }`}>
                     <span className={`badge text-xs ${
                       a.severity === '위험' || a.severity === '경고' ? 'badge-danger' :
@@ -586,12 +605,12 @@ export default function IoTDashboardPage() {
                       {a.severity}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800">{a.message}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm text-[color:var(--color-ink)]">{a.message}</p>
+                      <p className="text-xs text-[color:var(--color-ink-faint)]">
                         {new Date(a.timestamp).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
-                    {a.resolved && <span className="text-xs text-green-600">해결됨</span>}
+                    {a.resolved && <span className="text-xs text-[color:var(--color-primary)]">해결됨</span>}
                   </div>
                 ))}
               </div>
@@ -599,7 +618,7 @@ export default function IoTDashboardPage() {
                 <div className="flex gap-2 mt-3">
                   <button
                     onClick={handleOpenAlertsModal}
-                    className="text-xs font-medium px-3 py-1.5 rounded-lg border border-[#2D5F2D] text-[#2D5F2D] hover:bg-[#2D5F2D] hover:text-white transition-colors"
+                    className="text-[12.5px] font-semibold px-3.5 py-2 rounded-full border border-[color:var(--color-line)] text-[color:var(--color-primary-dark)] hover:bg-[color:var(--color-primary-soft)] hover:border-[color:var(--color-primary)] transition-colors"
                   >
                     더보기 ({filteredAlerts.length - INITIAL_COUNT}건 더)
                   </button>

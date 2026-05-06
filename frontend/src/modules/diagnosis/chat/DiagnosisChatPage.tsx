@@ -10,11 +10,11 @@ interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string;
   type?: 'loading' | 'text' | 'solution';
-  data?: any;
+  data?: unknown;
 }
 
 // 마크다운 렌더러 컴포넌트 (개선된 파서)
-function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
+function MarkdownRenderer({ content }: { content: string }) {
   const parseMarkdown = (text: string): string => {
     // DOMPurify가 소독을 담당하므로 수동 이스케이프를 제거하여 백엔드 HTML 태그 보존
     const formatInline = (value: string): string =>
@@ -23,8 +23,8 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
     const normalizeLegacyPlaceholders = (value: string): string =>
       value
         .replace(/(?:\\)?\{\{\s*PEST_IDENTIFICATION_LINE\s*\}\}|(?:\\)?\{\s*PEST_IDENTIFICATION_LINE\s*\}|^PEST_IDENTIFICATION_LINE$/gm, '🔍 입력하신 이미지는 해충으로 인식되었습니다. 이를 기반으로 답변하겠습니다.')
-        .replace(/(?:\\)?\{\{\s*PESTICIDE_HTML\s*\}\}|(?:\\)?\{\s*PESTICIDE_HTML\s*\}|^PESTICIDE_HTML$/gm, '<p class="my-2 text-gray-400 italic">권장 농약 정보가 누락되었습니다.</p>')
-        .replace(/(?:\\)?\{\{\s*WEATHER_HTML\s*\}\}|(?:\\)?\{\s*WEATHER_HTML\s*\}|^WEATHER_HTML$/gm, '<p class="my-2 text-gray-400 italic">날씨 정보를 불러오지 못했습니다.</p>');
+        .replace(/(?:\\)?\{\{\s*PESTICIDE_HTML\s*\}\}|(?:\\)?\{\s*PESTICIDE_HTML\s*\}|^PESTICIDE_HTML$/gm, '<p class="my-2 text-[color:var(--color-ink-faint)] italic">권장 농약 정보가 누락되었습니다.</p>')
+        .replace(/(?:\\)?\{\{\s*WEATHER_HTML\s*\}\}|(?:\\)?\{\s*WEATHER_HTML\s*\}|^WEATHER_HTML$/gm, '<p class="my-2 text-[color:var(--color-ink-faint)] italic">날씨 정보를 불러오지 못했습니다.</p>');
 
     // 텍스트 전처리
     let processedText = normalizeLegacyPlaceholders(text)
@@ -37,12 +37,12 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
       .replace(/^-\s+-\s+/gm, '  - ');
 
     // 💡 이미지 마크다운 지원 개선: 백그라운드 주소 자동 연결 및 XSS 방어 강화
-    const BACKEND_ORIGIN = import.meta.env.VITE_BACKEND_ORIGIN || 'http://localhost:8000';
+    const BACKEND_ORIGIN = import.meta.env.VITE_BACKEND_ORIGIN || '';
     const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
     processedText = processedText.replace(/!\[(.*?)\]\((.*?)\)/g, (_match, alt, url) => {
       const fullUrl = url.startsWith('/uploads') ? `${BACKEND_ORIGIN}${url}` : url;
-      return `<img src="${escapeAttr(fullUrl)}" alt="${escapeAttr(alt)}" class="rounded-xl max-w-full h-auto my-2 border border-gray-100 shadow-sm" />`;
+      return `<img src="${escapeAttr(fullUrl)}" alt="${escapeAttr(alt)}" class="rounded-xl max-w-full h-auto my-2 border border-[color:var(--color-line-soft)] shadow-sm" />`;
     });
 
     const lines = processedText.split('\n');
@@ -58,7 +58,7 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
 
     const flushBlockquote = () => {
       if (!inBlockquote) return;
-      result.push('<blockquote class="my-4 p-4 bg-gray-50 border-l-4 border-gray-300 rounded-r-xl italic text-gray-600 space-y-1">');
+      result.push('<blockquote class="my-4 p-4 bg-[color:var(--color-surface)] border-l-4 border-[color:var(--color-line)] rounded-r-xl italic text-[color:var(--color-ink-mute)] space-y-1">');
       blockquoteLines.forEach(l => {
         const content = formatInline(l.replace(/^-\s+/, '• '));
         result.push(`<p>${content}</p>`);
@@ -73,7 +73,7 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
       if (tableRows.length < 2) {
         tableRows.forEach(row => result.push(`<p class="my-2">${formatInline(row.join(' | '))}</p>`));
       } else {
-        result.push('<div class="my-4 overflow-x-auto rounded-xl border border-gray-200 shadow-sm">');
+        result.push('<div class="my-4 overflow-x-auto rounded-xl border border-[color:var(--color-line)] shadow-sm">');
         result.push('<table class="min-w-full divide-y divide-gray-200 text-xs">');
         
         tableRows.forEach((row, idx) => {
@@ -81,17 +81,17 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
           if (isSeparator) return;
           
           if (idx === 0) {
-            result.push('<thead class="bg-gray-50"><tr>');
+            result.push('<thead class="bg-[color:var(--color-surface)]"><tr>');
             row.forEach(cell => {
               const formatted = formatInline(cell.trim());
-              result.push(`<th class="px-4 py-3 text-left font-bold text-gray-700 uppercase tracking-wider border-b border-gray-200">${formatted}</th>`);
+              result.push(`<th class="px-4 py-3 text-left font-bold text-[color:var(--color-ink-soft)] uppercase tracking-wider border-b border-[color:var(--color-line)]">${formatted}</th>`);
             });
             result.push('</tr></thead><tbody class="bg-white divide-y divide-gray-100">');
           } else {
-            result.push('<tr class="hover:bg-gray-50/50 transition-colors">');
+            result.push('<tr class="hover:bg-[color:var(--color-surface)]/50 transition-colors">');
             row.forEach(cell => {
               const formatted = formatInline(cell.trim());
-              result.push(`<td class="px-4 py-2.5 text-gray-600 whitespace-nowrap">${formatted}</td>`);
+              result.push(`<td class="px-4 py-2.5 text-[color:var(--color-ink-mute)] whitespace-nowrap">${formatted}</td>`);
             });
             result.push('</tr>');
           }
@@ -138,7 +138,7 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
         while (nestedLevel > 0) { result.push('</ul></li>'); nestedLevel--; }
         if (inList) { result.push('</ul>'); inList = false; }
         const content = line.replace(/^##\s+/, '').trim();
-        result.push(`<h2 class="text-lg font-bold text-gray-800 mt-6 mb-3">${formatInline(content)}</h2>`);
+        result.push(`<h2 class="text-lg font-bold text-[color:var(--color-ink)] mt-6 mb-3">${formatInline(content)}</h2>`);
         continue;
       }
 
@@ -146,18 +146,18 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
         while (nestedLevel > 0) { result.push('</ul></li>'); nestedLevel--; }
         if (inList) { result.push('</ul>'); inList = false; }
         const content = line.replace(/^###\s+/, '').trim();
-        result.push(`<h3 class="text-base font-semibold text-gray-700 mt-4 mb-2">${formatInline(content)}</h3>`);
+        result.push(`<h3 class="text-base font-semibold text-[color:var(--color-ink-soft)] mt-4 mb-2">${formatInline(content)}</h3>`);
         continue;
       }
 
       if (/^\s{4,}-\s+.+/.test(line)) {
         if (!inList) { result.push('<ul class="my-1">'); inList = true; }
-        if (nestedLevel === 0) { result.push('<li class="text-gray-800"><ul class="pl-4 mt-1 space-y-1">'); nestedLevel = 1; }
-        if (nestedLevel === 1) { result.push('<li class="text-gray-800"><ul class="pl-4 mt-1 space-y-1 border-l-2 border-gray-100 ml-1">'); nestedLevel = 2; }
+        if (nestedLevel === 0) { result.push('<li class="text-[color:var(--color-ink)]"><ul class="pl-4 mt-1 space-y-1">'); nestedLevel = 1; }
+        if (nestedLevel === 1) { result.push('<li class="text-[color:var(--color-ink)]"><ul class="pl-4 mt-1 space-y-1 border-l-2 border-[color:var(--color-line-soft)] ml-1">'); nestedLevel = 2; }
         
         const content = line.replace(/^\s{4,}-\s+/, '').trim();
         const formatted = formatInline(content);
-        result.push(`<li class="text-gray-800 text-sm pl-4 relative before:content-[''] before:absolute before:-left-1 before:top-2 before:w-1 before:h-1 before:bg-gray-800 before:rounded-sm">${formatted}</li>`);
+        result.push(`<li class="text-[color:var(--color-ink)] text-sm pl-4 relative before:content-[''] before:absolute before:-left-1 before:top-2 before:w-1 before:h-1 before:bg-gray-800 before:rounded-sm">${formatted}</li>`);
 
         if (!/^\s{4,}-\s+.+/.test(nextLine)) {
           result.push('</ul></li>');
@@ -169,11 +169,11 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
       if (/^\s{2,3}-\s+.+/.test(line)) {
         if (!inList) { result.push('<ul class="my-1">'); inList = true; }
         while (nestedLevel > 1) { result.push('</ul></li>'); nestedLevel--; }
-        if (nestedLevel === 0) { result.push('<li class="text-gray-800"><ul class="pl-4 mt-1 space-y-1">'); nestedLevel = 1; }
+        if (nestedLevel === 0) { result.push('<li class="text-[color:var(--color-ink)]"><ul class="pl-4 mt-1 space-y-1">'); nestedLevel = 1; }
         
         const content = line.replace(/^\s{2,3}-\s+/, '').trim();
         const formatted = formatInline(content);
-        result.push(`<li class="text-gray-800 font-medium pl-3 mt-2 relative before:content-[''] before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:border before:border-gray-800 before:rounded-full before:bg-transparent">${formatted}</li>`);
+        result.push(`<li class="text-[color:var(--color-ink)] font-medium pl-3 mt-2 relative before:content-[''] before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:border before:border-gray-800 before:rounded-full before:bg-transparent">${formatted}</li>`);
 
         if (!/^\s{2,}-\s+.+/.test(nextLine)) {
           result.push('</ul></li>');
@@ -188,7 +188,7 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
         
         const content = line.replace(/^-\s+/, '').trim();
         const formatted = formatInline(content);
-        result.push(`<li class="text-gray-800 mt-2 relative before:content-[''] before:absolute before:-left-3 before:top-2 before:w-1.5 before:h-1.5 before:bg-gray-800 before:rounded-full">${formatted}</li>`);
+        result.push(`<li class="text-[color:var(--color-ink)] mt-2 relative before:content-[''] before:absolute before:-left-3 before:top-2 before:w-1.5 before:h-1.5 before:bg-gray-800 before:rounded-full">${formatted}</li>`);
 
         if (!/^\s*-\s+.+/.test(nextLine)) {
           result.push('</ul>');
@@ -225,13 +225,24 @@ function MarkdownRenderer({ content }: { content: string, isUser?: boolean }) {
     if (inList) result.push('</ul>');
 
     const combinedHtml = result.join('');
-    // DOMPurify로 최종 소독하여 XSS 방지하면서 의도된 태그/스타일은 유지
+    // DOMPurify XSS 방어 — 강화된 설정:
+    //   1) `style` 속성 제거: CSS 주입 (expression(), url(javascript:...), 가시성 조작) 차단
+    //   2) URI 스킴 화이트리스트: javascript:/data:/vbscript: URL 차단, http(s)·내부 경로만 허용
+    //   3) 모든 on* 이벤트 핸들러 명시 차단 (FORBID_ATTR)
+    //   4) 위험 태그 명시 차단 (script/iframe/object/embed/form/input/textarea/svg)
     return DOMPurify.sanitize(combinedHtml, {
       ALLOWED_TAGS: [
         'div', 'span', 'p', 'br', 'blockquote', 'strong', 'b', 'ul', 'li', 'h2', 'h3',
         'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img'
       ],
-      ALLOWED_ATTR: ['class', 'style', 'title', 'src', 'alt']
+      ALLOWED_ATTR: ['class', 'title', 'src', 'alt'],
+      // http(s) URL 또는 동일 출처 상대 경로(/uploads/...)만 허용. javascript:·data: 차단.
+      ALLOWED_URI_REGEXP: /^(?:https?:|\/[^/])/i,
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'svg', 'style'],
+      FORBID_ATTR: [
+        'onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout', 'onfocus', 'onblur',
+        'onchange', 'onsubmit', 'onkeydown', 'onkeyup', 'onkeypress', 'style',
+      ],
     });
   };
 
@@ -254,7 +265,7 @@ export default function DiagnosisChatPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // API 호출 베이스 경로
-  const API_BASE = 'http://localhost:8000/api/v1/diagnosis';
+  const API_BASE = '/api/v1/diagnosis';
 
   // 1. 초기 컨텍스트 수신 (DiagnosisPage에서 보낸 데이터)
   const context = location.state?.diagnosisContext;
@@ -270,7 +281,7 @@ export default function DiagnosisChatPage() {
       if (response.ok) {
         const data = await response.json();
         // DB 메시지를 프론트엔드 형식으로 변환. 첫 번째 메시지는 솔루션 카드로 렌더링.
-        const dbMessages: Message[] = data.map((m: any, idx: number) => ({
+        const dbMessages: Message[] = data.map((m: { id: number | string; role: Message['role']; content: string }, idx: number) => ({
           id: m.id.toString(),
           role: m.role,
           content: m.content,
@@ -290,6 +301,9 @@ export default function DiagnosisChatPage() {
     }
   };
 
+  // 의존성을 stable identifier(`context?.id`)로 좁힌다.
+  // 과거 `[context]` 는 location.state 가 매 navigation 마다 새 객체를 만들어
+  // fetchChatMessages 가 반복 호출되며 UI 깜빡임의 원인이었다.
   useEffect(() => {
     if (!context) {
       navigate('/diagnosis');
@@ -299,7 +313,8 @@ export default function DiagnosisChatPage() {
     // 진단이 막 생성되었거나, 히스토리에서 왔거나 상관없이
     // 이미 백엔드 생성 과정에서 초기 메시지가 DB에 저장되므로 DB에서 불러옴
     fetchChatMessages();
-  }, [context]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context?.id]);
 
   // 스크롤 하단 이동
   useEffect(() => {
@@ -383,23 +398,23 @@ export default function DiagnosisChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-100px)] max-w-4xl mx-auto bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-100px)] max-w-4xl mx-auto bg-white rounded-3xl shadow-sm border border-[color:var(--color-line-soft)] overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-white sticky top-0 z-10">
-        <button onClick={() => navigate('/diagnosis')} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+        <button onClick={() => navigate('/diagnosis')} className="p-2 hover:bg-[color:var(--color-surface-deep)] rounded-full transition-colors text-[color:var(--color-ink-mute)]">
           <MdArrowBack className="text-xl" />
         </button>
         <div className="flex flex-col items-center">
-          <h2 className="font-bold text-gray-800">해충 AI 진단 센터</h2>
+          <h2 className="font-bold text-[color:var(--color-ink)]">해충 AI 진단 센터</h2>
           <p className="text-[10px] text-primary font-bold uppercase tracking-wider">AI AGENT ACTIVE</p>
         </div>
-        <button onClick={() => window.location.reload()} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+        <button onClick={() => window.location.reload()} className="p-2 hover:bg-[color:var(--color-surface-deep)] rounded-full transition-colors text-[color:var(--color-ink-mute)]">
           <MdRefresh className="text-xl" />
         </button>
       </div>
 
       {/* Chat Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/30">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 bg-[color:var(--color-surface)]/30">
         <AnimatePresence>
           {isLoading && messages.length === 0 && (
             <motion.div 
@@ -408,7 +423,7 @@ export default function DiagnosisChatPage() {
               className="flex flex-col items-center justify-center h-full space-y-4 py-20"
             >
               <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-              <p className="text-sm text-gray-500 font-medium">대화 내용을 불러오는 중입니다...</p>
+              <p className="text-sm text-[color:var(--color-ink-mute)] font-medium">대화 내용을 불러오는 중입니다...</p>
             </motion.div>
           )}
           
@@ -418,8 +433,8 @@ export default function DiagnosisChatPage() {
               animate={{ opacity: 1 }} 
               className="flex flex-col items-center justify-center h-full space-y-3 py-20 opacity-60"
             >
-              <MdSmartToy className="text-5xl text-gray-300" />
-              <p className="text-sm text-gray-400">대화 내용이 없습니다.</p>
+              <MdSmartToy className="text-5xl text-[color:var(--color-ink-disabled)]" />
+              <p className="text-sm text-[color:var(--color-ink-faint)]">대화 내용이 없습니다.</p>
             </motion.div>
           )}
 
@@ -432,7 +447,7 @@ export default function DiagnosisChatPage() {
             >
               <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  msg.role === 'assistant' ? 'bg-primary text-white' : 'bg-gray-200 text-gray-600'
+                  msg.role === 'assistant' ? 'bg-primary text-white' : 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)]'
                 }`}>
                   {msg.role === 'assistant' ? <MdSmartToy /> : <MdPerson />}
                 </div>
@@ -441,27 +456,27 @@ export default function DiagnosisChatPage() {
                   {msg.type === 'solution' ? (
                     <div className="space-y-4 w-full">
                       {/* 통합된 메인 텍스트 영역 (템플릿 엔진 출력물 - 마크다운 렌더링) */}
-                      <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 text-sm text-gray-700 leading-relaxed min-w-[280px] prose prose-sm max-w-none prose-headings:text-gray-800 prose-h2:text-lg prose-h2:font-bold prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-base prose-h3:font-semibold prose-h3:mt-3 prose-h3:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 markdown-content">
-                        <MarkdownRenderer content={msg.data?.result_text || msg.content || "분석 데이터를 불러오지 못했습니다."} />
+                      <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-[color:var(--color-line-soft)] text-sm text-[color:var(--color-ink-soft)] leading-relaxed min-w-[280px] prose prose-sm max-w-none prose-headings:text-[color:var(--color-ink)] prose-h2:text-lg prose-h2:font-bold prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-base prose-h3:font-semibold prose-h3:mt-3 prose-h3:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 markdown-content">
+                        <MarkdownRenderer content={(msg.data as { result_text?: string } | undefined)?.result_text || msg.content || "분석 데이터를 불러오지 못했습니다."} />
                       </div>
                     </div>
                   ) : msg.type === 'loading' ? (
                     <div className="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
                       <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-                      <p className="text-sm text-gray-400 font-medium">{msg.content}</p>
+                      <p className="text-sm text-[color:var(--color-ink-faint)] font-medium">{msg.content}</p>
                     </div>
                   ) : (
                     <div className={`p-4 rounded-2xl shadow-sm border ${
                       msg.role === 'user' 
                         ? 'bg-primary text-white border-primary rounded-tr-none' 
-                        : 'bg-white text-gray-700 border-gray-100 rounded-tl-none'
+                        : 'bg-white text-[color:var(--color-ink-soft)] border-[color:var(--color-line-soft)] rounded-tl-none'
                     }`}>
                       {msg.role === 'assistant' ? (
                         <div className="prose prose-sm max-w-none prose-p:my-0.5 prose-ul:my-1 prose-li:my-0.5">
                           <MarkdownRenderer content={msg.content} />
                         </div>
                       ) : (
-                        <MarkdownRenderer content={msg.content} isUser={true} />
+                        <MarkdownRenderer content={msg.content} />
                       )}
                     </div>
                   )}
@@ -472,13 +487,13 @@ export default function DiagnosisChatPage() {
           {isTyping && (
             <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start gap-3">
               <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center"><MdSmartToy /></div>
-              <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm flex flex-col gap-2 border border-gray-100">
+              <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm flex flex-col gap-2 border border-[color:var(--color-line-soft)]">
                 <div className="flex gap-1">
                   <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce" />
                   <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce [animation-delay:0.2s]" />
                   <span className="w-1.5 h-1.5 bg-primary/40 rounded-full animate-bounce [animation-delay:0.4s]" />
                 </div>
-                <p className="text-[11px] text-gray-400 font-medium leading-none">진단봇이 생각 중이에요. 잠시만 기다려 주세요...</p>
+                <p className="text-[11px] text-[color:var(--color-ink-faint)] font-medium leading-none">진단봇이 생각 중이에요. 잠시만 기다려 주세요...</p>
               </div>
             </motion.div>
           )}
@@ -492,10 +507,16 @@ export default function DiagnosisChatPage() {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => {
+              // onKeyPress 는 React 19 에서 deprecated. onKeyDown 으로 마이그레이션.
+              // IME 조합 중(한글 입력 마지막 글자) Enter 가 발생하면 send 를 막아 잘림 방지.
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                handleSend();
+              }
+            }}
             disabled={isTyping}
             placeholder={isTyping ? "진단봇의 답변을 기다리는 중..." : "추가 질문을 입력하세요..."}
-            className={`flex-1 bg-gray-100 border-none rounded-2xl py-3.5 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all ${
+            className={`flex-1 bg-[color:var(--color-surface-deep)] border-none rounded-2xl py-3.5 px-5 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all ${
               isTyping ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           />
@@ -503,13 +524,13 @@ export default function DiagnosisChatPage() {
             onClick={handleSend}
             disabled={!inputValue.trim() || isTyping}
             className={`p-3.5 rounded-xl transition-all ${
-              inputValue.trim() && !isTyping ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              inputValue.trim() && !isTyping ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-faint)] cursor-not-allowed'
             }`}
           >
             <MdSend className="text-xl" />
           </button>
         </div>
-        <p className="text-[10px] text-center text-gray-400 mt-2">AI 진단 결과에 따라 전문가와 상의 후 조치를 취하십시오.</p>
+        <p className="text-[10px] text-center text-[color:var(--color-ink-faint)] mt-2">AI 진단 결과에 따라 전문가와 상의 후 조치를 취하십시오.</p>
       </div>
     </div>
   );

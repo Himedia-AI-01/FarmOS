@@ -18,22 +18,26 @@ export default function MissingFieldsAlert({
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const today = new Date().toISOString().slice(0, 10);
     const weekAgo = new Date(Date.now() - 7 * 86400000)
       .toISOString()
       .slice(0, 10);
     fetchMissingFields(weekAgo, today).then((res) => {
+      // 언마운트 후 setState 차단 — 화면 전환 중 fetch가 늦게 끝나는 경우 대비
+      if (cancelled) return;
       if (res && res.total > 0) setAlerts(res.missing_fields);
     });
+    return () => { cancelled = true; };
   }, [fetchMissingFields]);
 
   if (dismissed || alerts.length === 0) return null;
 
   return (
-    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+    <div className="p-4 bg-[color:var(--tint-warning)] border border-amber-200 rounded-xl">
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-2">
-          <MdWarning className="text-amber-500 text-xl mt-0.5 shrink-0" />
+          <MdWarning className="text-[color:var(--color-accent)] text-xl mt-0.5 shrink-0" />
           <div>
             <p className="text-sm font-medium text-amber-800">
               누락 항목 {alerts.length}건
@@ -56,7 +60,7 @@ export default function MissingFieldsAlert({
                   .filter(Boolean)
                   .join(" · ");
                 return (
-                  <li key={i} className="text-xs text-amber-700">
+                  <li key={i} className="text-xs text-[color:var(--color-accent-dark)]">
                     <button
                       onClick={() => onEditEntry?.(alert.entry_id)}
                       className="text-left cursor-pointer hover:text-amber-900 hover:underline"
@@ -72,7 +76,7 @@ export default function MissingFieldsAlert({
                 );
               })}
               {alerts.length > 5 && (
-                <li className="text-xs text-amber-500">
+                <li className="text-xs text-[color:var(--color-accent)]">
                   외 {alerts.length - 5}건
                 </li>
               )}
@@ -81,7 +85,7 @@ export default function MissingFieldsAlert({
         </div>
         <button
           onClick={() => setDismissed(true)}
-          className="text-amber-400 hover:text-amber-600 cursor-pointer"
+          className="text-[color:var(--color-accent)] hover:text-[color:var(--color-accent-dark)] cursor-pointer"
         >
           <MdClose />
         </button>

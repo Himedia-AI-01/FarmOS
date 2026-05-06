@@ -14,7 +14,7 @@ import { onAIDecisionEvent } from '@/hooks/useSensorData';
 const RELAY_API_BASE = 'https://iot.lilpa.moe/api/v1';
 const FARMOS_API_BASE =
   (import.meta as unknown as { env?: { VITE_FARMOS_API_BASE?: string } }).env
-    ?.VITE_FARMOS_API_BASE ?? 'http://localhost:8000/api/v1';
+    ?.VITE_FARMOS_API_BASE ?? '/api/v1';
 
 const POLL_INTERVAL = 60000; // SSE가 실시간 처리하므로 폴링은 60초 fallback
 

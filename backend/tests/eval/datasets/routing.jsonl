@@ -1,0 +1,68 @@
+{"q":"오늘 날씨 어때","expected_route":"direct_tool","note":"weather single domain — fast_path"}
+{"q":"내일 비 오나","expected_route":"direct_tool"}
+{"q":"내 작물 시세 알려줘","expected_route":"direct_tool"}
+{"q":"영농일지 최근 7일 보여줘","expected_route":"farm-data-agent"}
+{"q":"어제 IoT 자율 제어 이력","expected_route":"farm-data-agent"}
+{"q":"내 농장에 노균병 의심된다","expected_route":"diagnosis-agent"}
+{"q":"잎이 노래졌어요 토마토","expected_route":"diagnosis-agent"}
+{"q":"흰 가루가 묻어요","expected_route":"diagnosis-agent"}
+{"q":"공익직불금 신청 자격","expected_route":"subsidy-agent"}
+{"q":"소농직불 얼마","expected_route":"subsidy-agent"}
+{"q":"영농기록 꼭 써야 해","expected_route":"subsidy-agent","note":"obligation question"}
+{"q":"5일 기상 윈도우, 시세, 일지 종합해서 출하 시기","expected_route":"orchestrator","note":"multi-domain"}
+{"q":"이번 주 농장 운영 플랜 짜줘","expected_route":"orchestrator","note":"multi-domain heavy"}
+{"q":"넌 뭐 할 수 있어","expected_route":"orchestrator","note":"meta"}
+{"q":"도움말","expected_route":"orchestrator","note":"meta"}
+{"q":"사과랑 배 시세 비교","expected_route":"direct_tool","note":"benign particle"}
+{"q":"농약 안전사용 의무사항","expected_route":"subsidy-agent"}
+{"q":"방제법 알려줘","expected_route":"diagnosis-agent"}
+{"q":"이번 주 풍속 위험","expected_route":"direct_tool"}
+{"q":"진딧물 어떻게 잡아","expected_route":"diagnosis-agent"}
+{"q":"안녕하세요 오늘 시세 좀 알려주세요","expected_route":"direct_tool","note":"greeting prefix"}
+{"q":"저기요 노균병 어떻게 해야 해요","expected_route":"diagnosis-agent","note":"casual prefix"}
+{"q":"형님 직불금 자격 좀","expected_route":"subsidy-agent","note":"informal address"}
+{"q":"노근병 잡는 약 추천","expected_route":"diagnosis-agent","note":"STT 발음 변이 노근병→노균병"}
+{"q":"노깐병 약","expected_route":"diagnosis-agent","note":"STT 노깐병→노균병"}
+{"q":"직물금 자격","expected_route":"subsidy-agent","note":"STT 직물금→직불금"}
+{"q":"직불검 신청","expected_route":"subsidy-agent","note":"STT 직불검→직불금"}
+{"q":"옆면살포 시기","expected_route":"diagnosis-agent","note":"STT 옆면→엽면 변이지만 방제 관련 의도"}
+{"q":"히석배수","expected_route":"diagnosis-agent","note":"STT 히석→희석"}
+{"q":"오늘 작업 가능한가","expected_route":"direct_tool","note":"weather-implicit"}
+{"q":"기온 몇도","expected_route":"direct_tool"}
+{"q":"바람 세","expected_route":"direct_tool"}
+{"q":"비 올까","expected_route":"direct_tool"}
+{"q":"강수확률","expected_route":"direct_tool"}
+{"q":"일주일 일지 요약","expected_route":"farm-data-agent"}
+{"q":"이번 주 작업 기록","expected_route":"farm-data-agent"}
+{"q":"최근 관수 몇 번","expected_route":"farm-data-agent"}
+{"q":"최근 환기 이력","expected_route":"farm-data-agent"}
+{"q":"최근 차광 작동","expected_route":"farm-data-agent"}
+{"q":"오늘 일지 뭐 썼지","expected_route":"farm-data-agent"}
+{"q":"어제 일지 보여줘","expected_route":"farm-data-agent"}
+{"q":"흰가루병 약제","expected_route":"diagnosis-agent"}
+{"q":"탄저병 방제","expected_route":"diagnosis-agent"}
+{"q":"응애 잡는 법","expected_route":"diagnosis-agent"}
+{"q":"도열병 약 추천","expected_route":"diagnosis-agent"}
+{"q":"잎이 누렇게 변해요","expected_route":"diagnosis-agent","note":"AGENTS.md 구어체"}
+{"q":"잎 뒤에 거미줄 같은 거","expected_route":"diagnosis-agent","note":"AGENTS.md 응애"}
+{"q":"끈적한 게 묻어 있어요","expected_route":"diagnosis-agent","note":"AGENTS.md 진딧물"}
+{"q":"배추가 물러졌어요","expected_route":"diagnosis-agent","note":"AGENTS.md 무름병"}
+{"q":"기본직불 등록 어떻게","expected_route":"subsidy-agent"}
+{"q":"면적직불 단가","expected_route":"subsidy-agent"}
+{"q":"감액 기준","expected_route":"subsidy-agent"}
+{"q":"부정수급 처분","expected_route":"subsidy-agent"}
+{"q":"준수사항 뭐 있어","expected_route":"subsidy-agent"}
+{"q":"직불 자격","expected_route":"subsidy-agent"}
+{"q":"청년농 가산금","expected_route":"subsidy-agent"}
+{"q":"공익직불 시행지침","expected_route":"subsidy-agent"}
+{"q":"정책자금 대출","expected_route":"subsidy-agent"}
+{"q":"마을 공동작업 안 가도 돼","expected_route":"subsidy-agent","note":"obligation override"}
+{"q":"교육 안 들어도 되나요","expected_route":"subsidy-agent","note":"obligation override"}
+{"q":"화학비료 더 줘도 되","expected_route":"subsidy-agent","note":"obligation override"}
+{"q":"오늘 진딧물 약 사고 일지도 써야 해","expected_route":"orchestrator","note":"multi-action"}
+{"q":"날씨 그리고 시세","expected_route":"orchestrator","note":"explicit conjunction"}
+{"q":"내 작물 또한 인근 작물 비교","expected_route":"orchestrator"}
+{"q":"기능이 뭐야","expected_route":"orchestrator","note":"meta"}
+{"q":"뭐 할 수 있어","expected_route":"orchestrator","note":"meta"}
+{"q":"어떻게 사용","expected_route":"orchestrator","note":"meta"}
+{"q":"help","expected_route":"orchestrator","note":"meta english"}

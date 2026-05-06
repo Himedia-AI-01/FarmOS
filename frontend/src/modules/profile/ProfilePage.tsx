@@ -7,7 +7,7 @@ import DaumPostcode from 'react-daum-postcode';
 import { MdSearch } from 'react-icons/md';
 import { formatDaumAddress, type DaumPostcodeData } from '@/utils/daumAddress';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = '/api/v1';
 
 /* ────────────── 타입 ────────────── */
 interface ProfileData {
@@ -145,15 +145,15 @@ export default function ProfilePage() {
     }
   };
 
-  const inputClass = 'w-full px-4 py-3 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition';
-  const selectClass = `${inputClass} bg-white appearance-none cursor-pointer`;
+  const inputClass = 'input';
+  const selectClass = 'select';
 
   if (!profile || !draft) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         {loadError ? (
           <>
-            <p className="text-gray-500">프로필을 불러올 수 없습니다.</p>
+            <p className="text-[color:var(--color-ink-mute)]">프로필을 불러올 수 없습니다.</p>
             <button
               onClick={() => setRetryCount(c => c + 1)}
               className="px-4 py-2 text-sm font-semibold text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition"
@@ -162,7 +162,7 @@ export default function ProfilePage() {
             </button>
           </>
         ) : (
-          <div className="text-gray-400">불러오는 중...</div>
+          <div className="text-[color:var(--color-ink-faint)]">불러오는 중...</div>
         )}
       </div>
     );
@@ -175,7 +175,7 @@ export default function ProfilePage() {
       {/* 헤더 */}
       <div>
         <h1 className="module-title">내 프로필</h1>
-        <p className="text-gray-500 mt-1">농장 정보와 영농 상세를 관리합니다</p>
+        <p className="mt-1.5 text-[14.5px] text-[color:var(--color-ink-mute)]">농장 정보와 영농 상세를 관리합니다</p>
       </div>
 
       {/* 미완성 안내 배너 */}
@@ -183,12 +183,12 @@ export default function ProfilePage() {
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-accent/10 border border-accent/30 rounded-xl p-4 flex items-start gap-3"
+          className="rounded-2xl border border-[color:var(--color-accent)]/30 bg-[#FBF1D8]/55 p-4 flex items-start gap-3"
         >
-          <span className="text-2xl flex-shrink-0">📝</span>
+          <span className="text-2xl flex-shrink-0" aria-hidden>📝</span>
           <div>
-            <p className="font-semibold text-gray-800">프로필을 완성해주세요</p>
-            <p className="text-sm text-gray-600 mt-0.5">
+            <p className="text-[14.5px] font-bold text-[color:var(--color-ink)]">프로필을 완성해주세요</p>
+            <p className="mt-1 text-[13.5px] leading-[1.6] text-[color:var(--color-ink-soft)]">
               보조금 적격성 확인, 맞춤 시세 알림 등 FarmOS의 핵심 기능을 이용할 수 있습니다.
             </p>
           </div>
@@ -214,11 +214,11 @@ export default function ProfilePage() {
         {editing === 'farm' ? (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">농장 이름</label>
+              <label className="field-label mb-1.5 block">농장 이름</label>
               <input type="text" value={draft.farmname} onChange={e => setDraft(d => d ? { ...d, farmname: e.target.value } : d)} placeholder="예: 행복한 사과농장" className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">주소</label>
+              <label className="field-label mb-1.5 block">주소</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -247,10 +247,10 @@ export default function ProfilePage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">경작 면적 (평)</label>
+              <label className="field-label mb-1.5 block">경작 면적 (평)</label>
               <input type="number" step="0.1" min="0" value={draft.area} onChange={e => setDraft(d => d ? { ...d, area: e.target.value } : d)} placeholder="예: 3300" className={inputClass} />
               {(() => { const c = safeAreaConvert(draft.area); return c && (
-                <p className="text-sm text-gray-500 mt-1">약 {c.m2.toFixed(0)}m² ({c.ha.toFixed(2)}ha)</p>
+                <p className="text-sm text-[color:var(--color-ink-mute)] mt-1">약 {c.m2.toFixed(0)}m² ({c.ha.toFixed(2)}ha)</p>
               ); })()}
             </div>
           </div>
@@ -280,18 +280,18 @@ export default function ProfilePage() {
         {editing === 'crop' ? (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">주요 재배 작물</label>
+              <label className="field-label mb-1.5 block">주요 재배 작물</label>
               <select value={draft.main_crop} onChange={e => setDraft(d => d ? { ...d, main_crop: e.target.value } : d)} className={selectClass}>
                 <option value="">선택하세요</option>
                 {CROP_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">품종</label>
+              <label className="field-label mb-1.5 block">품종</label>
               <input type="text" value={draft.crop_variety} onChange={e => setDraft(d => d ? { ...d, crop_variety: e.target.value } : d)} placeholder="예: 홍로, 부사" className={inputClass} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">농지 유형</label>
+              <label className="field-label mb-1.5 block">농지 유형</label>
               <select value={draft.farmland_type} onChange={e => setDraft(d => d ? { ...d, farmland_type: e.target.value } : d)} className={selectClass}>
                 <option value="">선택하세요</option>
                 {FARMLAND_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -320,42 +320,42 @@ export default function ProfilePage() {
         {editing === 'detail' ? (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">농업인 유형</label>
+              <label className="field-label mb-1.5 block">농업인 유형</label>
               <select value={draft.farmer_type} onChange={e => setDraft(d => d ? { ...d, farmer_type: e.target.value } : d)} className={selectClass}>
                 {FARMER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">농촌 거주 연수</label>
+                <label className="field-label mb-1.5 block">농촌 거주 연수</label>
                 <input type="number" min="0" value={draft.years_rural_residence} onChange={e => setDraft(d => d ? { ...d, years_rural_residence: e.target.value } : d)} placeholder="년" className={inputClass} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">영농 경력 연수</label>
+                <label className="field-label mb-1.5 block">영농 경력 연수</label>
                 <input type="number" min="0" value={draft.years_farming} onChange={e => setDraft(d => d ? { ...d, years_farming: e.target.value } : d)} placeholder="년" className={inputClass} />
               </div>
             </div>
-            <label className="flex items-center justify-between cursor-pointer p-3 bg-surface rounded-xl">
-              <div>
-                <div className="font-medium text-gray-800 text-sm">농업경영체 등록</div>
-                <div className="text-xs text-gray-500">보조금 필수 요건</div>
+            <label className="flex items-center justify-between gap-4 cursor-pointer p-4 bg-[color:var(--color-surface)] rounded-2xl">
+              <div className="min-w-0">
+                <div className="text-[14px] font-bold text-[color:var(--color-ink)]">농업경영체 등록</div>
+                <div className="mt-0.5 text-[12.5px] text-[color:var(--color-ink-mute)]">보조금 필수 요건</div>
               </div>
-              <div className="relative">
-                <input type="checkbox" checked={draft.has_farm_registration} onChange={e => setDraft(d => d ? { ...d, has_farm_registration: e.target.checked } : d)} className="sr-only peer" />
-                <div className="w-11 h-6 rounded-full bg-gray-300 peer-checked:bg-primary transition-colors" />
-                <div className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-              </div>
+              <span className="toggle">
+                <input type="checkbox" checked={draft.has_farm_registration} onChange={e => setDraft(d => d ? { ...d, has_farm_registration: e.target.checked } : d)} />
+                <span className="toggle-track" />
+                <span className="toggle-thumb" />
+              </span>
             </label>
-            <label className="flex items-center justify-between cursor-pointer p-3 bg-surface rounded-xl">
-              <div>
-                <div className="font-medium text-gray-800 text-sm">농업진흥지역</div>
-                <div className="text-xs text-gray-500">직불금 단가 차등</div>
+            <label className="flex items-center justify-between gap-4 cursor-pointer p-4 bg-[color:var(--color-surface)] rounded-2xl">
+              <div className="min-w-0">
+                <div className="text-[14px] font-bold text-[color:var(--color-ink)]">농업진흥지역</div>
+                <div className="mt-0.5 text-[12.5px] text-[color:var(--color-ink-mute)]">직불금 단가 차등</div>
               </div>
-              <div className="relative">
-                <input type="checkbox" checked={draft.is_promotion_area} onChange={e => setDraft(d => d ? { ...d, is_promotion_area: e.target.checked } : d)} className="sr-only peer" />
-                <div className="w-11 h-6 rounded-full bg-gray-300 peer-checked:bg-primary transition-colors" />
-                <div className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-              </div>
+              <span className="toggle">
+                <input type="checkbox" checked={draft.is_promotion_area} onChange={e => setDraft(d => d ? { ...d, is_promotion_area: e.target.checked } : d)} />
+                <span className="toggle-track" />
+                <span className="toggle-thumb" />
+              </span>
             </label>
           </div>
         ) : (
@@ -385,14 +385,14 @@ export default function ProfilePage() {
             className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden flex flex-col"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-4 border-b border-gray-100">
-              <h3 id="profile-postcode-modal-title" className="font-bold text-gray-800 text-lg">주소 검색</h3>
+            <div className="flex justify-between items-center p-4 border-b border-[color:var(--color-line-soft)]">
+              <h3 id="profile-postcode-modal-title" className="font-bold text-[color:var(--color-ink)] text-lg">주소 검색</h3>
               <button
                 type="button"
                 ref={postcodeCloseButtonRef}
                 aria-label="주소 검색 닫기"
                 onClick={() => setIsPostcodeOpen(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-mute)] transition-colors"
               >
                 닫기
               </button>
@@ -437,7 +437,7 @@ function Section({
         )}
         {isEditing && (
           <div className="flex gap-2">
-            <button onClick={onCancel} className="px-3 py-1.5 text-sm font-medium text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+            <button onClick={onCancel} className="px-3 py-1.5 text-sm font-medium text-[color:var(--color-ink-mute)] border border-[color:var(--color-line)] rounded-lg hover:bg-[color:var(--color-surface)] transition">
               취소
             </button>
             <button onClick={onSave} disabled={saving} className="px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-dark transition disabled:opacity-50">
@@ -461,11 +461,11 @@ function InfoRow({ label, value, empty, badge }: {
 }) {
   return (
     <div className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
-      <span className="text-gray-500 text-sm">{label}</span>
+      <span className="text-[color:var(--color-ink-mute)] text-sm">{label}</span>
       {badge ? (
         <span className={`badge-${badge}`}>{value}</span>
       ) : (
-        <span className={`text-sm font-medium ${empty ? 'text-gray-300 italic' : 'text-gray-800'}`}>
+        <span className={`text-sm font-medium ${empty ? 'text-[color:var(--color-ink-disabled)] italic' : 'text-[color:var(--color-ink)]'}`}>
           {value}
         </span>
       )}

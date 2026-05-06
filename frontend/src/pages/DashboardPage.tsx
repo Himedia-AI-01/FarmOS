@@ -1,195 +1,445 @@
-﻿import { Link } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useScenario } from '@/context/ScenarioContext';
+import {
+  MdArrowForward,
+  MdAutoAwesome,
+  MdCloud,
+  MdLockClock,
+  MdPayments,
+  MdSensors,
+  MdShowChart,
+  MdThermostat,
+  MdWaterDrop,
+  MdWbSunny,
+  MdWifiOff,
+} from 'react-icons/md';
 import { useAuth } from '@/context/AuthContext';
+import { useAIAgent } from '@/hooks/useAIAgent';
 import { useSensorData } from '@/hooks/useSensorData';
-import { MdArrowForward, MdWifiOff } from 'react-icons/md';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
+import { AgentMarkdown } from '@/components/agent/AgentMarkdown';
+import { EmptyState, Skeleton, StatusDot } from '@/components/ui';
 
-interface ModuleInfo {
+interface CommandLink {
   to: string;
-  icon: string;
   label: string;
-  color: string;
-  summary: string;
-  status: { color: string; text: string; textColor: string; bgColor: string };
+  detail: string;
+  illust: string;
 }
 
-const STATIC_MODULES: ModuleInfo[] = [
+const COMMAND_LINKS: CommandLink[] = [
+  { to: '/iot', label: '시설 제어', detail: '센서·자동화 판단', illust: '/illustrations/module-iot.png' },
+  { to: '/diagnosis', label: '진단 워크벤치', detail: '이미지 진단·처방', illust: '/illustrations/module-diagnosis.png' },
+  { to: '/journal', label: '영농일지', detail: '음성 기록·통합일지', illust: '/illustrations/module-journal.png' },
+  { to: '/weather', label: '기상', detail: '예보 기반 작업 계획', illust: '/illustrations/module-weather.png' },
+  { to: '/market', label: '시세', detail: 'KAMIS 가격 변동', illust: '/illustrations/module-market.png' },
+  { to: '/subsidy', label: '공익직불', detail: '자격·근거 조항', illust: '/illustrations/module-subsidy.png' },
+  { to: '/reviews', label: '판매 인사이트', detail: '리뷰·전략', illust: '/illustrations/module-reviews.png' },
+];
+
+// 다중 에이전트·다중 도구를 동시에 발화시키는 헤비 워크로드. 단일 도구 호출이 아니라
+// orchestrator → 2-3 subagent 체이닝, 병렬 RAG, escalation 게이트를 보여주기 위한 카드.
+const AGENT_ACTIONS = [
   {
-    to: '/diagnosis',
-    icon: '/images/icons/diagnosis.jpg',
-    label: '해충 AI 진단',
-    color: 'bg-red-50 text-red-600',
-    summary: '진단 기능 준비 완료',
-    status: { color: 'bg-green-400', text: '준비', textColor: 'text-green-700', bgColor: 'bg-green-50' },
+    label: '이번 주 통합 운영 플랜',
+    detail: '5일 기상·작물 단계·IoT·일지·시세 통합',
+    prompt:
+      '이번 주(오늘부터 5일) 농장 운영 플랜을 종합해줘. 5일치 기상 위험(서리·폭염·강풍·곰팡이병 환경), 내 작물 단계, 최근 7일 IoT 자율 제어 이력, 영농일지 누락 여부, 주작물 시세 흐름을 모두 활용해서 요일별 권장 작업을 짜줘. "비가 목요일에 오면 화요일로 방제 당기기" 같은 조건부 의사결정도 포함해줘.',
+    icon: MdAutoAwesome,
   },
   {
-    to: '/reviews',
-    icon: '/images/icons/reviews.jpg',
-    label: '리뷰 분석 리포트',
-    color: 'bg-purple-50 text-purple-600',
-    summary: '리뷰 분석',
-    status: { color: 'bg-green-400', text: '준비', textColor: 'text-green-700', bgColor: 'bg-green-50' },
+    label: '방제 의사결정 보조',
+    detail: '병해충 진단 → 안전 검증 → 직불 의무 교차',
+    prompt:
+      '내 작물에서 지금 시기 가장 위험한 병해충을 진단하고, 추천 농약이 안전사용 기준에 맞는지 검증한 다음, 그 농약 사용이 공익직불 8대 준수사항(특히 농약 안전사용·기록보관)과 충돌하지 않는지까지 종합 점검해줘. 병해충 진단 → 농약 검증 → 직불 의무 교차 확인을 한 흐름으로.',
+    icon: MdWaterDrop,
   },
   {
-    to: '/documents',
-    icon: '/images/icons/documents.jpg',
-    label: '행정 서류 자동 생성',
-    color: 'bg-amber-50 text-amber-600',
-    summary: '서류 자동 생성',
-    status: { color: 'bg-blue-400', text: '준비', textColor: 'text-blue-700', bgColor: 'bg-blue-50' },
+    label: '올해 수익 시뮬레이션',
+    detail: '직불금·시세·노동시간·IoT 효율 ROI',
+    prompt:
+      '올해 내 농장 예상 수익을 시뮬레이션해줘. 받을 수 있는 공익직불금 합계, 주작물 KAMIS 시세 추세 기반 매출 추정, 영농일지 노동 시간, IoT 자율 제어 절감 효과를 모두 반영해서 시나리오(보수적/기대/낙관)별 수치로 보여줘. 가정과 출처를 명확히 표기해줘.',
+    icon: MdPayments,
   },
   {
-    to: '/weather',
-    icon: '/images/icons/weather.jpg',
-    label: '기상 연동 스케줄링',
-    color: 'bg-cyan-50 text-cyan-600',
-    summary: '기상 정보 연동',
-    status: { color: 'bg-green-400', text: '준비', textColor: 'text-green-700', bgColor: 'bg-green-50' },
-  },
-  {
-    to: '/harvest',
-    icon: '/images/icons/harvest.jpg',
-    label: '수확량 예측',
-    color: 'bg-green-50 text-green-600',
-    summary: '수확 예측 분석',
-    status: { color: 'bg-green-400', text: '준비', textColor: 'text-green-700', bgColor: 'bg-green-50' },
-  },
-  {
-    to: '/journal',
-    icon: '/images/icons/journal.jpg',
-    label: '영농일지',
-    color: 'bg-orange-50 text-orange-600',
-    summary: '영농 기록 관리',
-    status: { color: 'bg-green-400', text: '준비', textColor: 'text-green-700', bgColor: 'bg-green-50' },
+    label: '8대 준수사항 자가 점검',
+    detail: '공익직불 의무 8개 병렬 점검 + 일지 교차',
+    prompt:
+      '공익직불 8대 준수사항(경영체등록·농지유지·농약·비료·폐기물·교육·마을활동·영농기록) 각 항목을 시행지침 근거와 함께 점검하고, 내 영농일지·IoT 이력으로 실제 이행 여부를 교차 확인해줘. 미흡한 항목과 보완 방법을 우선순위로 알려줘.',
+    icon: MdShowChart,
   },
 ];
 
-function getIoTModule(connected: boolean, hasData: boolean): ModuleInfo {
-  if (!connected) {
-    return {
-      to: '/iot',
-      icon: '/images/icons/iot-sensors.jpg',
-      label: 'IoT 센서 대시보드',
-      color: 'bg-gray-100 text-gray-400',
-      summary: '서버 연결 안 됨',
-      status: { color: 'bg-gray-300', text: '비활성', textColor: 'text-gray-400', bgColor: 'bg-gray-100' },
-    };
-  }
-  if (!hasData) {
-    return {
-      to: '/iot',
-      icon: '/images/icons/iot-sensors.jpg',
-      label: 'IoT 센서 대시보드',
-      color: 'bg-gray-100 text-gray-400',
-      summary: '센서 데이터 없음',
-      status: { color: 'bg-yellow-400', text: '대기', textColor: 'text-yellow-700', bgColor: 'bg-yellow-50' },
-    };
-  }
-  return {
-    to: '/iot',
-    icon: '/images/icons/iot-sensors.jpg',
-    label: 'IoT 센서 대시보드',
-    color: 'bg-blue-50 text-blue-600',
-    summary: '센서 모니터링 중',
-    status: { color: 'bg-green-400', text: '정상', textColor: 'text-green-700', bgColor: 'bg-green-50' },
-  };
+function formatTime(value?: string | null) {
+  if (!value) return '대기';
+  return new Date(value).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function DashboardPage() {
-  const { currentDay, notifications } = useScenario();
-  const { user } = useAuth();
-  const { connected, latest } = useSensorData();
-  const recentAlerts = notifications.filter(n => !n.read).slice(0, 3);
+function metricValue(value: number | null | undefined, digits = 1) {
+  if (value == null) return null;
+  return value.toFixed(digits);
+}
 
-  const iotModule = getIoTModule(connected, !!latest);
-  const inactive = !connected || !latest;
-  const MODULES = [iotModule, ...STATIC_MODULES];
+function controlLabel(controlType?: string) {
+  const labels: Record<string, string> = {
+    ventilation: '환기',
+    irrigation: '관수',
+    lighting: '조명',
+    shading: '차광/보온',
+  };
+  return controlType ? labels[controlType] ?? controlType : '판단 없음';
+}
+
+
+export default function DashboardPage() {
+  const { user } = useAuth();
+  const { connected, latest, alerts, irrigations } = useSensorData();
+  const { status, decisions, loading: agentLoading } = useAIAgent();
+  const { briefing, briefingLoading, fetchBriefing, sendAndOpen } = useFarmAgentContext();
+
+  // 브리핑 자동 로드는 FarmAgentProvider 가 한 번만 트리거 — 여기서 중복 호출하면
+  // 사이드 콘솔과 동시에 두 번 fetch 되어 화면이 깜박입니다.
+
+  const hasData = Boolean(latest);
+  const latestDecision = decisions[0] ?? status?.latest_decision ?? null;
+  const agentMode = agentLoading ? '동기화 중' : status?.enabled ? '자율 제어' : status ? '대기' : '미연결';
+  const riskCount = useMemo(() => alerts.filter((alert) => !alert.resolved).length, [alerts]);
+
+  const sensorTiles = [
+    {
+      label: '토양 습도',
+      value: metricValue(latest?.soilMoisture),
+      unit: '%',
+      icon: MdWaterDrop,
+      tintClass: 'tint-info',
+      iconClass: 'text-[color:var(--color-info)]',
+    },
+    {
+      label: '온도',
+      value: metricValue(latest?.temperature),
+      unit: '°C',
+      icon: MdThermostat,
+      tintClass: 'tint-danger',
+      iconClass: 'text-[color:var(--color-danger)]',
+    },
+    {
+      label: '대기 습도',
+      value: metricValue(latest?.humidity),
+      unit: '%',
+      icon: MdCloud,
+      tintClass: 'tint-success',
+      iconClass: 'text-[color:var(--color-primary)]',
+    },
+    {
+      label: '조도',
+      value: metricValue(latest?.lightIntensity, 0),
+      unit: ' lux',
+      icon: MdWbSunny,
+      tintClass: 'tint-warning',
+      iconClass: 'text-[color:var(--color-accent-dark)]',
+    },
+  ];
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 6) return '늦은 새벽이에요';
+    if (h < 12) return '좋은 아침이에요';
+    if (h < 18) return '좋은 오후예요';
+    return '좋은 저녁이에요';
+  })();
 
   return (
-    <div className="space-y-6 max-w-[1200px]">
-      {/* Greeting */}
-      <div className="card bg-gradient-to-br from-primary to-primary-light text-white !p-5 sm:!p-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold">안녕하세요, {user?.name}님!</h2>
-            <p className="text-white/90 mt-1.5 text-base sm:text-lg">
-              FarmOS 2.0 스마트 농장 관리
-            </p>
-            <p className="text-white/70 mt-1 text-sm">
-              시나리오 {currentDay}일차 진행 중
-            </p>
-          </div>
-          <img src="/images/farm-hero.jpg" alt="농장" className="hidden sm:block w-28 h-28 rounded-2xl object-cover shadow-lg" />
-        </div>
-      </div>
+    <div className="space-y-7 lg:space-y-9">
 
-      {/* Module Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-5">
-        {MODULES.map(({ to, icon, label, color, summary, status }, index) => {
-          const isIoTInactive = to === '/iot' && inactive;
-          return (
-            <motion.div
-              key={to}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.06, ease: 'easeOut' }}
+      {/* ──────────── Hero strip — compact greeting ──────────── */}
+      <section className="rise rise-1 flex flex-wrap items-end justify-between gap-x-6 gap-y-3" aria-label="대시보드 헤더">
+        <div className="min-w-0">
+          <p className="eyebrow">{greeting}</p>
+          <h2 className="display-1 mt-1">
+            {user?.farmname || `${user?.name ?? '농장'}님`}
+          </h2>
+          <p className="mt-2 max-w-[56ch] text-helper">
+            에이전트가 오늘의 농장 데이터를 정리해 두었어요. 우선순위를 확인하세요.
+          </p>
+        </div>
+        <div
+          className="inline-flex items-center gap-2 rounded-full border border-[color:var(--color-line)] bg-[color:var(--color-card)] px-3.5 py-2 text-[13px] font-semibold shadow-[var(--shadow-xs)]"
+          role="status"
+          aria-live="polite"
+        >
+          {connected && hasData ? (
+            <>
+              <StatusDot tone="success" pulse />
+              <span className="text-[color:var(--color-success)]">실시간</span>
+              <span className="text-[color:var(--color-ink-faint)]">·</span>
+              <span className="num text-[color:var(--color-ink-soft)]">{formatTime(latest?.timestamp)}</span>
+            </>
+          ) : (
+            <>
+              <MdWifiOff aria-hidden className="text-[15px] text-[color:var(--color-ink-mute)]" />
+              <span className="text-[color:var(--color-ink-mute)]">오프라인</span>
+            </>
+          )}
+        </div>
+      </section>
+
+      {/* ──────────── Field data — sensors + status strip ──────────── */}
+      <section className="rise rise-2 space-y-3" aria-labelledby="field-data-title">
+        <div className="flex items-end justify-between">
+          <h3 id="field-data-title" className="text-[1.125rem] font-bold tracking-[-0.018em] text-[color:var(--color-ink)]">
+            현장 데이터
+          </h3>
+          <Link
+            to="/iot"
+            className="text-[13px] font-semibold text-[color:var(--color-primary-dark)] transition hover:text-[color:var(--color-primary)]"
+          >
+            전체 보기 →
+          </Link>
+        </div>
+
+        <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {sensorTiles.map(({ label, value, unit, icon: Icon, tintClass, iconClass }) => (
+            <li
+              key={label}
+              className="rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-4 transition-colors hover:border-[color:var(--color-primary-light)] sm:p-5"
             >
-              <Link to={to} className={`card-hover group !p-4 sm:!p-6 block ${isIoTInactive ? 'opacity-60 grayscale' : ''}`}>
-                <div className="flex items-start justify-between">
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden ${color}`}>
-                    {isIoTInactive ? (
-                      <MdWifiOff className="text-2xl text-gray-400" />
-                    ) : (
-                      <img src={icon} alt={label} className="w-10 h-10 rounded-xl object-cover" />
-                    )}
-                  </div>
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${status.textColor} ${status.bgColor}`}>
-                    <span className={`w-2 h-2 rounded-full ${status.color}`} />
-                    {status.text}
-                  </span>
-                </div>
-                <h3 className={`mt-4 text-lg font-bold ${isIoTInactive ? 'text-gray-400' : 'text-gray-900'}`}>{label}</h3>
-                <p className={`text-base mt-1 ${isIoTInactive ? 'text-gray-300' : 'text-gray-500'}`}>{summary}</p>
-                <div className={`mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold transition-all ${
-                  isIoTInactive
-                    ? 'bg-gray-100 text-gray-400'
-                    : 'bg-primary/5 text-primary group-hover:bg-primary group-hover:text-white'
-                }`}>
-                  바로가기 <MdArrowForward className="text-xl" />
-                </div>
-              </Link>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      {/* Recent Alerts */}
-      {recentAlerts.length > 0 && (
-        <div className="card !p-6">
-          <h3 className="section-title mb-4">최근 알림</h3>
-          <div className="space-y-3">
-            {recentAlerts.map(n => (
-              <div key={n.id} className={`flex items-start gap-4 p-4 rounded-xl ${
-                n.type === 'danger' ? 'bg-red-50 border border-red-100' :
-                n.type === 'warning' ? 'bg-yellow-50 border border-yellow-100' :
-                n.type === 'success' ? 'bg-green-50 border border-green-100' :
-                'bg-blue-50 border border-blue-100'
-              }`}>
-                <span className={`mt-0.5 w-3 h-3 rounded-full flex-shrink-0 ${
-                  n.type === 'danger' ? 'bg-danger' :
-                  n.type === 'warning' ? 'bg-warning' :
-                  n.type === 'success' ? 'bg-success' : 'bg-info'
-                }`} />
-                <div>
-                  <p className="font-semibold text-gray-900">{n.title}</p>
-                  <p className="text-sm text-gray-600 mt-0.5">{n.message}</p>
-                </div>
+              <div className="flex items-start justify-between">
+                <span
+                  aria-hidden
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl ${tintClass} ${iconClass}`}
+                >
+                  <Icon className="text-[20px]" />
+                </span>
+                <span className="text-[12px] font-semibold text-[color:var(--color-ink-faint)]">{label}</span>
               </div>
-            ))}
+              <p className="mt-3 num text-[1.75rem] font-bold leading-[1.05] tracking-[-0.022em] text-[color:var(--color-ink)] sm:text-[2rem]">
+                {value ?? '--'}
+                <span className="ml-1 text-[14px] font-semibold text-[color:var(--color-ink-mute)]">
+                  {unit}
+                </span>
+              </p>
+            </li>
+          ))}
+        </ul>
+
+        <dl className="grid grid-cols-3 divide-x divide-[color:var(--color-line-soft)] overflow-hidden rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] text-center">
+          <div className="px-4 py-3">
+            <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">에이전트</dt>
+            <dd className="mt-1 text-[15px] font-bold text-[color:var(--color-ink)]">{agentMode}</dd>
           </div>
+          <div className="px-4 py-3">
+            <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">미해결 알림</dt>
+            <dd className="mt-1 num text-[15px] font-bold text-[color:var(--color-ink)]">
+              {riskCount}
+              <span className="ml-0.5 text-[12px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
+            </dd>
+          </div>
+          <div className="px-4 py-3">
+            <dt className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--color-ink-faint)]">관수 이력</dt>
+            <dd className="mt-1 num text-[15px] font-bold text-[color:var(--color-ink)]">
+              {irrigations.length}
+              <span className="ml-0.5 text-[12px] font-semibold text-[color:var(--color-ink-mute)]">건</span>
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      {/* ──────────── Today's briefing — featured AI card ──────────── */}
+      <section className="rise rise-3 overflow-hidden rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)]" aria-labelledby="briefing-title">
+        <header className="flex items-center gap-2.5 border-b border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)] px-5 py-3.5 sm:px-6">
+          <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]">
+            <MdAutoAwesome className="text-[16px]" />
+          </span>
+          <h3 id="briefing-title" className="text-[15px] font-bold text-[color:var(--color-ink)]">오늘의 브리핑</h3>
+          {briefing?.cached && (
+            <span className="chip text-[11px]" title="캐시된 응답">cached</span>
+          )}
+          <button
+            type="button"
+            onClick={() => void fetchBriefing(true)}
+            disabled={briefingLoading}
+            className="ml-auto rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-[color:var(--color-primary-dark)] transition hover:bg-[color:var(--color-primary-soft)] disabled:opacity-50"
+          >
+            {briefingLoading ? '분석 중...' : '다시 분석'}
+          </button>
+        </header>
+        <div className="max-h-[24rem] overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+          {briefingLoading && !briefing ? (
+            <Skeleton shape="text" lines={5} label="브리핑 생성 중" />
+          ) : briefing ? (
+            <div className="text-[15px] leading-[1.75] text-[color:var(--color-ink-soft)]">
+              <AgentMarkdown content={briefing.content} />
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              icon={<MdAutoAwesome className="text-[22px]" />}
+              title="브리핑이 아직 준비되지 않았어요"
+              description="센서 데이터가 들어오면 자동으로 정리해 드릴게요."
+            />
+          )}
         </div>
-      )}
+      </section>
+
+      {/* ──────────── Agent actions ──────────── */}
+      <section className="rise rise-4" aria-labelledby="agent-actions-title">
+        <div className="mb-5">
+          <h3 id="agent-actions-title" className="text-[1.375rem] font-bold tracking-[-0.02em] text-[color:var(--color-ink)]">
+            에이전트에게 맡기기
+          </h3>
+          <p className="mt-1.5 text-helper">
+            한 번 누르면 사이드 콘솔에서 분석을 시작합니다
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {AGENT_ACTIONS.map((action, idx) => (
+            <motion.button
+              key={action.label}
+              type="button"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.06 + idx * 0.05, duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}
+              onClick={() => void sendAndOpen(action.prompt)}
+              className="group relative flex flex-col overflow-hidden rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-5 text-left transition-all duration-200 hover:-translate-y-1 hover:border-[color:var(--color-primary-light)] hover:shadow-[var(--shadow-md)]"
+            >
+              <span aria-hidden className="flex h-11 w-11 items-center justify-center rounded-xl bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)] transition group-hover:bg-[color:var(--color-primary)] group-hover:text-white">
+                <action.icon className="text-[22px]" />
+              </span>
+              <p className="mt-4 text-[16.5px] font-bold leading-[1.3] tracking-[-0.015em] text-[color:var(--color-ink)]">
+                {action.label}
+              </p>
+              <p className="mt-1.5 text-[14px] leading-[1.55] text-[color:var(--color-ink-mute)]">
+                {action.detail}
+              </p>
+              <span className="mt-5 inline-flex items-center gap-1 text-[13px] font-semibold text-[color:var(--color-primary-dark)] transition-transform group-hover:translate-x-0.5">
+                위임하기 <MdArrowForward aria-hidden className="text-[15px]" />
+              </span>
+            </motion.button>
+          ))}
+        </div>
+      </section>
+
+      {/* ──────────── Modules + insights ──────────── */}
+      <section className="rise grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]" aria-labelledby="modules-title">
+        <div>
+          <div className="mb-5">
+            <h3 id="modules-title" className="text-[1.375rem] font-bold tracking-[-0.02em] text-[color:var(--color-ink)]">
+              둘러보기
+            </h3>
+            <p className="mt-1.5 text-helper">
+              직접 모듈로 이동하거나 에이전트가 호출할 수 있어요
+            </p>
+          </div>
+
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {COMMAND_LINKS.map(({ to, label, detail, illust }, index) => (
+              <motion.li
+                key={to}
+                // Last (orphan) card spans 2 cols on xl so 7 items lay as 3+3+(2 wide) — no lonely card
+                className={index === COMMAND_LINKS.length - 1 ? 'sm:col-span-2 xl:col-span-2' : ''}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.04 + index * 0.04, duration: 0.25 }}
+              >
+                <Link
+                  to={to}
+                  className="group flex h-full items-center gap-4 rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-3.5 pr-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[color:var(--color-primary-light)] hover:shadow-[var(--shadow-sm)]"
+                >
+                  <span
+                    aria-hidden
+                    className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[color:var(--color-surface)] transition group-hover:bg-[color:var(--color-primary-soft)]"
+                  >
+                    <img src={illust} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[16px] font-bold tracking-[-0.012em] text-[color:var(--color-ink)]">
+                      {label}
+                    </span>
+                    <span className="mt-1 block truncate text-[13.5px] text-[color:var(--color-ink-mute)]">
+                      {detail}
+                    </span>
+                  </span>
+                  <MdArrowForward
+                    aria-hidden
+                    className="flex-shrink-0 text-[20px] text-[color:var(--color-ink-faint)] transition group-hover:translate-x-0.5 group-hover:text-[color:var(--color-primary)]"
+                  />
+                </Link>
+              </motion.li>
+            ))}
+          </ul>
+        </div>
+
+        <aside className="space-y-5" aria-label="에이전트 인사이트">
+          {/* Recent rulings */}
+          <div className="rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-5">
+            <div className="flex items-center gap-2.5">
+              <span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-primary)]">
+                <MdLockClock className="text-[16px]" />
+              </span>
+              <h3 className="text-[16px] font-bold tracking-[-0.012em] text-[color:var(--color-ink)]">
+                최근 자율 판단
+              </h3>
+            </div>
+            {decisions.length === 0 ? (
+              <EmptyState
+                compact
+                title="기록이 없어요"
+                description="자율 판단이 발생하면 여기에 정리됩니다."
+                className="mt-3 rounded-xl bg-[color:var(--color-surface)]"
+              />
+            ) : (
+              <ul className="mt-3 space-y-0.5">
+                {decisions.slice(0, 4).map((decision) => (
+                  <li key={decision.id}>
+                    <Link
+                      to="/iot"
+                      className="block rounded-xl px-3 py-3 transition hover:bg-[color:var(--color-surface)]"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[14.5px] font-bold text-[color:var(--color-ink)]">
+                          {controlLabel(decision.control_type)}
+                        </span>
+                        <time className="num text-[12.5px] font-semibold text-[color:var(--color-ink-mute)]">
+                          {formatTime(decision.timestamp)}
+                        </time>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[13.5px] leading-[1.55] text-[color:var(--color-ink-mute)]">
+                        {decision.reason}
+                      </p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Agent handoff */}
+          <div className="relative overflow-hidden rounded-2xl bg-[color:var(--color-primary-dark)] p-5 text-white shadow-[var(--shadow-md)]">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-10 -right-10 h-44 w-44 rounded-full bg-[color:var(--color-primary)] opacity-50 blur-3xl"
+            />
+            <div className="relative">
+              <div className="flex items-center gap-2">
+                <MdAutoAwesome aria-hidden className="text-[18px] text-[color:var(--color-accent-light)]" />
+                <span className="text-[14px] font-semibold tracking-tight opacity-95">에이전트 인계</span>
+              </div>
+              <p className="mt-3 text-[14.5px] leading-[1.7] opacity-95">
+                {latestDecision?.reason ?? '최근 자동 판단이 아직 없습니다.'}
+              </p>
+              <Link
+                to="/iot"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/15 px-4 py-3 text-[14px] font-semibold text-white backdrop-blur-sm transition hover:bg-white/25"
+              >
+                <MdSensors aria-hidden className="text-[17px]" />
+                제어 패널 열기
+              </Link>
+            </div>
+          </div>
+        </aside>
+      </section>
     </div>
   );
 }

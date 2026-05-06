@@ -43,15 +43,15 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b">
-          <h3 className="text-lg font-bold text-gray-800">작물 프로필 설정</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+          <h3 className="text-lg font-bold text-[color:var(--color-ink)]">작물 프로필 설정</h3>
+          <button onClick={onClose} className="p-1 hover:bg-[color:var(--color-surface-deep)] rounded-lg">
             <MdClose className="text-xl" />
           </button>
         </div>
 
         {/* Presets */}
         <div className="px-5 pt-4">
-          <p className="text-sm text-gray-500 mb-2">프리셋</p>
+          <p className="text-sm text-[color:var(--color-ink-mute)] mb-2">프리셋</p>
           <div className="flex flex-wrap gap-2">
             {Object.keys(PRESETS).map(name => (
               <button
@@ -60,7 +60,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
                 className={`px-3 py-1.5 rounded-full text-sm border transition-all ${
                   form.name === name
                     ? 'bg-green-600 text-white border-green-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:border-green-400'
+                    : 'bg-white text-[color:var(--color-ink-soft)] border-[color:var(--color-line)] hover:border-green-400'
                 }`}
               >
                 <MdAutoFixHigh className="inline mr-1" />
@@ -74,7 +74,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
         <div className="p-5 space-y-4">
           {/* 작물명 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">작물명</label>
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">작물명</label>
             <input
               type="text"
               value={form.name}
@@ -85,7 +85,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
 
           {/* 생육 단계 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">생육 단계</label>
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">생육 단계</label>
             <select
               value={form.growth_stage}
               onChange={e => setForm({ ...form, growth_stage: e.target.value })}
@@ -97,7 +97,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
 
           {/* 적정 온도 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">적정 온도 (C)</label>
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">적정 온도 (C)</label>
             <div className="flex gap-2 items-center">
               <input
                 type="number"
@@ -105,7 +105,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
                 onChange={e => setForm({ ...form, optimal_temp: [Number(e.target.value), form.optimal_temp[1]] })}
                 className="w-24 px-3 py-2 border rounded-lg text-center"
               />
-              <span className="text-gray-400">~</span>
+              <span className="text-[color:var(--color-ink-faint)]">~</span>
               <input
                 type="number"
                 value={form.optimal_temp[1]}
@@ -117,7 +117,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
 
           {/* 적정 습도 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">적정 습도 (%)</label>
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">적정 습도 (%)</label>
             <div className="flex gap-2 items-center">
               <input
                 type="number"
@@ -125,7 +125,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
                 onChange={e => setForm({ ...form, optimal_humidity: [Number(e.target.value), form.optimal_humidity[1]] })}
                 className="w-24 px-3 py-2 border rounded-lg text-center"
               />
-              <span className="text-gray-400">~</span>
+              <span className="text-[color:var(--color-ink-faint)]">~</span>
               <input
                 type="number"
                 value={form.optimal_humidity[1]}
@@ -137,7 +137,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
 
           {/* 일조시간 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">적정 일조시간</label>
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">적정 일조시간</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -147,16 +147,16 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
                 min={0}
                 max={24}
               />
-              <span className="text-gray-500 text-sm">시간</span>
+              <span className="text-[color:var(--color-ink-mute)] text-sm">시간</span>
             </div>
           </div>
 
           {/* 양액 배합 N-P-K */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">양액 배합비 (N-P-K)</label>
+            <label className="block text-sm font-medium text-[color:var(--color-ink-soft)] mb-1">양액 배합비 (N-P-K)</label>
             <div className="flex gap-2 items-center">
               <div className="text-center">
-                <span className="text-xs text-gray-500">N</span>
+                <span className="text-xs text-[color:var(--color-ink-mute)]">N</span>
                 <input
                   type="number"
                   step="0.1"
@@ -165,9 +165,9 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
                   className="w-20 px-2 py-2 border rounded-lg text-center"
                 />
               </div>
-              <span className="text-gray-400 mt-4">:</span>
+              <span className="text-[color:var(--color-ink-faint)] mt-4">:</span>
               <div className="text-center">
-                <span className="text-xs text-gray-500">P</span>
+                <span className="text-xs text-[color:var(--color-ink-mute)]">P</span>
                 <input
                   type="number"
                   step="0.1"
@@ -176,9 +176,9 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
                   className="w-20 px-2 py-2 border rounded-lg text-center"
                 />
               </div>
-              <span className="text-gray-400 mt-4">:</span>
+              <span className="text-[color:var(--color-ink-faint)] mt-4">:</span>
               <div className="text-center">
-                <span className="text-xs text-gray-500">K</span>
+                <span className="text-xs text-[color:var(--color-ink-mute)]">K</span>
                 <input
                   type="number"
                   step="0.1"
@@ -195,7 +195,7 @@ export default function CropProfileModal({ open, onClose, current, onSave }: Pro
         <div className="flex justify-end gap-2 p-5 border-t">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="px-4 py-2 text-sm text-[color:var(--color-ink-mute)] hover:bg-[color:var(--color-surface-deep)] rounded-lg"
           >
             취소
           </button>

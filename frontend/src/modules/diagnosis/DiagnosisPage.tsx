@@ -1,12 +1,14 @@
 ﻿import { useState, useCallback, useEffect, useRef } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdCameraAlt, MdHistory, MdCheckCircle, MdChat, MdInfoOutline, MdDeleteOutline, MdSearch } from 'react-icons/md';
+import { MdCameraAlt, MdHistory, MdCheckCircle, MdChat, MdInfoOutline, MdDeleteOutline, MdSearch, MdAutoAwesome } from 'react-icons/md';
+import { useFarmAgentContext } from '@/context/FarmAgentContext';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import DaumPostcode from 'react-daum-postcode';
 import { formatDaumAddress, type DaumPostcodeData } from '@/utils/daumAddress';
+import DiagnosisHistorySkeleton from './DiagnosisHistorySkeleton';
 
 const CROPS = [
   "감자", "고추", "들깨", "무", "배추", "벼", "양배추", "오이", "옥수수", "콩", "토마토", "파"
@@ -22,7 +24,7 @@ const PESTS = [
   "톱다리개미허리노린재", "파밤나방", "홍비단노린재"
 ];
 
-const API_BASE = 'http://localhost:8000/api/v1/diagnosis';
+const API_BASE = '/api/v1/diagnosis';
 
 const TIPS = [
   "작물의 잎 이면까지 꼼꼼히 촬영하면 더 정확한 해충 진단이 가능합니다.",
@@ -53,6 +55,31 @@ const LOADING_MESSAGES = [
 export default function DiagnosisPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { sendAndOpen } = useFarmAgentContext();
+
+  const askAgentForRecord = (e: React.MouseEvent, record: { crop?: string; pest?: string; region?: string }) => {
+    e.stopPropagation();
+    const parts = [
+      record.crop && `${record.crop}`,
+      record.pest && `${record.pest}`,
+    ]
+      .filter(Boolean)
+      .join('의 ');
+    const prompt = parts
+      ? `${parts} 진단 결과를 다시 검토하고, 친환경 방제 우선으로 권장 조치를 단계별로 알려주세요. 현재 기상과 약제 안전사용기준도 함께 고려해주세요.`
+      : '최근 진단 기록을 종합해서 우선순위가 높은 방제 조치를 알려주세요.';
+    void sendAndOpen(prompt);
+  };
+
+  const askAgentGeneral = (variant: 'plan' | 'safe' | 'history') => {
+    const prompt =
+      variant === 'plan'
+        ? `${selectedCrop || '내 작물'} 의 이번 주 예찰·방제 계획을 기상과 함께 짜주세요.`
+        : variant === 'safe'
+          ? `${selectedCrop || '내 작물'} 에 자주 쓰는 농약의 잔류허용기준과 안전사용 시기를 정리해주세요.`
+          : '내 진단 이력을 분석해서 반복되는 해충 패턴이 있는지, 예방책은 무엇인지 알려주세요.';
+    void sendAndOpen(prompt);
+  };
 
   const [selectedRegion, setSelectedRegion] = useState("");
   const [selectedCrop, setSelectedCrop] = useState("");
@@ -60,7 +87,18 @@ export default function DiagnosisPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [randomTip, setRandomTip] = useState(TIPS[0]);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
-  const [history, setHistory] = useState<any[]>([]);
+  type DiagnosisRecord = {
+    id: number;
+    crop?: string;
+    pest?: string;
+    region?: string;
+    date?: string;
+    created_at?: string | number;
+  };
+  const [history, setHistory] = useState<DiagnosisRecord[]>([]);
+  // 첫 진입에는 fetch 가 끝나기 전까지 skeleton 을 보여주기 위해 true 로 시작.
+  // user 가 없는 경우 useEffect 에서 false 로 내려준다 (fetch 자체가 안 일어나므로).
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   
   // 페이징 관련 상태
@@ -106,6 +144,7 @@ export default function DiagnosisPage() {
   }, [isAnalyzing]);
 
   const fetchHistory = async () => {
+    setLoadingHistory(true);
     try {
       const response = await fetch(`${API_BASE}/history`, { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch');
@@ -114,6 +153,8 @@ export default function DiagnosisPage() {
     } catch (error) {
       console.error("Failed to fetch history:", error);
       toast.error("진단 기록을 불러오는데 실패했습니다. 서버 연결을 확인해주세요.");
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -126,6 +167,9 @@ export default function DiagnosisPage() {
       setSelectedRegion(displayRegion);
       setSelectedCrop(user.main_crop || "배추");
       fetchHistory();
+    } else {
+      // user 없으면 fetch 자체를 안 하므로 skeleton 무한 표시 방지.
+      setLoadingHistory(false);
     }
   }, [user]);
 
@@ -244,8 +288,8 @@ export default function DiagnosisPage() {
       const pestToUse = (!isTest && detectedPest) ? detectedPest : testPest;
 
       if (!isTest && !detectedPest) {
-        toast('VLM 자동 판독 서버에 연결할 수 없어 선택된 해충으로 임시 진단합니다.', {
-          icon: '⚠️'
+        toast('AI 판독기가 일시 중단됐습니다. 선택하신 해충으로 진단을 진행합니다.', {
+          icon: '💤'
         });
       } else if (!isTest && detectedPest) {
         toast.success(`AI 판독: ${detectedPest}`, { icon: '🤖' });
@@ -280,13 +324,14 @@ export default function DiagnosisPage() {
       fetchHistory();
       navigate('/diagnosis/chat', { state: { diagnosisContext: savedData } });
       
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
+      if (e?.name === 'AbortError') {
         console.log("Diagnosis aborted by user");
         return;
       }
       console.error("Save error:", err);
-      toast.error(err.message || 'AI 진단 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      toast.error(e?.message || 'AI 진단 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
       setIsAnalyzing(false);
     } finally {
       if (abortControllerRef.current === controller) {
@@ -313,7 +358,7 @@ export default function DiagnosisPage() {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [isPostcodeOpen]);
 
-  const onDrop = useCallback((acceptedFiles: File[], fileRejections: any[]) => {
+  const onDrop = useCallback((acceptedFiles: File[], fileRejections: FileRejection[]) => {
     if (fileRejections.length > 0) {
       const error = fileRejections[0].errors[0];
       if (error.code === 'file-invalid-type' || error.code === 'invalid-extension') {
@@ -328,6 +373,9 @@ export default function DiagnosisPage() {
       setSelectedFile(acceptedFiles[0]);
       startDiagnosis(false, acceptedFiles[0]);
     }
+    // selectedCrop/Region/testPest are read inside startDiagnosis closure;
+    // intentionally omit startDiagnosis to avoid re-creating onDrop on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCrop, selectedRegion, testPest]);
 
   // 파일 확장자 엄격 검증 함수
@@ -368,14 +416,14 @@ export default function DiagnosisPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="card bg-white border border-gray-100 shadow-sm">
+      <div className="card bg-white border border-[color:var(--color-line-soft)] shadow-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <h2 className="text-lg font-bold text-[color:var(--color-ink)] flex items-center gap-2">
             <MdInfoOutline className="text-primary" />
             진단 환경 설정
           </h2>
           {isAutoFilled && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-600 text-xs font-bold rounded-full border border-green-100">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary)] text-xs font-bold rounded-full border border-[color:var(--color-primary-soft)]">
               <MdCheckCircle className="text-sm" />
               내 농장 정보 적용됨
             </span>
@@ -384,7 +432,7 @@ export default function DiagnosisPage() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5 flex flex-col">
-            <label className="text-xs font-bold text-gray-400 ml-1">지역/상세주소 (기상청 연동)</label>
+            <label className="text-xs font-bold text-[color:var(--color-ink-faint)] ml-1">지역/상세주소 (기상청 연동)</label>
             <div className="flex gap-2">
               <input 
                 type="text"
@@ -399,7 +447,7 @@ export default function DiagnosisPage() {
                   }
                 }}
                 tabIndex={0}
-                className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
+                className="w-full p-3 rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
               />
               <button 
                 type="button"
@@ -427,14 +475,14 @@ export default function DiagnosisPage() {
                   className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden flex flex-col"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  <div className="flex justify-between items-center p-4 border-b border-gray-100">
-                    <h3 id="diagnosis-postcode-modal-title" className="font-bold text-gray-800 text-lg">주소 검색</h3>
+                  <div className="flex justify-between items-center p-4 border-b border-[color:var(--color-line-soft)]">
+                    <h3 id="diagnosis-postcode-modal-title" className="font-bold text-[color:var(--color-ink)] text-lg">주소 검색</h3>
                     <button 
                       type="button"
                       ref={postcodeCloseButtonRef}
                       aria-label="주소 검색 닫기"
                       onClick={() => setIsPostcodeOpen(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      className="text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-mute)] transition-colors"
                     >
                       ✕ 닫기
                     </button>
@@ -449,11 +497,11 @@ export default function DiagnosisPage() {
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-400 ml-1">작물 (농약 안전정보 연동)</label>
+            <label className="text-xs font-bold text-[color:var(--color-ink-faint)] ml-1">작물 (농약 안전정보 연동)</label>
             <select 
               value={selectedCrop} 
               onChange={(e) => setSelectedCrop(e.target.value)}
-              className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
+              className="w-full p-3 rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] focus:bg-white focus:ring-2 focus:ring-primary/20 transition-all outline-none cursor-pointer"
             >
               <option value="" disabled>작물 선택</option>
               {CROPS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -465,17 +513,17 @@ export default function DiagnosisPage() {
       <div
         {...getRootProps()}
         className={`card border-2 border-dashed cursor-pointer transition-all text-center py-16 ${
-          isDragActive ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-primary/40 hover:bg-gray-50/50'
+          isDragActive ? 'border-primary bg-primary/5' : 'border-[color:var(--color-line)] hover:border-primary/40 hover:bg-[color:var(--color-surface)]/50'
         }`}
       >
         <input {...customInputProps} />
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <MdCameraAlt className="text-4xl text-primary" />
         </div>
-        <p className="text-xl font-bold text-gray-800">
+        <p className="text-xl font-bold text-[color:var(--color-ink)]">
           {isDragActive ? '여기에 사진을 놓으세요!' : '해충 사진을 업로드하세요'}
         </p>
-        <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
+        <p className="text-sm text-[color:var(--color-ink-faint)] mt-2 max-w-xs mx-auto">
           작물의 특징이나 해충이 잘 보이도록 근접 촬영한 사진일수록 정확합니다
         </p>
         <div className="flex justify-center">
@@ -485,8 +533,44 @@ export default function DiagnosisPage() {
         </div>
       </div>
 
-      <div className="card bg-amber-50/50 border border-amber-100 border-dashed">
-        <div className="flex items-center gap-2 mb-4 text-amber-700 font-bold text-sm">
+      <div className="card border border-primary/20 bg-primary/[0.03]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <MdAutoAwesome className="text-xl" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-[color:var(--color-ink)]">에이전트에게 묻기</p>
+              <p className="text-xs text-[color:var(--color-ink-mute)]">
+                기상·약제 안전·진단 이력을 함께 분석해 답합니다.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => askAgentGeneral('plan')}
+              className="rounded-lg border border-primary/30 bg-white px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5 transition"
+            >
+              이번 주 방제 계획 짜기
+            </button>
+            <button
+              onClick={() => askAgentGeneral('safe')}
+              className="rounded-lg border border-[color:var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+            >
+              농약 안전사용 정리
+            </button>
+            <button
+              onClick={() => askAgentGeneral('history')}
+              className="rounded-lg border border-[color:var(--color-line)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-ink-soft)] hover:border-primary/30 hover:text-primary transition"
+            >
+              내 진단 이력 분석
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card bg-[color:var(--tint-warning)]/50 border border-amber-100 border-dashed">
+        <div className="flex items-center gap-2 mb-4 text-[color:var(--color-accent-dark)] font-bold text-sm">
           <span className="px-2 py-0.5 bg-amber-200 rounded-md text-[10px]">FIXED</span>
           임시 VLM 진단 테스트 (해충 강제 지정)
         </div>
@@ -507,13 +591,13 @@ export default function DiagnosisPage() {
         </div>
       </div>
 
-      <div className="card border border-gray-100">
+      <div className="card border border-[color:var(--color-line-soft)]">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-gray-100 rounded-lg">
-              <MdHistory className="text-xl text-gray-600" />
+            <div className="p-2 bg-[color:var(--color-surface-deep)] rounded-lg">
+              <MdHistory className="text-xl text-[color:var(--color-ink-mute)]" />
             </div>
-            <h3 className="text-lg font-bold text-gray-800">최근 진단 기록</h3>
+            <h3 className="text-lg font-bold text-[color:var(--color-ink)]">최근 진단 기록</h3>
           </div>
           
           {history.length > 0 && (
@@ -521,14 +605,14 @@ export default function DiagnosisPage() {
               {selectedIds.length > 0 && (
                 <button 
                   onClick={() => setSelectedIds([])}
-                  className="text-xs font-bold text-red-400 hover:text-red-600 transition-colors cursor-pointer mr-2"
+                  className="text-xs font-bold text-red-400 hover:text-[color:var(--color-danger)] transition-colors cursor-pointer mr-2"
                 >
                   선택 해제 ({selectedIds.length})
                 </button>
               )}
               <button 
                 onClick={toggleSelectAll}
-                className="text-xs font-bold text-gray-400 hover:text-primary transition-colors cursor-pointer"
+                className="text-xs font-bold text-[color:var(--color-ink-faint)] hover:text-primary transition-colors cursor-pointer"
               >
                 {currentItems.length > 0 && currentItems.every(id => selectedIds.includes(id.id)) 
                   ? "전체 해제" 
@@ -537,7 +621,7 @@ export default function DiagnosisPage() {
               {selectedIds.length > 0 && (
                 <button 
                   onClick={deleteSelected}
-                  className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg border border-red-100 hover:bg-red-100 transition-all flex items-center gap-1"
+                  className="px-3 py-1.5 bg-[color:var(--color-danger-light)] text-[color:var(--color-danger)] text-xs font-bold rounded-lg border border-[color:var(--color-danger-light)] hover:bg-[color:var(--color-danger-light)] transition-all flex items-center gap-1"
                 >
                   <MdDeleteOutline className="text-sm" />
                   {selectedIds.length}개 삭제
@@ -548,9 +632,11 @@ export default function DiagnosisPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-3">
-          {history.length === 0 ? (
-            <div className="py-20 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
-              <p className="text-gray-400 text-sm">최근 진단 내역이 없습니다.</p>
+          {loadingHistory && history.length === 0 ? (
+            <DiagnosisHistorySkeleton />
+          ) : history.length === 0 ? (
+            <div className="py-20 text-center bg-[color:var(--color-surface)]/50 rounded-2xl border border-dashed border-[color:var(--color-line)]">
+              <p className="text-[color:var(--color-ink-faint)] text-sm">최근 진단 내역이 없습니다.</p>
             </div>
           ) : (
             <>
@@ -592,23 +678,30 @@ export default function DiagnosisPage() {
                           {record.pest}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-400">
-                        {record.region} · {record.date ? record.date : new Date(record.created_at).toLocaleDateString()} 
+                      <p className="text-xs text-[color:var(--color-ink-faint)]">
+                        {record.region} · {record.date ? record.date : (record.created_at ? new Date(record.created_at).toLocaleDateString() : '')}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <button 
+                    <button
+                      onClick={(e) => askAgentForRecord(e, record)}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-primary bg-primary/5 border border-primary/15 transition-all cursor-pointer hover:bg-primary/10 hover:border-primary/40"
+                      title="에이전트에게 이 진단 다시 검토하기"
+                    >
+                      <MdAutoAwesome className="text-xl" />
+                    </button>
+                    <button
                       onClick={(e) => deleteOne(e, record.id)}
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 bg-red-50 border border-red-100 transition-all cursor-pointer hover:border-red-500"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-[color:var(--color-danger)] bg-[color:var(--color-danger-light)] border border-[color:var(--color-danger-light)] transition-all cursor-pointer hover:border-red-500"
                       title="기록 삭제"
                     >
                       <MdDeleteOutline className="text-xl" />
                     </button>
                     
                     <div 
-                      className="flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-sm bg-green-50 text-primary cursor-pointer border border-green-100 hover:border-primary"
+                      className="flex items-center justify-center w-10 h-10 rounded-full transition-all shadow-sm bg-[color:var(--color-primary-soft)] text-primary cursor-pointer border border-[color:var(--color-primary-soft)] hover:border-primary"
                       onClick={() => navigate('/diagnosis/chat', { 
                         state: { 
                           diagnosisContext: record,
@@ -629,7 +722,7 @@ export default function DiagnosisPage() {
                   <button
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="p-2 rounded-lg border border-[color:var(--color-line)] text-[color:var(--color-ink-faint)] hover:bg-[color:var(--color-surface)] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     이전
                   </button>
@@ -639,7 +732,7 @@ export default function DiagnosisPage() {
                       const pageNum = i + 1;
                       // 너무 많은 페이지 번호 방지 (현재 페이지 주변만 표시)
                       if (totalPages > 5 && Math.abs(pageNum - currentPage) > 2 && pageNum !== 1 && pageNum !== totalPages) {
-                        if (pageNum === 2 || pageNum === totalPages - 1) return <span key={pageNum} className="px-1 text-gray-300">...</span>;
+                        if (pageNum === 2 || pageNum === totalPages - 1) return <span key={pageNum} className="px-1 text-[color:var(--color-ink-disabled)]">...</span>;
                         return null;
                       }
                       
@@ -650,7 +743,7 @@ export default function DiagnosisPage() {
                           className={`w-8 h-8 rounded-lg font-bold text-xs transition-all ${
                             currentPage === pageNum 
                               ? 'bg-primary text-white shadow-md shadow-primary/20 scale-110' 
-                              : 'text-gray-400 hover:bg-gray-50'
+                              : 'text-[color:var(--color-ink-faint)] hover:bg-[color:var(--color-surface)]'
                           }`}
                         >
                           {pageNum}
@@ -662,7 +755,7 @@ export default function DiagnosisPage() {
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    className="p-2 rounded-lg border border-[color:var(--color-line)] text-[color:var(--color-ink-faint)] hover:bg-[color:var(--color-surface)] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                   >
                     다음
                   </button>
@@ -699,14 +792,14 @@ export default function DiagnosisPage() {
               </div>
 
               <div className="space-y-4">
-                <h2 className="text-2xl font-bold text-gray-800">AI 분석 진행 중</h2>
+                <h2 className="text-2xl font-bold text-[color:var(--color-ink)]">AI 분석 진행 중</h2>
                 <p className="text-primary font-medium animate-pulse">
                   {loadingMessage}
                 </p>
               </div>
 
               <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                <p className="text-xs text-gray-500 leading-relaxed">
+                <p className="text-xs text-[color:var(--color-ink-mute)] leading-relaxed">
                   <span className="font-bold text-primary block mb-1">💡 알고 계셨나요?</span>
                   {randomTip}
                 </p>
@@ -715,7 +808,7 @@ export default function DiagnosisPage() {
               <div className="pt-4">
                 <button
                   onClick={cancelDiagnosis}
-                  className="px-6 py-2.5 bg-white text-gray-500 font-bold rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 hover:text-red-500 transition-all"
+                  className="px-6 py-2.5 bg-white text-[color:var(--color-ink-mute)] font-bold rounded-xl border border-[color:var(--color-line)] shadow-sm hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-danger)] transition-all"
                 >
                   진단 취소 및 돌아가기
                 </button>

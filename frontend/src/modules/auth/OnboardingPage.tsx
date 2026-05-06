@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { CROP_OPTIONS, FARMLAND_TYPES, FARMER_TYPES, safeAreaConvert } from '@/constants/farming';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = '/api/v1';
 const STEP_LABELS = ['계정', '농장', '작물', '영농', '완료'];
 
 /* ────────────── 타입 ────────────── */
@@ -47,11 +47,14 @@ const slideVariants = {
 };
 
 /* ────────────── 메인 컴포넌트 ────────────── */
+// 모듈 스코프 상수 — 컴포넌트 매 렌더마다 재생성되지 않도록 hoist.
+// 이전에 컴포넌트 내부 변수였을 때 useEffect deps 정적 분석에서 빠지는 문제도 함께 해소.
+const DRAFT_KEY = 'farmos_onboarding_draft';
+
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
 
-  const DRAFT_KEY = 'farmos_onboarding_draft';
   const isAnimating = useRef(false);
 
   const [step, setStep] = useState(1);
@@ -83,6 +86,9 @@ export default function OnboardingPage() {
   });
 
   // 로그인 상태 확인 + localStorage 초안 복원
+  // 의존성에 user 포함 — 초기 마운트 시 user=null인 상태에서 빈 deps로 1회만 실행되면
+  // checkAuth()가 user를 채워도 초안이 절대 복원되지 않는 버그가 있었다.
+  // user.user_id를 dep로 사용해 같은 사용자에 대한 재실행을 방지한다.
   useEffect(() => {
     if (user) {
       try {
@@ -98,7 +104,8 @@ export default function OnboardingPage() {
       } catch { /* 손상된 데이터 무시 */ }
       setStep(2);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.user_id]);
 
   // Steps 2-4 입력 데이터를 localStorage에 자동 저장 (계정 정보 제외)
   useEffect(() => {
@@ -113,19 +120,28 @@ export default function OnboardingPage() {
                     crop.main_crop || crop.farmland_type ||
                     detail.years_farming || detail.years_rural_residence;
     if (step >= 2 && step <= 4 && hasData) {
-      const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+      const handler = (e: BeforeUnloadEvent) => {
+        // Chrome/Edge는 e.preventDefault()만으로 prompt를 표시하지 않는다.
+        // returnValue=''까지 설정해야 모던 브라우저에서 일관되게 경고가 노출된다.
+        e.preventDefault();
+        e.returnValue = '';
+      };
       window.addEventListener('beforeunload', handler);
       return () => window.removeEventListener('beforeunload', handler);
     }
   }, [step, farm, crop, detail]);
 
-  // Kakao 주소 검색 스크립트 로드
+  // Kakao 주소 검색 스크립트 로드 — 명시적 https + 로드 실패 가시화
   useEffect(() => {
     if (document.getElementById('daum-postcode-script')) return;
     const script = document.createElement('script');
     script.id = 'daum-postcode-script';
-    script.src = '//t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+    // protocol-relative(`//`) 대신 명시적 https — file:// 등 비표준 환경에서도 안전.
+    script.src = 'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
     script.async = true;
+    script.onerror = () => {
+      console.warn('[onboarding] Kakao postcode 스크립트 로드 실패 — 주소 검색 사용 불가');
+    };
     document.head.appendChild(script);
   }, []);
 
@@ -289,23 +305,26 @@ export default function OnboardingPage() {
   };
 
   const handleAddressSearch = () => {
-    if (typeof (window as any).daum === 'undefined') {
+    type DaumPostcodeData = { zonecode: string; roadAddress: string };
+    type DaumPostcode = new (opts: { oncomplete: (data: DaumPostcodeData) => void }) => { open: () => void };
+    const daum = (window as unknown as { daum?: { Postcode: DaumPostcode } }).daum;
+    if (!daum) {
       toast.error('주소 검색 서비스를 불러올 수 없습니다.');
       return;
     }
-    new (window as any).daum.Postcode({
-      oncomplete(data: any) {
+    new daum.Postcode({
+      oncomplete(data) {
         setFarm(f => ({ ...f, postcode: data.zonecode, roadAddress: data.roadAddress, detailAddress: '' }));
       },
     }).open();
   };
 
-  const inputClass = 'w-full px-4 py-3 text-lg border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition';
-  const selectClass = `${inputClass} bg-white appearance-none cursor-pointer`;
+  const inputClass = 'input';
+  const selectClass = 'select';
 
   /* ────── Step Indicator ────── */
   const StepIndicator = () => (
-    <div className="flex items-center justify-center gap-1 mb-8">
+    <div className="flex items-center justify-center gap-1 mb-7">
       {STEP_LABELS.map((label, i) => {
         const stepNum = i + 1;
         const isActive = step === stepNum;
@@ -314,21 +333,21 @@ export default function OnboardingPage() {
           <div key={label} className="flex items-center">
             <div className="flex flex-col items-center">
               <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${isDone
-                  ? 'bg-success text-white'
+                className={`w-9 h-9 rounded-full flex items-center justify-center text-[13.5px] font-bold transition-all duration-300 ${isDone
+                  ? 'bg-[color:var(--color-primary)] text-white'
                   : isActive
-                    ? 'bg-primary text-white scale-110'
-                    : 'bg-gray-200 text-gray-400'
+                    ? 'bg-[color:var(--color-primary)] text-white scale-110 shadow-[0_4px_14px_-6px_rgba(31,92,61,0.45)]'
+                    : 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)]'
                   }`}
               >
                 {isDone ? '✓' : stepNum}
               </div>
-              <span className={`text-xs mt-1 ${isActive ? 'text-primary font-semibold' : 'text-gray-400'}`}>
+              <span className={`text-[12.5px] mt-1.5 font-semibold ${isActive ? 'text-[color:var(--color-primary-dark)]' : 'text-[color:var(--color-ink-mute)]'}`}>
                 {label}
               </span>
             </div>
             {i < STEP_LABELS.length - 1 && (
-              <div className={`w-8 h-0.5 mx-1 mt-[-14px] transition-colors duration-300 ${isDone ? 'bg-success' : 'bg-gray-200'}`} />
+              <div className={`w-9 h-[2px] mx-1 mt-[-18px] rounded-full transition-colors duration-300 ${isDone ? 'bg-[color:var(--color-primary)]' : 'bg-[color:var(--color-line)]'}`} />
             )}
           </div>
         );
@@ -340,34 +359,34 @@ export default function OnboardingPage() {
   const renderStep1 = () => (
     <div className="space-y-4">
       <div className="text-center mb-2">
-        <h2 className="text-xl font-bold text-gray-900">계정 만들기</h2>
-        <p className="text-gray-500 text-sm mt-1">FarmOS 시작을 위한 기본 정보를 입력하세요</p>
+        <h2 className="text-xl font-bold text-[color:var(--color-ink)]">계정 만들기</h2>
+        <p className="text-[color:var(--color-ink-mute)] text-sm mt-1">FarmOS 시작을 위한 기본 정보를 입력하세요</p>
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">아이디 <span className="text-danger">*</span></label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">아이디 <span className="text-danger">*</span></label>
         <input type="text" value={account.user_id} onChange={e => setAccount(f => ({ ...f, user_id: e.target.value }))} placeholder="4~10자" className={inputClass} />
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">이름 <span className="text-danger">*</span></label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">이름 <span className="text-danger">*</span></label>
         <input type="text" value={account.name} onChange={e => setAccount(f => ({ ...f, name: e.target.value }))} placeholder="이름" className={inputClass} />
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">이메일 <span className="text-danger">*</span></label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">이메일 <span className="text-danger">*</span></label>
         <input type="email" value={account.email} onChange={e => setAccount(f => ({ ...f, email: e.target.value }))} placeholder="email@example.com" className={inputClass} />
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">비밀번호 <span className="text-danger">*</span></label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">비밀번호 <span className="text-danger">*</span></label>
         <input type="password" value={account.password} onChange={e => setAccount(f => ({ ...f, password: e.target.value }))} placeholder="4자 이상" className={inputClass} />
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">비밀번호 확인 <span className="text-danger">*</span></label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">비밀번호 확인 <span className="text-danger">*</span></label>
         <input type="password" value={account.password_confirm} onChange={e => setAccount(f => ({ ...f, password_confirm: e.target.value }))} placeholder="비밀번호 재입력" className={inputClass} />
       </div>
       <button onClick={handleAccountSubmit} disabled={loading} className="btn-primary w-full">
         {loading ? '처리 중...' : '다음'}
       </button>
       <div className="text-center">
-        <Link to="/login" className="text-gray-500 hover:text-primary transition text-sm">
+        <Link to="/login" className="text-[color:var(--color-ink-mute)] hover:text-primary transition text-sm">
           이미 계정이 있으신가요? <span className="text-primary font-semibold">로그인</span>
         </Link>
       </div>
@@ -378,29 +397,29 @@ export default function OnboardingPage() {
   const renderStep2 = () => (
     <div className="space-y-4">
       <div className="text-center mb-2">
-        <h2 className="text-xl font-bold text-gray-900">농장 기본정보</h2>
-        <p className="text-gray-500 text-sm mt-1">농장 위치와 면적을 입력하세요</p>
+        <h2 className="text-xl font-bold text-[color:var(--color-ink)]">농장 기본정보</h2>
+        <p className="text-[color:var(--color-ink-mute)] text-sm mt-1">농장 위치와 면적을 입력하세요</p>
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">농장 이름</label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">농장 이름</label>
         <input type="text" value={farm.farmname} onChange={e => setFarm(f => ({ ...f, farmname: e.target.value }))} placeholder="예: 행복한 사과농장" className={inputClass} />
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">주소</label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">주소</label>
         <div className="flex gap-2">
-          <input type="text" value={farm.postcode} readOnly placeholder="우편번호" className={`${inputClass} bg-gray-100 cursor-not-allowed flex-1`} />
+          <input type="text" value={farm.postcode} readOnly placeholder="우편번호" className={`${inputClass} bg-[color:var(--color-surface-deep)] cursor-not-allowed flex-1`} />
           <button type="button" onClick={handleAddressSearch} className="px-4 py-3 bg-primary text-white rounded-xl font-semibold whitespace-nowrap hover:opacity-90 transition">
             우편번호 찾기
           </button>
         </div>
-        <input type="text" value={farm.roadAddress} readOnly placeholder="도로명주소" className={`${inputClass} bg-gray-100 cursor-not-allowed mt-2`} />
+        <input type="text" value={farm.roadAddress} readOnly placeholder="도로명주소" className={`${inputClass} bg-[color:var(--color-surface-deep)] cursor-not-allowed mt-2`} />
         <input type="text" value={farm.detailAddress} onChange={e => setFarm(f => ({ ...f, detailAddress: e.target.value }))} placeholder="상세주소 입력" className={`${inputClass} mt-2`} />
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">경작 면적 (평)</label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">경작 면적 (평)</label>
         <input type="number" step="0.1" min="0" value={farm.area} onChange={e => setFarm(f => ({ ...f, area: e.target.value }))} placeholder="예: 3300" className={inputClass} />
         {(() => { const c = safeAreaConvert(farm.area); return c && (
-          <p className="text-sm text-gray-500 mt-1">약 {c.m2.toFixed(0)}m² ({c.ha.toFixed(2)}ha)</p>
+          <p className="text-sm text-[color:var(--color-ink-mute)] mt-1">약 {c.m2.toFixed(0)}m² ({c.ha.toFixed(2)}ha)</p>
         ); })()}
       </div>
       <div className="flex gap-3">
@@ -414,22 +433,22 @@ export default function OnboardingPage() {
   const renderStep3 = () => (
     <div className="space-y-4">
       <div className="text-center mb-2">
-        <h2 className="text-xl font-bold text-gray-900">재배 작물</h2>
-        <p className="text-gray-500 text-sm mt-1">주요 재배 작물과 농지 유형을 선택하세요</p>
+        <h2 className="text-xl font-bold text-[color:var(--color-ink)]">재배 작물</h2>
+        <p className="text-[color:var(--color-ink-mute)] text-sm mt-1">주요 재배 작물과 농지 유형을 선택하세요</p>
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">주요 재배 작물</label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">주요 재배 작물</label>
         <select value={crop.main_crop} onChange={e => setCrop(f => ({ ...f, main_crop: e.target.value }))} className={selectClass}>
           <option value="">선택하세요</option>
           {CROP_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">품종</label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">품종</label>
         <input type="text" value={crop.crop_variety} onChange={e => setCrop(f => ({ ...f, crop_variety: e.target.value }))} placeholder="예: 홍로, 부사, 쌀눈" className={inputClass} />
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-2">농지 유형</label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-2">농지 유형</label>
         <div className="grid grid-cols-2 gap-3">
           {FARMLAND_TYPES.map(t => (
             <button
@@ -438,11 +457,11 @@ export default function OnboardingPage() {
               onClick={() => setCrop(f => ({ ...f, farmland_type: t.value }))}
               className={`p-3 rounded-xl border-2 text-left transition-all ${crop.farmland_type === t.value
                 ? 'border-primary bg-primary/5'
-                : 'border-gray-200 hover:border-gray-300'
+                : 'border-[color:var(--color-line)] hover:border-[color:var(--color-line)]'
                 }`}
             >
               <div className="font-semibold text-sm">{t.label}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{t.desc}</div>
+              <div className="text-xs text-[color:var(--color-ink-mute)] mt-0.5">{t.desc}</div>
             </button>
           ))}
         </div>
@@ -458,60 +477,58 @@ export default function OnboardingPage() {
   const renderStep4 = () => (
     <div className="space-y-4">
       <div className="text-center mb-2">
-        <h2 className="text-xl font-bold text-gray-900">영농 상세정보</h2>
-        <p className="text-gray-500 text-sm mt-1">보조금 적격성 확인에 필요한 정보입니다</p>
+        <h2 className="text-xl font-bold text-[color:var(--color-ink)]">영농 상세정보</h2>
+        <p className="text-[color:var(--color-ink-mute)] text-sm mt-1">보조금 적격성 확인에 필요한 정보입니다</p>
       </div>
       <div>
-        <label className="block text-base font-medium text-gray-700 mb-1">농업인 유형</label>
+        <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">농업인 유형</label>
         <select value={detail.farmer_type} onChange={e => setDetail(f => ({ ...f, farmer_type: e.target.value }))} className={selectClass}>
           {FARMER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-base font-medium text-gray-700 mb-1">농촌 거주 연수</label>
+          <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">농촌 거주 연수</label>
           <input type="number" min="0" value={detail.years_rural_residence} onChange={e => setDetail(f => ({ ...f, years_rural_residence: e.target.value }))} placeholder="년" className={inputClass} />
         </div>
         <div>
-          <label className="block text-base font-medium text-gray-700 mb-1">영농 경력 연수</label>
+          <label className="block text-base font-medium text-[color:var(--color-ink-soft)] mb-1">영농 경력 연수</label>
           <input type="number" min="0" value={detail.years_farming} onChange={e => setDetail(f => ({ ...f, years_farming: e.target.value }))} placeholder="년" className={inputClass} />
         </div>
       </div>
 
       {/* 토글 옵션 */}
-      <div className="space-y-3 bg-surface rounded-xl p-4">
-        <label className="flex items-center justify-between cursor-pointer">
-          <div>
-            <div className="font-medium text-gray-800">농업경영체 등록</div>
-            <div className="text-xs text-gray-500">농업경영체 등록 여부 (보조금 필수 요건)</div>
+      <div className="space-y-4 bg-[color:var(--color-surface)] rounded-2xl p-5">
+        <label className="flex items-center justify-between gap-4 cursor-pointer">
+          <div className="min-w-0">
+            <div className="text-[14.5px] font-bold text-[color:var(--color-ink)]">농업경영체 등록</div>
+            <div className="mt-0.5 text-[13px] text-[color:var(--color-ink-mute)] leading-[1.5]">등록 여부 · 보조금 필수 요건</div>
           </div>
-          <div className="relative">
+          <span className="toggle">
             <input
               type="checkbox"
               checked={detail.has_farm_registration}
               onChange={e => setDetail(f => ({ ...f, has_farm_registration: e.target.checked }))}
-              className="sr-only peer"
             />
-            <div className="w-11 h-6 rounded-full bg-gray-300 peer-checked:bg-primary transition-colors" />
-            <div className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-          </div>
+            <span className="toggle-track" />
+            <span className="toggle-thumb" />
+          </span>
         </label>
-        <div className="border-t border-gray-200" />
-        <label className="flex items-center justify-between cursor-pointer">
-          <div>
-            <div className="font-medium text-gray-800">농업진흥지역</div>
-            <div className="text-xs text-gray-500">진흥지역 소재 농지 여부 (직불금 단가 차등)</div>
+        <div className="border-t border-[color:var(--color-line-soft)]" />
+        <label className="flex items-center justify-between gap-4 cursor-pointer">
+          <div className="min-w-0">
+            <div className="text-[14.5px] font-bold text-[color:var(--color-ink)]">농업진흥지역</div>
+            <div className="mt-0.5 text-[13px] text-[color:var(--color-ink-mute)] leading-[1.5]">진흥지역 소재 여부 · 직불금 단가 차등</div>
           </div>
-          <div className="relative">
+          <span className="toggle">
             <input
               type="checkbox"
               checked={detail.is_promotion_area}
               onChange={e => setDetail(f => ({ ...f, is_promotion_area: e.target.checked }))}
-              className="sr-only peer"
             />
-            <div className="w-11 h-6 rounded-full bg-gray-300 peer-checked:bg-primary transition-colors" />
-            <div className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
-          </div>
+            <span className="toggle-track" />
+            <span className="toggle-thumb" />
+          </span>
         </label>
       </div>
 
@@ -526,9 +543,14 @@ export default function OnboardingPage() {
   const renderStep5 = () => (
     <div className="space-y-5">
       <div className="text-center">
-        <div className="text-5xl mb-3">🌱</div>
-        <h2 className="text-xl font-bold text-gray-900">등록 정보 확인</h2>
-        <p className="text-gray-500 text-sm mt-1">입력한 정보를 확인하고 시작하세요</p>
+        <img
+          src="/illustrations/onboarding-complete.png"
+          alt=""
+          aria-hidden
+          className="mx-auto h-32 w-32 object-contain mb-2"
+        />
+        <h2 className="text-[1.375rem] font-bold tracking-[-0.02em] text-[color:var(--color-ink)]">등록 정보 확인</h2>
+        <p className="mt-1.5 text-[14px] text-[color:var(--color-ink-mute)]">입력한 정보를 확인하고 시작하세요</p>
       </div>
 
       {/* 요약 카드 */}
@@ -581,23 +603,27 @@ export default function OnboardingPage() {
   );
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[color:var(--color-surface)] flex items-center justify-center p-4">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
         className="w-full max-w-lg"
       >
-        <div className="text-center mb-4">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary text-white text-2xl mb-2">
-            🌾
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">FarmOS</h1>
-          <p className="text-gray-500 text-sm">스마트 농업 관리 시스템</p>
+        <div className="text-center mb-6">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[color:var(--color-primary)] text-white mb-3">
+            <svg viewBox="0 0 32 32" fill="none" className="h-7 w-7" aria-hidden>
+              <path d="M5 27c0-11 7-19 22-22-1 13-7 22-19 22-1 0-3 0-3 0z" fill="currentColor" opacity="0.95"/>
+              <path d="M7 25C13 18 19 13 26 9" stroke="white" strokeWidth="1.6" strokeLinecap="round" opacity="0.6"/>
+            </svg>
+          </span>
+          <h1 className="text-[1.625rem] font-bold tracking-[-0.022em] text-[color:var(--color-ink)]">FarmOS</h1>
+          <p className="mt-1 text-[14px] text-[color:var(--color-ink-mute)]">스마트 농업 관리 시스템</p>
         </div>
 
         <StepIndicator />
 
-        <div className="card overflow-hidden">
+        <div className="rounded-2xl border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-6 overflow-hidden">
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={step}
@@ -619,17 +645,17 @@ export default function OnboardingPage() {
         </div>
 
         {step > 1 && step < 5 && (
-          <div className="mt-4 bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div className="mt-4 bg-white border border-[color:var(--color-line)] rounded-xl p-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-lg flex-shrink-0">💡</span>
-              <p className="text-sm text-gray-900">
-                이 단계는 건너뛸 수 있습니다. <br /><span className="text-gray-900">나중에 프로필에서 수정할 수 있습니다.</span>
+              <p className="text-sm text-[color:var(--color-ink)]">
+                이 단계는 건너뛸 수 있습니다. <br /><span className="text-[color:var(--color-ink)]">나중에 프로필에서 수정할 수 있습니다.</span>
               </p>
             </div>
             <button
               onClick={handleSkip}
               disabled={loading}
-              className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-gray-500 hover:text-primary border border-gray-300 hover:border-primary rounded-lg transition-colors"
+              className="flex-shrink-0 px-4 py-2 text-sm font-semibold text-[color:var(--color-ink-mute)] hover:text-primary border border-[color:var(--color-line)] hover:border-primary rounded-lg transition-colors"
             >
               건너뛰기
             </button>
@@ -644,13 +670,13 @@ export default function OnboardingPage() {
 
 function SummaryCard({ title, items }: { title: string; items: { label: string; value: string }[] }) {
   return (
-    <div className="bg-surface rounded-xl p-4">
-      <h3 className="font-semibold text-gray-800 mb-2 text-sm">{title}</h3>
-      <div className="space-y-1">
+    <div className="bg-[color:var(--color-surface)] rounded-2xl p-4">
+      <h3 className="text-[14px] font-bold text-[color:var(--color-ink)] mb-2.5">{title}</h3>
+      <div className="space-y-1.5">
         {items.map(item => (
-          <div key={item.label} className="flex justify-between text-sm">
-            <span className="text-gray-500">{item.label}</span>
-            <span className="font-medium text-gray-800">{item.value}</span>
+          <div key={item.label} className="flex justify-between gap-3 text-[13.5px]">
+            <span className="text-[color:var(--color-ink-mute)]">{item.label}</span>
+            <span className="font-semibold text-[color:var(--color-ink)] text-right">{item.value}</span>
           </div>
         ))}
       </div>
@@ -697,25 +723,25 @@ function EligibilityPreview({
 
   if (!meetsMinArea && !areaM2) {
     return (
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center text-sm text-gray-500">
+      <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-xl p-4 text-center text-sm text-[color:var(--color-ink-mute)]">
         면적을 입력하면 공익직불금 적격 여부를 미리 확인할 수 있습니다
       </div>
     );
   }
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+    <div className="bg-[color:var(--tint-info)] border border-[color:var(--color-info)]/30 rounded-xl p-4">
       <h3 className="font-semibold text-info mb-3 text-sm flex items-center gap-1">
         📋 공익직불금 적격성 미리보기
       </h3>
       <div className="space-y-2 text-sm">
         {/* 면적직불금 */}
-        <div className={`flex items-start gap-2 ${areaPaymentEligible ? 'text-success' : 'text-gray-400'}`}>
+        <div className={`flex items-start gap-2 ${areaPaymentEligible ? 'text-success' : 'text-[color:var(--color-ink-faint)]'}`}>
           <span className="mt-0.5">{areaPaymentEligible ? '✅' : '❌'}</span>
           <div>
             <div className="font-medium">면적직불금</div>
             {areaPaymentEligible ? (
-              <div className="text-xs text-gray-600">
+              <div className="text-xs text-[color:var(--color-ink-mute)]">
                 예상 약 {(estimatedAreaPayment / 10000).toFixed(0)}만원/년
                 ({farmlandType} {isPromotionArea ? '진흥' : '비진흥'}, {(areaM2 / 10000).toFixed(2)}ha)
               </div>
@@ -728,11 +754,11 @@ function EligibilityPreview({
         </div>
 
         {/* 소농직불금 */}
-        <div className={`flex items-start gap-2 ${showSmallFarm ? 'text-success' : isSmallFarmArea ? 'text-warning' : 'text-gray-400'}`}>
+        <div className={`flex items-start gap-2 ${showSmallFarm ? 'text-success' : isSmallFarmArea ? 'text-warning' : 'text-[color:var(--color-ink-faint)]'}`}>
           <span className="mt-0.5">{showSmallFarm ? '✅' : '⚠️'}</span>
           <div>
             <div className="font-medium">소농직불금 (130만원/년)</div>
-            <div className="text-xs text-gray-600">
+            <div className="text-xs text-[color:var(--color-ink-mute)]">
               {!isSmallFarmArea
                 ? `농지 1,000~5,000m² 범위 외 (현재 ${areaM2.toFixed(0)}m²)`
                 : !hasFarmRegistration
@@ -748,7 +774,7 @@ function EligibilityPreview({
           </div>
         </div>
       </div>
-      <p className="text-xs text-gray-400 mt-3 border-t border-blue-100 pt-2">
+      <p className="text-xs text-[color:var(--color-ink-faint)] mt-3 border-t border-[color:var(--color-info)]/20 pt-2">
         * 간이 판정이며, 정확한 결과는 가구소득 등 추가 정보가 필요합니다.
         상세 적격성 검사는 가입 후 보조금 메뉴에서 확인하세요.
       </p>

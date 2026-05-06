@@ -31,8 +31,8 @@ export default function AnalysisSettingsModal({ isOpen, onClose, settings, onSav
             <MdSettings className="text-xl text-primary" />
             <h3 className="text-lg font-semibold">분석 설정</h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100">
-            <MdClose className="text-xl text-gray-500" />
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[color:var(--color-surface-deep)]">
+            <MdClose className="text-xl text-[color:var(--color-ink-mute)]" />
           </button>
         </div>
 
@@ -40,7 +40,7 @@ export default function AnalysisSettingsModal({ isOpen, onClose, settings, onSav
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-sm">자동 배치 분석</p>
-              <p className="text-xs text-gray-500">리뷰가 N건 누적되면 자동 분석</p>
+              <p className="text-xs text-[color:var(--color-ink-mute)]">리뷰가 N건 누적되면 자동 분석</p>
             </div>
             <button
               onClick={() => setForm({ ...form, auto_batch_enabled: !form.auto_batch_enabled })}
@@ -58,7 +58,7 @@ export default function AnalysisSettingsModal({ isOpen, onClose, settings, onSav
               max={100}
               value={form.batch_trigger_count}
               onChange={e => setForm({ ...form, batch_trigger_count: Number(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg text-sm"
               disabled={!form.auto_batch_enabled}
             />
           </div>
@@ -68,7 +68,7 @@ export default function AnalysisSettingsModal({ isOpen, onClose, settings, onSav
             <select
               value={form.batch_schedule || ''}
               onChange={e => setForm({ ...form, batch_schedule: e.target.value || null })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg text-sm"
               disabled={!form.auto_batch_enabled}
             >
               <option value="">수동 (트리거 기준만)</option>
@@ -76,7 +76,7 @@ export default function AnalysisSettingsModal({ isOpen, onClose, settings, onSav
               <option value="0 9 * * *">매일 09:00</option>
               <option value="0 18 * * 5">매주 금요일 18:00</option>
             </select>
-            <p className="text-xs text-gray-400 mt-1">자동 분석 실행 주기</p>
+            <p className="text-xs text-[color:var(--color-ink-faint)] mt-1">자동 분석 실행 주기</p>
           </div>
 
           <div>
@@ -84,21 +84,21 @@ export default function AnalysisSettingsModal({ isOpen, onClose, settings, onSav
             <select
               value={form.default_batch_size}
               onChange={e => setForm({ ...form, default_batch_size: Number(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              className="w-full px-3 py-2 border border-[color:var(--color-line)] rounded-lg text-sm"
             >
               <option value={10}>10개씩</option>
               <option value={20}>20개씩 (권장)</option>
               <option value={30}>30개씩</option>
               <option value={50}>50개씩</option>
             </select>
-            <p className="text-xs text-gray-400 mt-1">LLM 1회 호출당 분석할 리뷰 수</p>
+            <p className="text-xs text-[color:var(--color-ink-faint)] mt-1">LLM 1회 호출당 분석할 리뷰 수</p>
           </div>
         </div>
 
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50"
+            className="flex-1 px-4 py-2 border border-[color:var(--color-line)] rounded-lg text-sm font-medium text-[color:var(--color-ink-mute)] hover:bg-[color:var(--color-surface)]"
           >
             취소
           </button>

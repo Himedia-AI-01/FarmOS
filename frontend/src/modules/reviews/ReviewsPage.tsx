@@ -6,8 +6,10 @@ import { useReviewAnalysis } from '@/hooks/useReviewAnalysis';
 import RAGSearchPanel from './RAGSearchPanel';
 import AnalysisSettingsModal from './AnalysisSettingsModal';
 import { REVIEWS, SENTIMENT_SUMMARY, KEYWORD_DATA, WEEKLY_TRENDS, AI_STRATEGIES } from '@/mocks/reviews';
+import { Spinner, StatusDot } from '@/components/ui';
+import { cn } from '@/lib/cn';
 
-const SENTIMENT_COLORS = { positive: '#16A34A', negative: '#DC2626', neutral: '#9CA3AF' };
+const SENTIMENT_COLORS = { positive: 'var(--color-success)', negative: 'var(--color-danger)', neutral: 'var(--color-ink-faint)' };
 
 export default function ReviewsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('all');
@@ -24,7 +26,6 @@ export default function ReviewsPage() {
     settings, updateSettings,
   } = useReviewAnalysis();
 
-  // API 데이터가 있으면 사용, 없으면 Mock 데이터 폴백
   const sentimentSummary = analysis?.sentiment_summary || SENTIMENT_SUMMARY;
   const keywords = analysis?.keywords || KEYWORD_DATA;
   const weeklyTrends = trends.length > 0
@@ -60,229 +61,251 @@ export default function ReviewsPage() {
         <button
           onClick={() => embedReviews()}
           disabled={isEmbedding}
-          className="relative flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-70 overflow-hidden"
+          aria-busy={isEmbedding}
+          className="btn-outline relative overflow-hidden !py-2 !text-[14px]"
         >
           {isEmbedding && (
             <span
-              className="absolute left-0 top-0 h-full bg-blue-200/50 transition-all duration-300"
+              aria-hidden
+              className="absolute left-0 top-0 h-full bg-[color:var(--color-info)]/15 transition-all duration-300"
               style={{ width: `${embedProgress}%` }}
             />
           )}
-          <MdStorage className="text-base relative z-10" />
+          {isEmbedding ? <Spinner size={16} tone="mute" label="" /> : <MdStorage aria-hidden className="text-base relative z-10" />}
           <span className="relative z-10">
             {isEmbedding ? `임베딩 ${embedProgress}%` : '임베딩 저장'}
           </span>
         </button>
         <button
-          onClick={() => analyzeReviews('all', settings.default_batch_size)}
+          onClick={() => analyzeReviews(settings.default_batch_size)}
           disabled={isAnalyzing}
-          className="relative flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-70 hover:bg-primary/90 transition-colors overflow-hidden"
+          aria-busy={isAnalyzing}
+          className="btn-primary relative overflow-hidden !py-2 !text-[14px]"
         >
           {isAnalyzing && (
             <span
+              aria-hidden
               className="absolute left-0 top-0 h-full bg-white/20 transition-all duration-300"
               style={{ width: `${analyzeProgress}%` }}
             />
           )}
-          <MdPlayArrow className="text-base relative z-10" />
+          {isAnalyzing ? <Spinner size={16} tone="inverse" label="" /> : <MdPlayArrow aria-hidden className="text-base relative z-10" />}
           <span className="relative z-10">
             {isAnalyzing ? `분석 ${analyzeProgress}%` : 'AI 분석 실행'}
           </span>
         </button>
         {hasAnalysis && (
-          <button
-            onClick={downloadReport}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-          >
-            <MdDownload className="text-base" /> PDF 리포트
+          <button onClick={downloadReport} className="btn-outline !py-2 !text-[14px]">
+            <MdDownload aria-hidden className="text-base" /> PDF 리포트
           </button>
         )}
         <button
           onClick={() => setShowSettings(true)}
-          className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors ml-auto"
+          className="icon-btn ml-auto"
+          aria-label="분석 설정"
         >
-          <MdSettings className="text-lg" />
+          <MdSettings aria-hidden className="text-[19px]" />
         </button>
       </div>
 
       {progressMessage && (isEmbedding || isAnalyzing) && (
-        <div className="p-3 bg-blue-50 text-blue-700 rounded-lg text-sm">{progressMessage}</div>
+        <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-xl border border-[color:var(--color-info)]/20 bg-[color:var(--tint-info)] px-4 py-3 text-[14px] text-[color:var(--color-info)]">
+          <Spinner size={16} tone="mute" label="" />
+          {progressMessage}
+        </div>
       )}
 
       {error && (
-        <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
+        <div role="alert" className="rounded-xl border border-[color:var(--color-danger-light)] bg-[color:var(--color-danger-light)]/40 px-4 py-3 text-[14px] text-[color:var(--color-danger)]">
+          {error}
+        </div>
       )}
 
       {/* Anomaly Alerts */}
       {anomalies.length > 0 && (
-        <div className="space-y-2">
+        <ul className="space-y-2">
           {anomalies.map((a, i) => (
-            <div key={i} className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-lg">
-              <MdWarning className="text-red-500 text-lg flex-shrink-0" />
-              <span className="text-sm text-red-700">{a.message}</span>
-            </div>
+            <li
+              key={i}
+              role="alert"
+              className="flex items-center gap-2 rounded-xl border border-[color:var(--color-danger-light)] bg-[color:var(--color-danger-light)]/40 px-3.5 py-2.5"
+            >
+              <MdWarning aria-hidden className="flex-shrink-0 text-[18px] text-[color:var(--color-danger)]" />
+              <span className="text-[13.5px] text-[color:var(--color-danger)]">{a.message}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {/* Analysis Meta */}
       {hasAnalysis && (
-        <div className="text-xs text-gray-400 flex gap-3">
+        <div className="flex flex-wrap gap-3 text-[12px] text-[color:var(--color-ink-faint)]">
           <span>Provider: {analysis.llm_provider}</span>
+          <span aria-hidden>·</span>
           <span>Model: {analysis.llm_model}</span>
-          <span>{analysis.processing_time_ms}ms</span>
+          <span aria-hidden>·</span>
+          <span className="num">{analysis.processing_time_ms}ms</span>
         </div>
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <div className="card !p-3 sm:!p-4 text-center">
-          <p className="text-xs sm:text-sm text-gray-500">총 리뷰</p>
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900">{sentimentSummary.total}</p>
+      <dl className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <div className="card !p-3 text-center sm:!p-4">
+          <dt className="text-[12.5px] text-[color:var(--color-ink-mute)] sm:text-[13.5px]">총 리뷰</dt>
+          <dd className="num text-[1.6rem] font-bold text-[color:var(--color-ink)] sm:text-[1.85rem]">{sentimentSummary.total}</dd>
         </div>
-        <div className="card !p-3 sm:!p-4 text-center">
-          <p className="text-xs sm:text-sm text-gray-500">긍정률</p>
-          <p className="text-2xl sm:text-3xl font-bold text-success">
+        <div className="card !p-3 text-center sm:!p-4">
+          <dt className="text-[12.5px] text-[color:var(--color-ink-mute)] sm:text-[13.5px]">긍정률</dt>
+          <dd className="num text-[1.6rem] font-bold text-[color:var(--color-success)] sm:text-[1.85rem]">
             {sentimentSummary.total > 0 ? Math.round(sentimentSummary.positive / sentimentSummary.total * 100) : 0}%
-          </p>
+          </dd>
         </div>
-        <div className="card !p-3 sm:!p-4 text-center">
-          <p className="text-xs sm:text-sm text-gray-500">평균 평점</p>
-          <p className="text-2xl sm:text-3xl font-bold text-amber-500">
-            {avgRating} <MdStar className="inline text-amber-400" />
-          </p>
+        <div className="card !p-3 text-center sm:!p-4">
+          <dt className="text-[12.5px] text-[color:var(--color-ink-mute)] sm:text-[13.5px]">평균 평점</dt>
+          <dd className="num inline-flex items-center justify-center gap-1 text-[1.6rem] font-bold text-[color:var(--color-accent-dark)] sm:text-[1.85rem]">
+            {avgRating} <MdStar aria-hidden className="text-[color:var(--color-accent)]" />
+          </dd>
         </div>
-        <div className="card !p-3 sm:!p-4 text-center">
-          <p className="text-xs sm:text-sm text-gray-500">AI 인사이트</p>
-          <p className="text-2xl sm:text-3xl font-bold text-primary">{strategies.length}건</p>
+        <div className="card !p-3 text-center sm:!p-4">
+          <dt className="text-[12.5px] text-[color:var(--color-ink-mute)] sm:text-[13.5px]">AI 인사이트</dt>
+          <dd className="num text-[1.6rem] font-bold text-[color:var(--color-primary-dark)] sm:text-[1.85rem]">{strategies.length}건</dd>
         </div>
-      </div>
+      </dl>
 
       {/* AI Summary (from LLM) */}
       {summary?.overall && (
-        <div className="card border-l-4 border-primary">
-          <h3 className="section-title mb-2">AI 분석 요약</h3>
-          <p className="text-sm text-gray-700">{summary.overall}</p>
+        <section aria-labelledby="ai-summary" className="card border-l-4 !border-l-[color:var(--color-primary)]">
+          <h3 id="ai-summary" className="section-title mb-2">AI 분석 요약</h3>
+          <p className="text-[14px] leading-[1.7] text-[color:var(--color-ink-soft)]">{summary.overall}</p>
           {summary.positives?.length > 0 && (
-            <div className="mt-2">
+            <ul className="mt-2 flex flex-wrap gap-1">
               {summary.positives.map((p, i) => (
-                <span key={i} className="inline-block mr-2 mb-1 px-2 py-0.5 bg-green-50 text-green-700 rounded text-xs">+ {p}</span>
+                <li key={i} className="badge-success text-[12px]">+ {p}</li>
               ))}
-            </div>
+            </ul>
           )}
           {summary.negatives?.length > 0 && (
-            <div className="mt-1">
+            <ul className="mt-1 flex flex-wrap gap-1">
               {summary.negatives.map((n, i) => (
-                <span key={i} className="inline-block mr-2 mb-1 px-2 py-0.5 bg-red-50 text-red-700 rounded text-xs">- {n}</span>
+                <li key={i} className="badge-danger text-[12px]">- {n}</li>
               ))}
-            </div>
+            </ul>
           )}
-        </div>
+        </section>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Sentiment Pie Chart */}
-        <div className="card">
-          <h3 className="section-title mb-4">감성 분석</h3>
-          {mounted && <div className="h-[260px] sm:h-[300px] overflow-hidden">
-            <ResponsiveContainer width="100%" height="100%" debounce={50}>
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="45%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value">
-                  {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Pie>
-                <Tooltip formatter={(value) => `${value}건`} />
-                <Legend formatter={(value, entry: any) => `${value} ${entry.payload.value}건`} iconType="circle" iconSize={10} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>}
-        </div>
+        <section aria-labelledby="sentiment-chart" className="card">
+          <h3 id="sentiment-chart" className="section-title mb-4">감성 분석</h3>
+          {mounted && (
+            <div className="h-[260px] overflow-hidden sm:h-[300px]">
+              <ResponsiveContainer width="100%" height="100%" debounce={50}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="45%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value">
+                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip formatter={(value) => `${value}건`} />
+                  <Legend formatter={(value, entry) => `${value} ${(entry?.payload as { value?: number } | undefined)?.value ?? 0}건`} iconType="circle" iconSize={10} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
 
         {/* Weekly Trend */}
-        <div className="card">
-          <h3 className="section-title mb-4">주간 추이</h3>
-          {mounted && <div className="h-[200px] sm:h-[250px] overflow-hidden">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyTrends}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="positive" fill="#16A34A" name="긍정" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="negative" fill="#DC2626" name="부정" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="neutral" fill="#9CA3AF" name="중립" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>}
-        </div>
+        <section aria-labelledby="weekly-chart" className="card">
+          <h3 id="weekly-chart" className="section-title mb-4">주간 추이</h3>
+          {mounted && (
+            <div className="h-[200px] overflow-hidden sm:h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weeklyTrends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
+                  <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Bar dataKey="positive" fill="var(--color-success)" name="긍정" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="negative" fill="var(--color-danger)" name="부정" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="neutral" fill="var(--color-ink-faint)" name="중립" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Keyword Cloud */}
-      <div className="card">
-        <h3 className="section-title mb-4">키워드 분석</h3>
-        <div className="flex flex-wrap gap-2">
+      <section aria-labelledby="keyword-section" className="card">
+        <h3 id="keyword-section" className="section-title mb-4">키워드 분석</h3>
+        <ul className="flex flex-wrap gap-2">
           {keywords.map(k => (
-            <span
+            <li
               key={k.word}
-              className={`px-3 py-1.5 rounded-full font-medium ${
-                k.sentiment === 'positive' ? 'bg-green-100 text-green-800' :
-                k.sentiment === 'negative' ? 'bg-red-100 text-red-800' :
-                'bg-gray-100 text-gray-700'
-              }`}
-              style={{ fontSize: `${Math.max(14, Math.min(22, 10 + k.count))}px` }}
+              className={cn(
+                'rounded-full px-3 py-1.5 font-medium',
+                k.sentiment === 'positive' && 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)]',
+                k.sentiment === 'negative' && 'bg-[color:var(--color-danger-light)] text-[color:var(--color-danger)]',
+                k.sentiment === 'neutral' && 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-soft)]',
+              )}
+              style={{ fontSize: `${Math.max(13, Math.min(20, 11 + k.count))}px` }}
             >
-              {k.word} ({k.count})
-            </span>
+              {k.word} <span className="num opacity-70">({k.count})</span>
+            </li>
           ))}
-        </div>
-      </div>
+        </ul>
+      </section>
 
       {/* RAG Search */}
       <RAGSearchPanel onSearch={searchReviews} results={searchResults} isSearching={isSearching} />
 
       {/* AI Strategy Recommendations */}
-      <div className="card">
-        <div className="flex items-center gap-2 mb-4">
-          <MdTrendingUp className="text-xl text-primary" />
-          <h3 className="section-title">AI 판매 전략 추천</h3>
+      <section aria-labelledby="strategy-section" className="card">
+        <div className="mb-4 flex items-center gap-2">
+          <MdTrendingUp aria-hidden className="text-[20px] text-[color:var(--color-primary)]" />
+          <h3 id="strategy-section" className="section-title">AI 판매 전략 추천</h3>
         </div>
-        <div className="space-y-3">
+        <ul className="space-y-3">
           {strategies.map(s => (
-            <div key={s.id} className="p-4 rounded-xl border border-gray-100 hover:border-primary/20 transition-colors">
-              <div className="flex items-start justify-between">
-                <h4 className="font-semibold text-gray-900">{s.title}</h4>
-                <span className={`badge text-xs ${
-                  s.priority === '높음' ? 'badge-danger' :
-                  s.priority === '중간' ? 'badge-warning' : 'badge-info'
-                }`}>
+            <li key={s.id} className="rounded-xl border border-[color:var(--color-line)] p-4 transition-colors hover:border-[color:var(--color-primary-light)]">
+              <div className="flex items-start justify-between gap-3">
+                <h4 className="text-[15px] font-bold text-[color:var(--color-ink)]">{s.title}</h4>
+                <span
+                  className={cn(
+                    'badge text-[12px]',
+                    s.priority === '높음' && 'badge-danger',
+                    s.priority === '중간' && 'badge-warning',
+                    s.priority !== '높음' && s.priority !== '중간' && 'badge-info',
+                  )}
+                >
                   {s.priority}
                 </span>
               </div>
-              {s.description && <p className="text-sm text-gray-600 mt-2">{s.description}</p>}
-            </div>
+              {s.description && <p className="mt-2 text-[13.5px] leading-[1.6] text-[color:var(--color-ink-mute)]">{s.description}</p>}
+            </li>
           ))}
-        </div>
-      </div>
+        </ul>
+      </section>
 
       {/* Review List */}
-      <div className="card">
+      <section aria-labelledby="review-list" className="card">
         <div className="mb-4">
-          <h3 className="section-title mb-3">리뷰 목록</h3>
-          <div className="flex gap-2 flex-wrap items-center">
+          <h3 id="review-list" className="section-title mb-3">리뷰 목록</h3>
+          <div className="flex flex-wrap items-center gap-2">
             {['all', '네이버스마트스토어', '쿠팡'].map(p => (
               <button
                 key={p}
                 onClick={() => setSelectedPlatform(p)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors ${
-                  selectedPlatform === p ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                aria-pressed={selectedPlatform === p}
+                className={cn('chip cursor-pointer', selectedPlatform === p && 'chip-active')}
               >
                 {p === 'all' ? '전체' : p}
               </button>
             ))}
             <select
               value={selectedSentiment}
-              onChange={e => setSelectedSentiment(e.target.value)}
-              className="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 border-none outline-none cursor-pointer hover:bg-gray-200 transition-colors"
+              onChange={(e) => setSelectedSentiment(e.target.value)}
+              className="select ml-auto !min-h-[34px] !w-auto !py-1.5 !pr-8 !text-[13px]"
+              aria-label="감성으로 필터링"
             >
               <option value="all">감성 전체</option>
               <option value="positive">긍정</option>
@@ -291,25 +314,27 @@ export default function ReviewsPage() {
             </select>
           </div>
         </div>
-        <div className="space-y-2 max-h-[320px] sm:max-h-[400px] overflow-y-auto">
-          {filteredReviews.map(r => (
-            <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50">
-              <span className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                r.sentiment === 'positive' ? 'bg-success' :
-                r.sentiment === 'negative' ? 'bg-danger' : 'bg-gray-400'
-              }`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-800">{r.text}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs text-gray-400">{r.platform}</span>
-                  <span className="text-xs text-amber-500">{'★'.repeat(r.rating)}</span>
-                  <span className="text-xs text-gray-300">{r.date}</span>
+        <ul className="max-h-[320px] space-y-2 overflow-y-auto sm:max-h-[400px]">
+          {filteredReviews.map((r) => (
+            <li key={r.id} className="flex items-start gap-3 rounded-xl bg-[color:var(--color-surface)] p-3">
+              <StatusDot
+                tone={r.sentiment === 'positive' ? 'success' : r.sentiment === 'negative' ? 'danger' : 'mute'}
+                size={10}
+                className="mt-1"
+                label={r.sentiment === 'positive' ? '긍정' : r.sentiment === 'negative' ? '부정' : '중립'}
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] leading-[1.55] text-[color:var(--color-ink-soft)]">{r.text}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px]">
+                  <span className="text-[color:var(--color-ink-faint)]">{r.platform}</span>
+                  <span aria-label={`평점 ${r.rating}점`} className="text-[color:var(--color-accent)]">{'★'.repeat(r.rating)}</span>
+                  <time className="num text-[color:var(--color-ink-faint)]">{r.date}</time>
                 </div>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
-      </div>
+        </ul>
+      </section>
 
       {/* Settings Modal */}
       <AnalysisSettingsModal

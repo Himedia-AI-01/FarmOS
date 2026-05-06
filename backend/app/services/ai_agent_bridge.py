@@ -87,6 +87,8 @@ class AiAgentBridge:
         self.last_backfill_at: datetime | None = None
         self.last_error: str | None = None
         self.total_processed: int = 0
+        # dead-letter 카운터 — _handle_decision 실패 누적, /bridge/status 에서 노출
+        self.total_failed: int = 0
 
     # ── 공개 API ──────────────────────────────────────────────────────────────
 
@@ -282,14 +284,32 @@ class AiAgentBridge:
                     await self._handle_decision(raw)
 
     async def _handle_decision(self, raw: dict[str, Any]) -> None:
-        """SSE 이벤트 1건 처리 — UPSERT + 요약 증분."""
+        """SSE 이벤트 1건 처리 — UPSERT + 요약 증분.
+
+        Dead-letter 정책:
+            UPSERT 실패 시 단순히 drop 하면 backfill 커서가 이미 진전했기 때문에
+            이벤트가 영구 유실된다 (SC-1 ingest 보장 위반).
+            완전한 dead-letter 큐 구축은 별도 마이그레이션이 필요하므로 우선
+            (1) 전체 페이로드를 ERROR 레벨로 기록해 수동 복원 가능하게 하고
+            (2) 재시도 카운터를 누적해 운영자가 빈도를 모니터링할 수 있게 한다.
+        """
+        decision_id = raw.get("id")
         async with self._session_factory() as db:
             try:
                 applied = await self._upsert_and_summarize(db, raw)
                 await db.commit()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 — 단일 이벤트 실패가 stream 을 막지 않도록 격리
                 await db.rollback()
-                logger.warning("ai_agent_bridge.upsert_failed id=%s err=%s", raw.get("id"), exc)
+                self.total_failed = getattr(self, "total_failed", 0) + 1
+                # ERROR 레벨 + 전체 raw payload — 로그에서 grep 으로 복원 가능
+                logger.error(
+                    "ai_agent_bridge.dead_letter id=%s err=%s payload=%s total_failed=%d",
+                    decision_id,
+                    exc,
+                    json.dumps(raw, default=str)[:2000],
+                    self.total_failed,
+                    exc_info=True,
+                )
                 return
 
         if applied:

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = '/api/v1';
 
 // Access token 만료 5분 전에 자동 갱신 (55분)
 const TOKEN_REFRESH_INTERVAL = 55 * 60 * 1000;
@@ -129,6 +129,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearRefreshTimer();
   }, [checkAuth, clearRefreshTimer]);
 
+  // setInterval doesn't fire while the tab is backgrounded (browsers throttle
+  // it heavily after 5min). When the user returns, the access token may have
+  // expired before the next tick — proactively refresh on visibilitychange so
+  // the next request doesn't 401.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!refreshTimerRef.current) return; // no active session — nothing to refresh
+      void refreshAccessToken().then((ok) => {
+        if (!ok) {
+          clearRefreshTimer();
+          setUser(null);
+        }
+      });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refreshAccessToken, clearRefreshTimer]);
+
   const login = async (userId: string, password: string) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
@@ -144,12 +164,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // 서버 호출 실패(네트워크 오프라인 등)에 관계없이 클라이언트 상태는 반드시 정리한다.
+    // 과거: 실패 시 setUser(null)이 실행되지 않아 사용자가 "로그인 상태"로 보였다.
     clearRefreshTimer();
-    await fetch(`${API_BASE}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    setUser(null);
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (err) {
+      // 네트워크 오류 무시 — 클라이언트 측 세션은 어차피 종료
+      console.warn('[auth] logout request failed (서버 쿠키는 만료 시 자동 정리):', err);
+    } finally {
+      setUser(null);
+    }
   };
 
   const refreshUser = useCallback(async () => {
@@ -168,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

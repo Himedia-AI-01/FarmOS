@@ -6,4 +6,4 @@
  */
 export const API_BASE: string =
   ((import.meta.env as Record<string, string | undefined>).VITE_API_BASE) ??
-  "http://localhost:8000/api/v1";
+  "/api/v1";

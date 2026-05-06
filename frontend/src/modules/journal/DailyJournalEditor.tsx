@@ -149,13 +149,13 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
 
       <div className="relative bg-white rounded-2xl shadow-xl w-[95vw] max-w-5xl h-[90vh] flex flex-col">
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[color:var(--color-line-soft)]">
           <div className="flex items-center gap-2">
             {view === "history" && (
               <button
                 type="button"
                 onClick={() => setView("edit")}
-                className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
+                className="p-1 text-[color:var(--color-ink-mute)] hover:text-[color:var(--color-ink-soft)] cursor-pointer"
                 aria-label="편집 뷰로 돌아가기"
               >
                 <MdChevronLeft className="text-xl" />
@@ -164,14 +164,14 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
             <div>
               <h3
                 id="daily-journal-editor-title"
-                className="text-base font-semibold text-gray-900"
+                className="text-base font-semibold text-[color:var(--color-ink)]"
               >
                 {view === "edit"
                   ? `통합 영농일지 편집 · ${dailyJournal.work_date}`
                   : `이전 기록 (${revisions?.length ?? 0}건)`}
               </h3>
               {view === "edit" && locked && (
-                <p className="text-xs text-red-500 mt-1">
+                <p className="text-xs text-[color:var(--color-danger)] mt-1">
                   확정된 일지는 편집할 수 없습니다. 먼저 확정을 해제하세요.
                 </p>
               )}
@@ -183,7 +183,7 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
                 type="button"
                 onClick={openHistory}
                 aria-label="이전 기록"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-indigo-600 hover:bg-indigo-50 cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[color:var(--color-primary-dark)] hover:bg-[color:var(--color-primary-soft)] cursor-pointer"
               >
                 <MdHistory className="text-base" />
                 <span className="hidden sm:inline">이전 기록</span>
@@ -191,7 +191,7 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
             )}
           <button
             onClick={handleClose}
-            className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
+            className="p-1 text-[color:var(--color-ink-faint)] hover:text-[color:var(--color-ink-mute)] cursor-pointer"
             aria-label="닫기"
           >
             <MdClose className="text-xl" />
@@ -203,21 +203,21 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
         {view === "edit" && (
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
           {/* 좌측 원본 참고 — 데스크톱 전용. 모바일은 공간 확보를 위해 숨김. */}
-          <aside className="hidden md:flex md:flex-col md:w-72 md:border-r border-gray-100 md:overflow-y-auto md:p-4 bg-gray-50/50">
-            <h4 className="text-xs font-semibold text-gray-500 mb-2">
+          <aside className="hidden md:flex md:flex-col md:w-72 md:border-r border-[color:var(--color-line-soft)] md:overflow-y-auto md:p-4 bg-[color:var(--color-surface)]/50">
+            <h4 className="text-xs font-semibold text-[color:var(--color-ink-mute)] mb-2">
               원본 작업 기록 ({snapshot.length}건)
             </h4>
             <ul className="space-y-2 text-xs">
               {snapshot.map((e, i) => (
                 <li
                   key={(e.id as number) ?? i}
-                  className="p-2 bg-white border border-gray-100 rounded"
+                  className="p-2 bg-white border border-[color:var(--color-line-soft)] rounded"
                 >
-                  <div className="font-medium text-gray-700">
+                  <div className="font-medium text-[color:var(--color-ink-soft)]">
                     {(e.field_name as string) || "-"} ·{" "}
-                    <span className="text-gray-500">{(e.crop as string) || "-"}</span>
+                    <span className="text-[color:var(--color-ink-mute)]">{(e.crop as string) || "-"}</span>
                   </div>
-                  <div className="text-gray-500">
+                  <div className="text-[color:var(--color-ink-mute)]">
                     {(e.work_stage as string) || ""}
                     {e.usage_pesticide_product
                       ? ` · 농약: ${e.usage_pesticide_product as string}`
@@ -227,12 +227,12 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
                       : ""}
                   </div>
                   {e.detail ? (
-                    <div className="text-gray-400 mt-1">{e.detail as string}</div>
+                    <div className="text-[color:var(--color-ink-faint)] mt-1">{e.detail as string}</div>
                   ) : null}
                 </li>
               ))}
               {snapshot.length === 0 && (
-                <li className="text-gray-400">원본 스냅샷이 없습니다.</li>
+                <li className="text-[color:var(--color-ink-faint)]">원본 스냅샷이 없습니다.</li>
               )}
             </ul>
           </aside>
@@ -245,13 +245,13 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
               onChange={(e) => setNarrative(e.target.value)}
               readOnly={locked}
               spellCheck={false}
-              className="flex-1 resize-none border border-gray-200 rounded-lg p-3 font-sans text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-gray-50"
+              className="flex-1 resize-none border border-[color:var(--color-line)] rounded-lg p-3 font-sans text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-soft)] disabled:bg-[color:var(--color-surface)]"
               placeholder="영농일지 본문을 편집하세요..."
             />
-            <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
+            <div className="flex items-center justify-between mt-2 text-xs text-[color:var(--color-ink-faint)]">
               <span>
                 {narrative.length.toLocaleString()} / {MAX_LEN.toLocaleString()}자
-                {dirty && <span className="ml-2 text-amber-600">● 저장되지 않음</span>}
+                {dirty && <span className="ml-2 text-[color:var(--color-accent-dark)]">● 저장되지 않음</span>}
               </span>
             </div>
           </div>
@@ -260,14 +260,14 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
 
         {/* 이전 기록 뷰 — 모달 전체 화면을 revision 카드 리스트로 전환 */}
         {view === "history" && (
-          <div className="flex-1 overflow-y-auto px-4 py-4 bg-gray-50/30">
+          <div className="flex-1 overflow-y-auto px-4 py-4 bg-[color:var(--color-surface)]/30">
             {revisions && revisions.length === 0 && (
-              <div className="text-center py-12 text-sm text-gray-400">
+              <div className="text-center py-12 text-sm text-[color:var(--color-ink-faint)]">
                 아직 편집 히스토리가 없습니다.
               </div>
             )}
             {!locked && (
-              <p className="text-xs text-gray-500 mb-3 text-center">
+              <p className="text-xs text-[color:var(--color-ink-mute)] mb-3 text-center">
                 불러올 기록을 선택하세요. 현재 편집 중인 내용은 덮어써집니다.
               </p>
             )}
@@ -278,17 +278,17 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
                     type="button"
                     onClick={() => restoreFromRevision(rev)}
                     disabled={locked}
-                    className="w-full text-left p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:border-indigo-400 hover:shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:shadow-sm disabled:active:scale-100"
+                    className="w-full text-left p-4 bg-white border border-[color:var(--color-line)] rounded-xl shadow-sm hover:border-[color:var(--color-primary-light)] hover:shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[color:var(--color-line)] disabled:hover:shadow-sm disabled:active:scale-100"
                   >
                     <div className="flex items-center gap-2 text-xs mb-2">
-                      <span className="text-gray-500">
+                      <span className="text-[color:var(--color-ink-mute)]">
                         {new Date(rev.created_at).toLocaleString("ko-KR")}
                       </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-medium">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary-dark)] font-medium">
                         {rev.narrative_source}
                       </span>
                     </div>
-                    <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 leading-relaxed line-clamp-6">
+                    <pre className="whitespace-pre-wrap font-sans text-sm text-[color:var(--color-ink-soft)] leading-relaxed line-clamp-6">
                       {rev.narrative}
                     </pre>
                   </button>
@@ -300,7 +300,7 @@ export default function DailyJournalEditor({ dailyJournal, onSaved, onClose }: P
 
         {/* 푸터 — 편집 뷰에서만 표시 */}
         {view === "edit" && (
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[color:var(--color-line-soft)] bg-[color:var(--color-surface)]/50">
           <button
             onClick={handleClose}
             className="btn-outline text-sm"

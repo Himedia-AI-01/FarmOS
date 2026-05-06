@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # ── 데이터베이스 ────────────────────────────────────────────────────────
     # 데이터베이스 (PostgreSQL)
     DATABASE_URL: str = ""
+    # 쇼핑몰 DB. 동일 Postgres 인스턴스에서 dbname 만 다른 게 일반적이다.
+    # 비워두면 DATABASE_URL 의 dbname 을 'shop' 으로 치환한 값을 사용한다.
+    SHOP_DATABASE_URL: str = ""
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30

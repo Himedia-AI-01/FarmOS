@@ -491,7 +491,7 @@ export default function IoTDashboardPage() {
           <>
             <MdWifiOff className="text-[18px] text-[color:var(--color-ink-mute)]" />
             <span className="font-bold text-[color:var(--color-ink-mute)]">백엔드 연결 안 됨</span>
-            <span className="text-[12px] text-[color:var(--color-ink-faint)]">http://localhost:8000</span>
+            <span className="text-[12px] text-[color:var(--color-ink-faint)]">백엔드 응답 없음</span>
           </>
         )}
       </div>

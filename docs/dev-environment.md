@@ -207,24 +207,6 @@ npm install
 DATABASE_URL=postgresql+psycopg2://postgres:root@localhost:5432/farmos
 ```
 
-### 프론트엔드 URL 환경 변수 (`shopping_mall/frontend/.env`, 선택)
-
-쇼핑몰 프론트엔드는 다음 환경변수를 우선 사용하고, 값이 없으면 코드의 `??` fallback으로 로컬 개발용 `localhost` 주소를 사용합니다.
-
-```env
-VITE_API_URL=http://localhost:4000
-VITE_FARMOS_API_URL=http://localhost:8000/api/v1
-VITE_FARMOS_LOGIN_URL=http://localhost:5173/login
-```
-
-현재 fallback 기준:
-
-```ts
-VITE_API_URL ?? 'http://localhost:4000'
-VITE_FARMOS_API_URL ?? 'http://localhost:8000/api/v1'
-VITE_FARMOS_LOGIN_URL ?? 'http://localhost:5173/login'
-```
-
 ### 시드 데이터 투입
 
 ```bash

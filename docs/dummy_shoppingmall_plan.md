@@ -149,14 +149,3 @@ npm install && npm run dev
 # 또는 전체 서비스 한번에 실행
 bootstrap.cmd
 ```
-
-### Frontend URL fallback
-
-쇼핑몰 프론트엔드는 환경변수가 있으면 해당 값을 사용하고, 없으면 로컬 개발 주소로 fallback한다.
-
-```ts
-VITE_API_URL ?? 'http://localhost:4000'
-VITE_FARMOS_API_URL ?? 'http://localhost:8000/api/v1'
-VITE_FARMOS_LOGIN_URL ?? 'http://localhost:5173/login'
-```
-

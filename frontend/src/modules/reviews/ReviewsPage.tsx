@@ -2,7 +2,7 @@
 // ts/06-reviews-pipeline-state-analysis.md §5 기준: mock 폴백 제거, 빈 상태는 placeholder.
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { MdTrendingUp, MdPlayArrow, MdSettings, MdDownload, MdWarning, MdStorage, MdInfoOutline, MdCheckCircle } from 'react-icons/md';
+import { MdTrendingUp, MdPlayArrow, MdSettings, MdDownload, MdWarning, MdStorage, MdCheckCircle, MdStar, MdChevronLeft, MdChevronRight } from 'react-icons/md';
 import { useReviewAnalysis } from '@/hooks/useReviewAnalysis';
 import RAGSearchPanel from './RAGSearchPanel';
 import AnalysisSettingsModal from './AnalysisSettingsModal';
@@ -40,7 +40,32 @@ export default function ReviewsPage() {
     error, analyzeReviews, searchResults, isSearching, searchReviews,
     trends, anomalies, downloadReport, embedReviews,
     settings, updateSettings,
+    reviewList, reviewListTotal, reviewListPage, reviewListPageSize,
+    reviewListHasMore, isReviewListLoading, reviewListRatingFilter,
+    setReviewListRatingFilter, fetchReviewList,
   } = useReviewAnalysis();
+
+  // 평점 필터 프리셋 — 전체 / 긍정(4-5) / 중립(3) / 부정(1-2)
+  const ratingPresets = [
+    { key: 'all', label: '전체', min: null as number | null, max: null as number | null },
+    { key: 'pos', label: '긍정 (4-5)', min: 4, max: 5 },
+    { key: 'neu', label: '중립 (3)', min: 3, max: 3 },
+    { key: 'neg', label: '부정 (1-2)', min: 1, max: 2 },
+  ];
+  const activeRatingKey =
+    reviewListRatingFilter.min === null && reviewListRatingFilter.max === null ? 'all'
+    : reviewListRatingFilter.min === 4 && reviewListRatingFilter.max === 5 ? 'pos'
+    : reviewListRatingFilter.min === 3 && reviewListRatingFilter.max === 3 ? 'neu'
+    : reviewListRatingFilter.min === 1 && reviewListRatingFilter.max === 2 ? 'neg'
+    : 'custom';
+
+  const handleRatingPreset = (min: number | null, max: number | null) => {
+    setReviewListRatingFilter({ min, max });
+    // 필터 변경 시 1페이지로 리셋
+    fetchReviewList(1, reviewListPageSize, min, max);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(reviewListTotal / reviewListPageSize));
 
   const sentimentSummary = analysis?.sentiment_summary ?? EMPTY_SENTIMENT;
   const keywords = analysis?.keywords ?? [];
@@ -320,18 +345,100 @@ export default function ReviewsPage() {
         )}
       </section>
 
-      {/* Review List — 백엔드 /list 엔드포인트 미존재로 placeholder.
-         적재된 리뷰를 보려면 위 RAG 의미 검색을 사용 (ts/06-reviews-pipeline-state-analysis.md §5 b-1). */}
+      {/* Review List — shop_reviews 페이지네이션 (RAG 검색과 분리) */}
       <section aria-labelledby="review-list" className="card">
-        <h3 id="review-list" className="section-title mb-3">리뷰 목록</h3>
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-[color:var(--color-line)] bg-[color:var(--color-surface)] px-4 py-8 text-center">
-          <MdInfoOutline aria-hidden className="text-[28px] text-[color:var(--color-ink-faint)]" />
-          <p className="text-[14px] font-medium text-[color:var(--color-ink-soft)]">리뷰 목록 API 준비 중</p>
-          <p className="max-w-md text-[12.5px] leading-[1.6] text-[color:var(--color-ink-faint)]">
-            적재된 리뷰는 위의 <strong>의미 검색</strong>으로 자연어 조회가 가능합니다.
-            전체 목록 조회 API는 추후 제공될 예정입니다.
-          </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h3 id="review-list" className="section-title">
+            리뷰 목록
+            <span className="ml-2 text-[12px] font-normal text-[color:var(--color-ink-faint)]">
+              총 <span className="num">{reviewListTotal.toLocaleString()}</span>건
+            </span>
+          </h3>
+          <div role="group" aria-label="평점 필터" className="flex flex-wrap gap-1">
+            {ratingPresets.map(p => (
+              <button
+                key={p.key}
+                onClick={() => handleRatingPreset(p.min, p.max)}
+                className={cn(
+                  'rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors',
+                  activeRatingKey === p.key
+                    ? 'bg-[color:var(--color-primary)] text-white'
+                    : 'bg-[color:var(--color-surface-deep)] text-[color:var(--color-ink-mute)] hover:bg-[color:var(--color-surface)]',
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {isReviewListLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Spinner size={20} tone="mute" label="리뷰 불러오는 중" />
+          </div>
+        ) : reviewList.length === 0 ? (
+          <EmptyInline message="조건에 해당하는 리뷰가 없습니다." />
+        ) : (
+          <ul className="space-y-2">
+            {reviewList.map(r => (
+              <li
+                key={r.id}
+                className="rounded-xl border border-[color:var(--color-line)] bg-[color:var(--color-surface)] p-3 transition-colors hover:border-[color:var(--color-primary-light)]"
+              >
+                <div className="mb-1 flex items-center gap-2 text-[12.5px] text-[color:var(--color-ink-mute)]">
+                  <span
+                    className="inline-flex items-center gap-0.5 font-semibold text-[color:var(--color-warning)]"
+                    aria-label={`평점 ${r.rating}점`}
+                  >
+                    <MdStar aria-hidden className="text-[15px]" />
+                    <span className="num">{r.rating.toFixed(1)}</span>
+                  </span>
+                  {r.product_name && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="truncate">{r.product_name}</span>
+                    </>
+                  )}
+                  {r.created_at && (
+                    <>
+                      <span aria-hidden className="ml-auto" />
+                      <span className="num text-[color:var(--color-ink-faint)]">
+                        {r.created_at.slice(0, 10)}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="text-[14px] leading-[1.6] text-[color:var(--color-ink-soft)]">{r.content}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {reviewListTotal > 0 && (
+          <div className="mt-4 flex items-center justify-between gap-3 text-[13px]">
+            <span className="text-[color:var(--color-ink-faint)]">
+              <span className="num">{reviewListPage}</span> / <span className="num">{totalPages}</span> 페이지
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => fetchReviewList(reviewListPage - 1, reviewListPageSize, reviewListRatingFilter.min, reviewListRatingFilter.max)}
+                disabled={reviewListPage <= 1 || isReviewListLoading}
+                className="icon-btn disabled:opacity-40"
+                aria-label="이전 페이지"
+              >
+                <MdChevronLeft aria-hidden className="text-[18px]" />
+              </button>
+              <button
+                onClick={() => fetchReviewList(reviewListPage + 1, reviewListPageSize, reviewListRatingFilter.min, reviewListRatingFilter.max)}
+                disabled={!reviewListHasMore || isReviewListLoading}
+                className="icon-btn disabled:opacity-40"
+                aria-label="다음 페이지"
+              >
+                <MdChevronRight aria-hidden className="text-[18px]" />
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Settings Modal */}

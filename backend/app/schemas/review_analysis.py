@@ -163,3 +163,31 @@ class AnalysisListItem(BaseModel):
     processing_time_ms: int
     llm_provider: str | None = None
     created_at: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# 리뷰 목록 (shop_reviews 페이지네이션 조회)
+# ---------------------------------------------------------------------------
+
+class ReviewListItem(BaseModel):
+    """GET /api/v1/reviews/list 리스트 아이템.
+
+    감성(sentiment)은 LLM 분석 후 ReviewAnalysis.sentiments 에 저장되지만,
+    현 단계에서는 리뷰 자체에 컬럼이 없어 응답에 포함하지 않는다.
+    필요 시 추후 review_id ↔ sentiment 매핑 테이블을 join 한다.
+    """
+    id: int
+    product_id: int | None = None
+    product_name: str | None = None
+    rating: float
+    content: str
+    created_at: str | None = None
+
+
+class ReviewListResponse(BaseModel):
+    """GET /api/v1/reviews/list 응답."""
+    items: list[ReviewListItem]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool

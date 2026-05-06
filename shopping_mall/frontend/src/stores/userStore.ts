@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-const FARMOS_API = 'http://localhost:8000/api/v1';
+const FARMOS_API = import.meta.env.VITE_FARMOS_API || 'http://localhost:8000/api/v1';
 const SHOP_API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 interface AuthUser {

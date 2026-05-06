@@ -1,6 +1,7 @@
 import math
 from typing import Optional
 from sqlalchemy.orm import Session, joinedload
+from app.core.sql_safety import LIKE_ESCAPE_CHAR, contains_like_pattern, normalize_search_term
 from app.models.product import Product
 from app.models.store import Store
 
@@ -51,7 +52,12 @@ def get_product(db: Session, product_id: int):
 
 
 def search_products(db: Session, q: str, page: int = 1, limit: int = 20):
-    query = db.query(Product).filter(Product.name.contains(q))
+    term = normalize_search_term(q)
+    if not term:
+        return {"items": [], "total": 0, "page": page, "limit": limit, "total_pages": 0}
+    query = db.query(Product).filter(
+        Product.name.ilike(contains_like_pattern(term), escape=LIKE_ESCAPE_CHAR)
+    )
     total = query.count()
     offset = (page - 1) * limit
     items = query.order_by(Product.created_at.desc()).offset(offset).limit(limit).all()

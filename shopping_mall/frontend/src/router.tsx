@@ -17,11 +17,8 @@ import AdminLayout from '@/admin/AdminLayout';
 import DashboardPage from '@/admin/pages/DashboardPage';
 import ChatbotPage from '@/admin/pages/ChatbotPage';
 import CsInsightsPage from '@/admin/pages/CsInsightsPage';
-import CalendarPage from '@/admin/pages/CalendarPage';
 import ShipmentsPage from '@/admin/pages/ShipmentsPage';
-import ReportsPage from '@/admin/pages/ReportsPage';
 import AnalyticsPage from '@/admin/pages/AnalyticsPage';
-import ExpensesPage from '@/admin/pages/ExpensesPage';
 import TicketsPage from '@/admin/pages/TicketsPage';
 import FaqPage from '@/admin/pages/FaqPage';
 
@@ -52,11 +49,8 @@ export const router = createBrowserRouter([
       { path: 'tickets', element: <TicketsPage /> },
       { path: 'chatbot', element: <ChatbotPage /> },
       { path: 'cs-insights', element: <CsInsightsPage /> },
-      { path: 'calendar', element: <CalendarPage /> },
       { path: 'shipments', element: <ShipmentsPage /> },
-      { path: 'reports', element: <ReportsPage /> },
       { path: 'analytics', element: <AnalyticsPage /> },
-      { path: 'expenses', element: <ExpensesPage /> },
       { path: 'faq', element: <FaqPage /> },
     ],
   },

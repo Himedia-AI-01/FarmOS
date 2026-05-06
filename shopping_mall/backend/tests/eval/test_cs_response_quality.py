@@ -16,6 +16,7 @@ CS 응답 품질 검증 — 핸드오프 형식 / 불렛 제한 / 정책 출처 
 import argparse
 import http.cookiejar
 import json
+import os
 import re
 import sys
 import time
@@ -25,7 +26,7 @@ from pathlib import Path
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
 
-BASE_URL   = "http://localhost:4000"
+BASE_URL = os.getenv("SHOPPING_MALL_BASE_URL", "http://127.0.0.1:4000")
 COOKIE_PATH = Path(__file__).parents[4] / "cookie.txt"   # FarmOS/cookie.txt
 TIMEOUT_SEC = 180
 
@@ -190,7 +191,7 @@ def main(verbose: bool = False) -> None:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     print("=" * 68)
-    print("CS 응답 품질 검증  (서버: localhost:4000)")
+    print(f"CS 응답 품질 검증  (서버: {BASE_URL})")
     print(f"케이스 수: {len(QUALITY_CASES)}")
     print("=" * 68)
 

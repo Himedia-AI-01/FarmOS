@@ -283,6 +283,7 @@ class AdminOrderStatusUpdate(BaseModel):
 # 관리자 허용 전환 — 자동 전환이 없는 단계만 수동으로 처리
 _ADMIN_ORDER_TRANSITIONS: dict[str, list[str]] = {
     "pending":   ["preparing", "cancelled"],
+    "paid":      ["preparing", "cancelled"],
     "preparing": ["cancelled"],
     "shipped":   ["cancelled"],  # 강제 취소 (배송 중 관리자 처리)
     "delivered": [],
@@ -300,8 +301,8 @@ def admin_update_order_status(
     """관리자 수동 주문 상태 전환.
 
     허용 전환:
-      pending   → preparing  (상품 준비 시작 확인)
-      pending   → cancelled  (관리자 직접 취소)
+      pending/paid → preparing  (상품 준비 시작 확인)
+      pending/paid → cancelled  (관리자 직접 취소)
       preparing → cancelled  (관리자 직접 취소)
       shipped   → cancelled  (강제 취소 — 배송 중 예외 처리)
     """
@@ -317,10 +318,14 @@ def admin_update_order_status(
             detail=f"'{order.status}' → '{body.status}' 전환은 허용되지 않습니다. 허용된 전환: {allowed_str}",
         )
 
-    # pending / preparing 취소 시 재고 복구
-    if body.status == "cancelled" and order.status in ("pending", "preparing"):
+    if body.status == "cancelled" and order.status in ("pending", "paid", "preparing"):
         from app.services.order_processor import OrderProcessor
         OrderProcessor.restore_stock(db, order.id)
+
+    # 취소 확정 시 매출 차감 전표 반영 (배송 중 강제 취소 포함)
+    if body.status == "cancelled":
+        from app.services.revenue_sync import create_refund_revenue_entries
+        create_refund_revenue_entries(db, order)
 
     order.status = body.status
     db.commit()

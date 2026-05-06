@@ -178,7 +178,7 @@
 | ORM | SQLAlchemy / Tortoise / Raw SQL | **SQLAlchemy (sync)** | FarmOS와 동일 ORM, 풍부한 생태계 |
 | API Client | fetch / axios / TanStack Query | **axios + TanStack Query** | 캐싱, 로딩/에러 상태 자동 관리 |
 | Routing | React Router / TanStack Router | **React Router DOM v7** | FarmOS와 동일, SPA 라우팅 |
-| Image Handling | img + placeholder / 외부 라이브러리 | **img + Placeholder 이미지 (picsum)** | 더미데이터용 무료 이미지 |
+| Image Handling | img + placeholder / 외부 라이브러리 | **img + 외부 더미 이미지 URL(loremflickr)** | 더미데이터용 무료 이미지 |
 | Package Manager (Python) | uv / pip / poetry | **uv** | FarmOS와 동일, 빠른 설치 |
 
 ### 7.3 프로젝트 폴더 구조
@@ -197,7 +197,7 @@ FarmOS/                              # 기존 프로젝트 루트
 │   │   ├── tailwind.config.ts
 │   │   ├── tsconfig.json
 │   │   ├── index.html
-│   │   ├── .env                     # VITE_API_URL=http://localhost:4000
+│   │   ├── .env                     # VITE_* URL override (없으면 localhost fallback)
 │   │   ├── .gitignore
 │   │   ├── public/
 │   │   │   └── images/
@@ -231,7 +231,8 @@ FarmOS/                              # 기존 프로젝트 루트
 │   │       │   ├── useCart.ts
 │   │       │   └── useOrders.ts
 │   │       ├── lib/                  # 유틸리티
-│   │       │   ├── api.ts            # axios 인스턴스 (baseURL: localhost:4000)
+│   │       │   ├── serviceUrls.ts    # VITE_* ?? localhost fallback URL 상수
+│   │       │   ├── api.ts            # axios 인스턴스 (baseURL: SHOP_API_URL)
 │   │       │   └── utils.ts          # 가격 포맷터, 날짜 헬퍼
 │   │       └── types/                # TypeScript 타입
 │   │           ├── product.ts
@@ -460,7 +461,9 @@ CREATE TABLE wishlists (
 
 | Variable | Purpose | Package | Default |
 |----------|---------|---------|---------|
-| `VITE_API_URL` | 더미 API 서버 주소 | frontend | `http://localhost:4000` |
+| `VITE_API_URL` | 쇼핑몰 API 서버 주소 | frontend | `?? 'http://localhost:4000'` |
+| `VITE_FARMOS_API_URL` | FarmOS 인증 API 주소 | frontend | `?? 'http://localhost:8000/api/v1'` |
+| `VITE_FARMOS_LOGIN_URL` | FarmOS 로그인 페이지 주소 | frontend | `?? 'http://localhost:5173/login'` |
 | `PORT` | Backend 서버 포트 | backend | `4000` |
 | `DATABASE_URL` | PostgreSQL DB 경로 | backend | `postgresql+psycopg2://postgres:root@localhost:5432/farmos` |
 

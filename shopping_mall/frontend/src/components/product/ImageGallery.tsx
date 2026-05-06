@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { defaultProductImage } from '@/lib/fallbackImages';
 
 export default function ImageGallery({ images, name }: { images: string[]; name: string }) {
   const [selected, setSelected] = useState(0);
-  const list = images.length > 0 ? images : ['https://picsum.photos/seed/default/600/600'];
+  const list = images.length > 0 ? images : [defaultProductImage(600)];
 
   return (
     <div>

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # 자동 취소 가능 주문 상태 (배송사 픽업 전)
-AUTO_CANCEL_STATUSES: frozenset[str] = frozenset({"pending", "preparing"})
+AUTO_CANCEL_STATUSES: frozenset[str] = frozenset({"pending", "paid", "preparing"})
 
 # 관리자 검토 필요 상태 (배송 시작 후)
 ADMIN_REVIEW_STATUSES: frozenset[str] = frozenset({"shipped"})
@@ -83,6 +83,7 @@ class OrderProcessor:
 
             before = product.stock
             product.stock += item.quantity
+            product.sales_count = max(0, product.sales_count - item.quantity)
             restored[item.product_id] = item.quantity
 
             # ④ 재고 복구 후 is_available 자동 전환
@@ -134,6 +135,8 @@ class OrderProcessor:
         ticket.status = "completed"
 
         restored = OrderProcessor.restore_stock(db, order.id)
+        from app.services.revenue_sync import create_refund_revenue_entries
+        create_refund_revenue_entries(db, order)
 
         logger.info(
             "[order_processor] 자동 취소 적용(미커밋): order=%d ticket=%s restored=%s",
@@ -245,6 +248,8 @@ class OrderProcessor:
             )
 
         order.status = "returned"
+        from app.services.revenue_sync import create_refund_revenue_entries
+        create_refund_revenue_entries(db, order)
         logger.info(
             "[order_processor] 반품 완료 적용(미커밋): order=%d",
             order.id,

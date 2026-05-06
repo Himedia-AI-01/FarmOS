@@ -45,10 +45,6 @@ class Settings(BaseSettings):
     # not accept reasoning_effort on every OpenAI-compatible provider.
     llm_reasoning_effort: str = ""
 
-    # ── Fallback LLM (Anthropic Claude) ─────────────────────────────────────
-    anthropic_api_key: str = ""
-    claude_fallback_model: str = "claude-haiku-4-5"
-
     # ── 재랭킹 ──────────────────────────────────────────────────────────────
     # Cross-Encoder 재랭킹 모델. 비워두면 재랭킹 비활성화.
     # 추천: dragonkue/bge-reranker-v2-m3-ko (한국어 특화, ~570MB)

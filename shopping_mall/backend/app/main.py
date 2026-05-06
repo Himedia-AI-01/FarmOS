@@ -79,7 +79,125 @@ def _ensure_schema_patches() -> None:
                 "ADD COLUMN IF NOT EXISTS flags TEXT NOT NULL DEFAULT '[]'"
             )
         )
-    logger.info("shop_tickets.flags schema patch ensured.")
+        conn.execute(
+            text(
+                """
+                DO $$
+                DECLARE
+                    target_table text;
+                BEGIN
+                    SELECT referred.relname
+                      INTO target_table
+                      FROM pg_constraint con
+                      JOIN pg_class local ON local.oid = con.conrelid
+                      JOIN pg_class referred ON referred.oid = con.confrelid
+                     WHERE con.conname = 'shop_faq_citations_faq_doc_id_fkey'
+                       AND local.relname = 'shop_faq_citations';
+
+                    IF target_table IS DISTINCT FROM 'shop_faq_docs' THEN
+                        ALTER TABLE shop_faq_citations
+                        DROP CONSTRAINT IF EXISTS shop_faq_citations_faq_doc_id_fkey;
+
+                        DELETE FROM shop_faq_citations citation
+                         WHERE NOT EXISTS (
+                            SELECT 1
+                              FROM shop_faq_docs doc
+                             WHERE doc.id = citation.faq_doc_id
+                         );
+
+                        ALTER TABLE shop_faq_citations
+                        ADD CONSTRAINT shop_faq_citations_faq_doc_id_fkey
+                        FOREIGN KEY (faq_doc_id)
+                        REFERENCES shop_faq_docs(id)
+                        ON DELETE CASCADE;
+                    END IF;
+                END $$;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                DELETE FROM shop_faq_citations current
+                 USING shop_faq_citations duplicate
+                 WHERE current.id > duplicate.id
+                   AND current.chat_log_id = duplicate.chat_log_id
+                   AND current.faq_doc_id = duplicate.faq_doc_id
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                          FROM pg_constraint
+                         WHERE conname = 'uq_faq_citation_log_doc'
+                           AND conrelid = 'shop_faq_citations'::regclass
+                    ) THEN
+                        ALTER TABLE shop_faq_citations
+                        ADD CONSTRAINT uq_faq_citation_log_doc
+                        UNIQUE (chat_log_id, faq_doc_id);
+                    END IF;
+                END $$;
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_shop_tool_metrics_tool_created
+                    ON shop_tool_metrics (tool_name, created_at)
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_shop_tool_metrics_created_at
+                    ON shop_tool_metrics (created_at)
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_shop_shipments_related_ticket_id
+                    ON shop_shipments (related_ticket_id)
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                          FROM pg_indexes
+                         WHERE schemaname = current_schema()
+                           AND indexname = 'uq_shop_tickets_active'
+                    ) AND NOT EXISTS (
+                        SELECT 1
+                          FROM (
+                            SELECT order_id, action_type
+                              FROM shop_tickets
+                             WHERE status = 'received'
+                             GROUP BY order_id, action_type
+                            HAVING count(*) > 1
+                          ) duplicates
+                    ) THEN
+                        CREATE UNIQUE INDEX uq_shop_tickets_active
+                            ON shop_tickets (order_id, action_type)
+                         WHERE status = 'received';
+                    END IF;
+                END $$;
+                """
+            )
+        )
+    logger.info("schema patches ensured.")
 
 
 _ensure_schema_patches()
@@ -168,9 +286,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Shopping Mall API", version="0.2.0", lifespan=lifespan)
 
+
+def _local_dev_origins() -> list[str]:
+    origins = list(settings.allow_origins)
+    for port in (5173, 5174, 5175):
+        for host in ("localhost", "127.0.0.1"):
+            origin = f"http://{host}:{port}"
+            if origin not in origins:
+                origins.append(origin)
+    return origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allow_origins,
+    allow_origins=_local_dev_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

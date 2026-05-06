@@ -56,14 +56,7 @@ EMBED_MODEL=openai/text-embedding-3-small
 # PRIMARY_LLM_API_KEY를 자동으로 재사용 — 추가 키 불필요
 ```
 
-**Ollama가 설치된 경우**
-```env
-EMBED_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBED_MODEL=embeddinggemma:latest
-```
-
-**둘 다 없는 경우 — 로컬 실행 (API 키·서버 불필요)**
+**OpenRouter 키가 없는 경우 — 로컬 실행 (API 키·서버 불필요)**
 ```env
 EMBED_PROVIDER=sentence_transformers
 EMBED_MODEL=BAAI/bge-m3

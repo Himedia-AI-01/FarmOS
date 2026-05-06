@@ -86,18 +86,17 @@ def get_dashboard(db: Session = Depends(get_db)):
     today_str = today.isoformat()
     yesterday_str = yesterday.isoformat()
 
-    # --- Today's revenue ---
-    today_revenue = (
-        db.query(func.coalesce(func.sum(RevenueEntry.total_amount), 0))
-        .filter(RevenueEntry.category == "sales", RevenueEntry.date == today_str)
-        .scalar()
-    ) or 0
+    def revenue_sum_for_day(day: str) -> int:
+        return (
+            db.query(func.coalesce(func.sum(RevenueEntry.total_amount), 0))
+            .filter(RevenueEntry.date == day)
+            .scalar()
+        ) or 0
 
-    yesterday_revenue = (
-        db.query(func.coalesce(func.sum(RevenueEntry.total_amount), 0))
-        .filter(RevenueEntry.category == "sales", RevenueEntry.date == yesterday_str)
-        .scalar()
-    ) or 0
+    # --- Today's net revenue ---
+    today_revenue = revenue_sum_for_day(today_str)
+
+    yesterday_revenue = revenue_sum_for_day(yesterday_str)
 
     # --- Today's orders ---
     today_orders = (
@@ -143,7 +142,6 @@ def get_dashboard(db: Session = Depends(get_db)):
             func.coalesce(func.sum(RevenueEntry.total_amount), 0),
         )
         .filter(
-            RevenueEntry.category == "sales",
             RevenueEntry.date >= week_ago.isoformat(),
             RevenueEntry.date <= today_str,
         )

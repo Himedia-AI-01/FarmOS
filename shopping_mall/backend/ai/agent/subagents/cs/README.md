@@ -61,7 +61,7 @@ Action: escalate_to_agent, refuse_request
 ```python
 cs_executor = AgentExecutor(
     primary=primary,          # ChatOpenAI
-    fallback=fallback,        # ChatAnthropic | None
+    fallback=fallback,        # fallback model | None
     rag_service=rag,
     max_iterations=settings.agent_max_iterations,
 )

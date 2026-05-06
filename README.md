@@ -286,7 +286,7 @@ RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2   # 선택
 3. 서버 시작 버튼 클릭
 ```
 
-`Web_Starter.exe`는 서버를 띄우기 전에 `automation/run.mjs`를 실행해 DB 테이블/row 수를 확인하고, 필요한 경우 시드 흐름을 호출합니다. 쇼핑몰 파트는 추가로 `shop_tickets.flags` 같은 안전한 누락 컬럼을 보강하고, 상품 이미지 URL을 최신 매핑으로 맞춥니다.
+`Web_Starter.exe`는 서버를 띄우기 전에 `automation/run.mjs`를 실행해 DB 테이블/row 수를 확인하고, 필요한 경우 시드 흐름을 호출합니다. 쇼핑몰 파트는 추가로 `shop_tickets.flags`, FAQ 인용 FK/유니크 제약, 운영 인덱스 같은 안전한 누락 스키마를 보강하고, 상품 이미지 URL을 최신 매핑으로 맞춥니다.
 
 수동 실행이 필요할 때는 아래 명령을 사용합니다.
 
@@ -298,7 +298,7 @@ cd backend && uv run uvicorn main:app --reload
 cd frontend && npm install && npm run dev
 
 # 쇼핑몰 백엔드
-cd shopping_mall/backend && uv run uvicorn main:app --reload --port 4000
+cd shopping_mall/backend && uv run uvicorn main:app --port 4000
 
 # 쇼핑몰 프론트엔드
 cd shopping_mall/frontend && npm install && npm run dev

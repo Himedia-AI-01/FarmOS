@@ -29,11 +29,11 @@ logger = logging.getLogger(__name__)
 # ── 상수 ───────────────────────────────────────────────────────────────────────
 
 # 취소 가능 상태: 아직 배송사에 픽업되지 않은 주문
-CANCELLABLE_STATUSES: frozenset[str] = frozenset({"pending", "preparing"})
+CANCELLABLE_STATUSES: frozenset[str] = frozenset({"pending", "paid", "preparing"})
 # 교환 가능 상태: 수령 완료된 주문
 EXCHANGEABLE_STATUSES: frozenset[str] = frozenset({"delivered"})
 # 주문 변경 가능 상태: 배송 전 주문
-CHANGEABLE_STATUSES: frozenset[str] = frozenset({"pending", "preparing"})
+CHANGEABLE_STATUSES: frozenset[str] = frozenset({"pending", "paid", "preparing"})
 HIGH_VALUE_REVIEW_THRESHOLD = 50_000
 HIGH_VALUE_REVIEW_FLAG: dict[str, str] = {
     "code": "high_value_review",
@@ -85,7 +85,24 @@ def _is_flow_abort_intent(text: str, action: str) -> bool:
 
 def _is_confirm_intent(text: str) -> bool:
     text_lower = text.strip().lower()
-    return any(kw in text_lower for kw in CONFIRM_KEYWORDS)
+    negative_patterns = (
+        r"안\s*(?:해|할|하겠|진행|신청)",
+        r"(?:진행|신청|확인).{0,8}(?:안|말|취소|보류)",
+        r"(?:아니오|아니요|싫|보류|취소|그만)",
+    )
+    if any(re.search(pattern, text_lower) for pattern in negative_patterns):
+        return False
+    compact = re.sub(r"\s+", "", text_lower)
+    if compact in CONFIRM_KEYWORDS:
+        return True
+    return any(
+        re.search(pattern, text_lower)
+        for pattern in (
+            r"(?:네|예|응).{0,8}(?:진행|신청|확인|맞)",
+            r"(?:진행|신청|접수).{0,8}(?:해|할게|해주세요|합니다)",
+            r"(?:맞아|맞습니다|좋아|좋아요)",
+        )
+    )
 
 
 def _action_label(action: str) -> str:
@@ -187,18 +204,19 @@ def _is_simple_change_of_mind(reason: str) -> bool:
     return any(term in normalized for term in _SIMPLE_CHANGE_OF_MIND_TERMS)
 
 
-def _parse_refund_method(text: str) -> str:
+def _parse_refund_method(text: str) -> str | None:
     text = text.strip()
     if text in REFUND_METHOD_MAP:
         return REFUND_METHOD_MAP[text]
-    if "1" in text or "원결제" in text or "카드" in text:
+    normalized = re.sub(r"\s+", "", text)
+    if normalized in {"1번", "원결제", "원결제수단", "카드", "계좌이체"}:
         return REFUND_METHOD_MAP["1"]
-    if "2" in text or "적립" in text or "포인트" in text:
+    if normalized in {"2번", "적립금", "포인트", "적립금환불"}:
         return REFUND_METHOD_MAP["2"]
-    return REFUND_METHOD_MAP["1"]  # 기본값
+    return None
 
 
-def _parse_change_type(text: str) -> str:
+def _parse_change_type(text: str) -> str | None:
     text = text.strip()
     if text in CHANGE_TYPE_MAP:
         return CHANGE_TYPE_MAP[text]
@@ -206,9 +224,33 @@ def _parse_change_type(text: str) -> str:
     if m and m.group(1) in CHANGE_TYPE_MAP:
         return CHANGE_TYPE_MAP[m.group(1)]
     for label in CHANGE_TYPE_MAP.values():
-        if label in text:
+        if text == label:
             return label
-    return CHANGE_TYPE_MAP["5"]
+    return None
+
+
+def _fetch_order_items_with_names(db, order_id: int | None) -> list[dict]:
+    """주문 품목과 상품명을 표시/검증용으로 일괄 조회한다."""
+    from app.models.order import OrderItem
+    from app.models.product import Product
+
+    if order_id is None:
+        return []
+
+    order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+    if not order_items:
+        return []
+
+    product_ids = {item.product_id for item in order_items}
+    products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    product_names = {p.id: p.name for p in products}
+    return [
+        {
+            "item": item,
+            "name": product_names.get(item.product_id, f"상품 #{item.product_id}"),
+        }
+        for item in order_items
+    ]
 
 
 def _get_change_current_value(db, state: OrderState, change_type: str) -> str:
@@ -238,20 +280,13 @@ def _get_change_current_value(db, state: OrderState, change_type: str) -> str:
         return "등록된 배송 요청사항이 없습니다."
 
     if change_type == "상품 수량 변경":
-        order_items = (
-            db.query(OrderItem)
-            .filter(OrderItem.order_id == state.get("order_id"))
-            .all()
-        )
-        if not order_items:
+        item_rows = _fetch_order_items_with_names(db, state.get("order_id"))
+        if not item_rows:
             return "등록된 주문 상품이 없습니다."
 
-        product_ids = {item.product_id for item in order_items}
-        products = db.query(Product).filter(Product.id.in_(product_ids)).all()
-        product_names = {p.id: p.name for p in products}
         return "\n".join(
-            f"{product_names.get(item.product_id, '상품')} {item.quantity}개"
-            for item in order_items
+            f"{i}. {row['name']} 현재 {row['item'].quantity}개"
+            for i, row in enumerate(item_rows, start=1)
         )
 
     return ""
@@ -260,7 +295,7 @@ def _get_change_current_value(db, state: OrderState, change_type: str) -> str:
 # "N번 [상품] [M개]" — 품목 인덱스는 "번"으로 명시적으로 구분,
 # 수량은 동일 토큰 내 "M개"에서만 추출 (전역 re.findall로 혼용하지 않음)
 _ITEM_SELECTION_RE = re.compile(
-    r"(\d+)\s*번(?:\s*상품)?(?:[^\d]*?(\d+)\s*개)?"
+    r"(\d+)\s*번(?:\s*상품)?(?:[^\d]*?(?:(전체|전부)|(\d+)\s*개))?"
 )
 
 
@@ -285,9 +320,23 @@ def _parse_item_selections(user_input: str, order_items: list, db) -> list:
 
     selected: list = []
 
-    # "전체" 단독 입력 — "N번 상품 전체"는 아래 N번 패턴으로 처리
-    if "전체" in user_input and not re.search(r"\d+\s*번", user_input):
+    normalized = user_input.strip()
+    compact = re.sub(r"\s+", "", normalized)
+
+    # "전체"/"전부" 단독 입력 — "N번 전체"는 아래 N번 패턴으로 처리
+    if any(word in compact for word in {"전체", "전부"}) and not re.search(r"\d+\s*번", compact):
         for oi in order_items:
+            name = product_names.get(oi.product_id, f"상품 #{oi.product_id}")
+            selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": oi.quantity})
+        return selected
+
+    # "1", "1,2", "1 2"처럼 번호만 입력하면 각 품목 전량으로 처리
+    if re.fullmatch(r"\d+(?:\s*[,， ]\s*\d+)*", normalized):
+        indexes = [int(n) for n in re.findall(r"\d+", normalized)]
+        if not indexes or any(idx < 1 or idx > len(order_items) for idx in indexes):
+            return []
+        for idx in dict.fromkeys(indexes):
+            oi = order_items[idx - 1]
             name = product_names.get(oi.product_id, f"상품 #{oi.product_id}")
             selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": oi.quantity})
         return selected
@@ -298,10 +347,33 @@ def _parse_item_selections(user_input: str, order_items: list, db) -> list:
         if 1 <= idx <= len(order_items):
             oi = order_items[idx - 1]
             name = product_names.get(oi.product_id, f"상품 #{oi.product_id}")
-            qty = min(int(m.group(2)), oi.quantity) if m.group(2) else oi.quantity
+            qty = oi.quantity if m.group(2) else int(m.group(3)) if m.group(3) else oi.quantity
+            if qty < 1 or qty > oi.quantity:
+                return []
             selected.append({"item_id": oi.id, "product_id": oi.product_id, "name": name, "qty": qty})
 
     return selected
+
+
+_QUANTITY_CHANGE_RE = re.compile(r"(\d+)\s*번(?:\s*상품)?[^\d]*?(\d+)\s*개")
+
+
+def _parse_quantity_change_detail(text: str, item_rows: list[dict]) -> str | None:
+    """상품 수량 변경 입력을 목록 번호와 주문 수량 범위 안에서만 허용한다."""
+    changes = []
+    for m in _QUANTITY_CHANGE_RE.finditer(text.strip()):
+        idx = int(m.group(1))
+        new_qty = int(m.group(2))
+        if idx < 1 or idx > len(item_rows):
+            return None
+        row = item_rows[idx - 1]
+        current_qty = row["item"].quantity
+        if new_qty < 1 or new_qty > current_qty:
+            return None
+        changes.append(f"{row['name']}: {current_qty}개 → {new_qty}개")
+    if not changes:
+        return None
+    return "\n".join(dict.fromkeys(changes))
 
 
 # ── 노드 함수 ─────────────────────────────────────────────────────────────────
@@ -314,9 +386,9 @@ async def route_action(state: OrderState, config: RunnableConfig) -> dict:
 async def list_orders(state: OrderState, config: RunnableConfig) -> dict:
     """취소/교환/변경 가능한 주문 목록 조회 → interrupt로 선택 대기.
 
-    - 취소: pending / preparing 상태만 (배송 픽업 전)
+    - 취소: pending / paid / preparing 상태만 (배송 픽업 전)
     - 교환: delivered 상태만 (수령 완료)
-    - 변경: pending / preparing 상태만 (배송 픽업 전)
+    - 변경: pending / paid / preparing 상태만 (배송 픽업 전)
     """
     from app.models.order import Order
 
@@ -454,12 +526,7 @@ async def select_items(state: OrderState, config: RunnableConfig) -> dict:
 
     if not selected:
         # 유효한 품목 번호를 찾지 못한 경우: 자동 전체 선택 대신 한 번 재입력 요청
-        retry_prompt = (
-            "선택하신 품목을 확인하지 못했습니다.\n\n"
-            f"{item_list}\n\n"
-            "번호로 다시 알려주세요 (예: 1번 상품 2개, 1번 상품 전체).\n"
-            "진행을 중단하려면 '그만'이라고 입력하세요."
-        )
+        retry_prompt = ORDER_PROMPTS["invalid_item_selection"].format(item_list=item_list)
         user_input = interrupt(retry_prompt)
         if _is_flow_abort_intent(user_input, state["action"]):
             return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
@@ -542,6 +609,18 @@ async def get_refund_method(state: OrderState, config: RunnableConfig) -> dict:
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
 
     refund_method = _parse_refund_method(user_input)
+    if refund_method is None:
+        user_input = interrupt(ORDER_PROMPTS["invalid_refund_method"])
+        if _is_flow_abort_intent(user_input, state["action"]):
+            return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
+        refund_method = _parse_refund_method(user_input)
+    if refund_method is None:
+        return {
+            **state,
+            "abort": True,
+            "response": "환불 방법을 확인하지 못했습니다. 처음부터 다시 시도해 주세요.",
+            "is_pending": False,
+        }
     return {**state, "refund_method": refund_method}
 
 
@@ -555,6 +634,18 @@ async def get_change_type(state: OrderState, config: RunnableConfig) -> dict:
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
 
     change_type = _parse_change_type(user_input)
+    if change_type is None:
+        user_input = interrupt(ORDER_PROMPTS["invalid_change_type"])
+        if _is_flow_abort_intent(user_input, state["action"]):
+            return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
+        change_type = _parse_change_type(user_input)
+    if change_type is None:
+        return {
+            **state,
+            "abort": True,
+            "response": "변경 유형을 확인하지 못했습니다. 처음부터 다시 시도해 주세요.",
+            "is_pending": False,
+        }
     return {**state, "change_type": change_type}
 
 
@@ -574,6 +665,28 @@ async def get_change_detail(state: OrderState, config: RunnableConfig) -> dict:
 
     if _is_flow_abort_intent(user_input, state["action"]):
         return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
+
+    if change_type == "상품 수량 변경":
+        item_rows = _fetch_order_items_with_names(db, state.get("order_id"))
+        detail = _parse_quantity_change_detail(user_input, item_rows)
+        if detail is None:
+            retry_prompt = ORDER_PROMPTS["change_detail"].format(
+                change_type=change_type,
+                current_value=current_value,
+                guide=guide + "\n목록 번호와 현재 주문 수량 내 수량만 입력할 수 있습니다.",
+            )
+            user_input = interrupt(retry_prompt)
+            if _is_flow_abort_intent(user_input, state["action"]):
+                return {**state, "abort": True, "response": ORDER_PROMPTS["flow_cancelled"], "is_pending": False}
+            detail = _parse_quantity_change_detail(user_input, item_rows)
+        if detail is None:
+            return {
+                **state,
+                "abort": True,
+                "response": "변경할 상품 번호와 수량을 확인하지 못했습니다. 처음부터 다시 시도해 주세요.",
+                "is_pending": False,
+            }
+        return {**state, "change_detail": detail}
 
     detail = user_input.strip()[:_MAX_REASON_LENGTH] if user_input.strip() else "상세 내용 미입력"
     return {**state, "change_detail": detail}
@@ -642,7 +755,7 @@ async def show_summary(state: OrderState, config: RunnableConfig) -> dict:
 async def create_ticket(state: OrderState, config: RunnableConfig) -> dict:
     """티켓 발행 — DB INSERT + 정책 기반 자동 처리.
 
-    취소(cancel) + 배송 전(pending/preparing):
+    취소(cancel) + 배송 전(pending/paid/preparing):
       → OrderProcessor.apply_auto_cancel(): Order.status=cancelled + 재고 복구 + ticket.status=completed
       → 단일 트랜잭션 commit
       → 응답: auto_cancelled

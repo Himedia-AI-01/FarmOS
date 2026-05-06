@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # secure=True 면 HTTPS 응답에서만 브라우저가 쿠키 전송한다.
     # 프로덕션 배포 시 반드시 .env 에서 COOKIE_SECURE=true 로 오버라이드.
     COOKIE_SECURE: bool = False
+    # 서브도메인 간 쿠키 공유용 (예: ".farmos.biz" → app.farmos.biz / shop.farmos.biz 모두에 cookie 송신).
+    # 비어 있으면 host-only 쿠키.
+    COOKIE_DOMAIN: str = ""
 
     # 비밀번호 재설정 이메일 발신 토글
     # False (기본): /find-password 응답에 reset_token 포함하지 않고 200만 반환 → 이메일 채널 미구축 환경에서도 토큰 노출 차단

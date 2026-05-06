@@ -288,8 +288,8 @@ export default function DiagnosisPage() {
       const pestToUse = (!isTest && detectedPest) ? detectedPest : testPest;
 
       if (!isTest && !detectedPest) {
-        toast('VLM 자동 판독 서버에 연결할 수 없어 선택된 해충으로 임시 진단합니다.', {
-          icon: '⚠️'
+        toast('AI 판독기가 일시 중단됐습니다. 선택하신 해충으로 진단을 진행합니다.', {
+          icon: '💤'
         });
       } else if (!isTest && detectedPest) {
         toast.success(`AI 판독: ${detectedPest}`, { icon: '🤖' });

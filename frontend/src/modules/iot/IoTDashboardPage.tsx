@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, memo, useCallback } from 'react';
-import { MdWaterDrop, MdThermostat, MdOpacity, MdWbSunny, MdWarning, MdWifiOff, MdClose } from 'react-icons/md';
+import { MdWaterDrop, MdThermostat, MdOpacity, MdWbSunny, MdWarning, MdWifiOff, MdClose, MdAutoAwesome } from 'react-icons/md';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from 'recharts';
 import { useSensorData } from '@/hooks/useSensorData';
+import { useAIAgent } from '@/hooks/useAIAgent';
 import AIAgentPanel from './AIAgentPanel';
 import IoTSkeleton from './IoTSkeleton';
 import ManualControlPanel from './ManualControlPanel';
@@ -25,10 +26,17 @@ function filterByDateRange<T>(
   });
 }
 
-function SensorCard({ icon: Icon, label, value, unit, tintClass, iconClass, threshold, warning, disabled }: {
+function SensorCard({
+  icon: Icon, label, value, unit, tintClass, iconClass,
+  threshold, warning, disabled, optimalRange, optimalLabel,
+}: {
   icon: React.ElementType; label: string; value: number | null; unit: string;
   tintClass: string; iconClass: string;
   threshold?: number; warning?: boolean; disabled?: boolean;
+  /** AI Agent 작물 프로필 권장 범위 [low, high]. 표시 + warning 계산에 사용. */
+  optimalRange?: [number, number];
+  /** optimalRange 라벨 (예: "토마토 / 영양생장기"). */
+  optimalLabel?: string;
 }) {
   return (
     <div
@@ -82,6 +90,19 @@ function SensorCard({ icon: Icon, label, value, unit, tintClass, iconClass, thre
         <div className="mt-3 flex items-center gap-2">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]" />
           <span className="num whitespace-nowrap text-[11.5px] font-semibold text-[color:var(--color-ink-faint)]">기준 {threshold}{unit}</span>
+        </div>
+      )}
+      {optimalRange && (
+        <div className={`mt-3 flex items-center gap-1.5 text-[11.5px] ${disabled ? 'text-[color:var(--color-ink-faint)]' : 'text-[color:var(--color-primary-dark)]'}`}>
+          <MdAutoAwesome aria-hidden className={`text-[13px] ${disabled ? '' : 'text-[color:var(--color-primary)]'}`} />
+          <span className="font-semibold">
+            적정 <span className="num">{optimalRange[0]}~{optimalRange[1]}</span>{unit}
+          </span>
+          {optimalLabel && (
+            <span className="ml-auto truncate text-[color:var(--color-ink-faint)]" title={optimalLabel}>
+              {optimalLabel}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -406,6 +427,14 @@ function AlertsModal({
 
 export default function IoTDashboardPage() {
   const { latest, history, alerts, irrigations, connected, loading } = useSensorData();
+  // AI Agent 상태에서 활성 작물 프로필을 끌어와 센서카드 임계 표시에 반영.
+  // status 가 null (Relay 미연결) 이어도 센서카드는 보이게 — optionally
+  // optimalRange 가 undefined 이면 기존 표시만 유지된다.
+  const { status: agentStatus } = useAIAgent();
+  const cropProfile = agentStatus?.crop_profile ?? null;
+  const optimalLabel = cropProfile ? `${cropProfile.name} / ${cropProfile.growth_stage}` : undefined;
+  const tempRange = cropProfile?.optimal_temp;
+  const humidityRange = cropProfile?.optimal_humidity;
   const hasData = !!latest;
   const inactive = !connected || !hasData;
 
@@ -510,13 +539,27 @@ export default function IoTDashboardPage() {
           icon={MdThermostat} label="온도"
           value={hasData ? latest!.temperature : null} unit="°C"
           tintClass="tint-danger" iconClass="text-[color:var(--color-danger)]"
+          // AI Agent 권장 온도 범위 밖으로 벗어나면 warning. 프로필이 없으면 표시만 비움.
+          warning={
+            hasData && tempRange
+              ? latest!.temperature < tempRange[0] || latest!.temperature > tempRange[1]
+              : undefined
+          }
+          optimalRange={tempRange}
+          optimalLabel={optimalLabel}
           disabled={inactive}
         />
         <SensorCard
           icon={MdOpacity} label="대기 습도"
           value={hasData ? latest!.humidity : null} unit="%"
           tintClass="tint-success" iconClass="text-[color:var(--color-primary)]"
-          warning={hasData && latest!.humidity > 90}
+          warning={
+            hasData && humidityRange
+              ? latest!.humidity < humidityRange[0] || latest!.humidity > humidityRange[1]
+              : hasData && latest!.humidity > 90
+          }
+          optimalRange={humidityRange}
+          optimalLabel={optimalLabel}
           disabled={inactive}
         />
         <SensorCard

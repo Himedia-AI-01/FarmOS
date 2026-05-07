@@ -348,7 +348,20 @@ interface SensorAlertItem {
   severity: string;
   message: string;
   resolved?: boolean;
+  /** 같은 (type, severity) 알림이 같은 시간 버킷 내에 몇 건 있었는지. throttle on 일 때만 set. */
+  groupedCount?: number;
 }
+
+// 알림 묶기 간격 옵션 — 같은 종류/심각도 알림을 N분 단위로 묶어 1건으로 표시.
+type ThrottleMin = 0 | 5 | 15 | 30 | 60 | 180;
+const ALERT_THROTTLE_OPTIONS: { value: ThrottleMin; label: string }[] = [
+  { value: 0, label: '끔' },
+  { value: 5, label: '5분' },
+  { value: 15, label: '15분' },
+  { value: 30, label: '30분' },
+  { value: 60, label: '1시간' },
+  { value: 180, label: '3시간' },
+];
 
 function AlertsModal({
   alerts,
@@ -425,7 +438,14 @@ function AlertsModal({
                     {a.severity}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[color:var(--color-ink)]">{a.message}</p>
+                    <p className="text-sm text-[color:var(--color-ink)]">
+                      {a.message}
+                      {a.groupedCount && a.groupedCount > 1 && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-[color:var(--color-surface-deep)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--color-ink-mute)]">
+                          외 {a.groupedCount - 1}건
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-[color:var(--color-ink-faint)]">
                       {new Date(a.timestamp).toLocaleString('ko-KR', {
                         month: 'short',
@@ -487,11 +507,18 @@ export default function IoTDashboardPage() {
     until: null,
     preset: 'all',
   });
+  // 센서 알림 묶기 간격 (분). 0 이면 묶기 끔(원본 그대로 표시).
+  const [alertsThrottleMin, setAlertsThrottleMin] = useState<ThrottleMin>(0);
 
+  // 관수 이력 표시 정책:
+  //   - 실제 관수가 발생한 시점만 보여준다 (밸브 "열림" 이벤트 + duration > 0).
+  //   - 백엔드(IoT relay) 가 상태폴링/닫힘/heartbeat 등을 같은 채널로 흘려 보내
+  //     이력이 누적되는 현상을 프론트에서 차단.
+  //   - id 단위 dedup 은 useSensorData 에서 이미 수행하므로 여기선 의미적 필터만.
   const filteredIrrigations = useMemo(
     () =>
       filterByDateRange(
-        irrigations,
+        irrigations.filter((e) => e.valveAction === '열림' && e.duration > 0),
         (e) => e.triggeredAt,
         irrigationRange.since,
         irrigationRange.until,
@@ -499,16 +526,37 @@ export default function IoTDashboardPage() {
     [irrigations, irrigationRange.since, irrigationRange.until],
   );
 
-  const filteredAlerts = useMemo(
-    () =>
-      filterByDateRange(
-        alerts,
-        (a) => a.timestamp,
-        alertsRange.since,
-        alertsRange.until,
-      ),
-    [alerts, alertsRange.since, alertsRange.until],
-  );
+  const filteredAlerts = useMemo<SensorAlertItem[]>(() => {
+    const ranged = filterByDateRange(
+      alerts,
+      (a) => a.timestamp,
+      alertsRange.since,
+      alertsRange.until,
+    );
+
+    // throttle 끔 → 그대로 (groupedCount 미사용)
+    if (alertsThrottleMin === 0) return ranged;
+
+    // throttle on → (type, severity, bucket) 단위로 그룹핑 후 가장 최근 1건 + count.
+    // bucket 은 floor(timestamp / intervalMs) — 동일 윈도우 내 알림이 같은 키를 공유.
+    const intervalMs = alertsThrottleMin * 60 * 1000;
+    const map = new Map<string, { repr: typeof ranged[number]; count: number }>();
+    for (const a of ranged) {
+      const ts = new Date(a.timestamp).getTime();
+      const bucket = Math.floor(ts / intervalMs);
+      const key = `${a.type}|${a.severity}|${bucket}`;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { repr: a, count: 1 });
+      } else {
+        existing.count += 1;
+        if (ts > new Date(existing.repr.timestamp).getTime()) existing.repr = a;
+      }
+    }
+    return Array.from(map.values())
+      .map(({ repr, count }) => ({ ...repr, groupedCount: count }))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [alerts, alertsRange.since, alertsRange.until, alertsThrottleMin]);
 
   const chartData = useMemo(() =>
     history.map(r => ({
@@ -669,7 +717,22 @@ export default function IoTDashboardPage() {
         <div className={`card ${inactive ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
             <h3 className="section-title !mb-0">센서 알림</h3>
-            <DateRangeFilter value={alertsRange} onChange={setAlertsRange} />
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="flex items-center gap-1.5 text-[12.5px] text-[color:var(--color-ink-mute)]">
+                <span>묶기</span>
+                <select
+                  value={alertsThrottleMin}
+                  onChange={(e) => setAlertsThrottleMin(Number(e.target.value) as ThrottleMin)}
+                  className="rounded-md border border-[color:var(--color-line)] bg-white px-2 py-1 text-[12.5px] text-[color:var(--color-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/30 focus:border-[color:var(--color-primary)]"
+                  aria-label="알림 묶기 간격"
+                >
+                  {ALERT_THROTTLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+              <DateRangeFilter value={alertsRange} onChange={setAlertsRange} />
+            </div>
           </div>
           {filteredAlerts.length === 0 ? (
             <p className="text-[color:var(--color-ink-faint)] text-sm text-center py-4">
@@ -692,7 +755,14 @@ export default function IoTDashboardPage() {
                       {a.severity}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[color:var(--color-ink)]">{a.message}</p>
+                      <p className="text-sm text-[color:var(--color-ink)]">
+                        {a.message}
+                        {a.groupedCount && a.groupedCount > 1 && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-[color:var(--color-surface-deep)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--color-ink-mute)]">
+                            외 {a.groupedCount - 1}건
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-[color:var(--color-ink-faint)]">
                         {new Date(a.timestamp).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>

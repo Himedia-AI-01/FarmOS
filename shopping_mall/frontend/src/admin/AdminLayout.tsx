@@ -106,11 +106,11 @@ export default function AdminLayout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [statusDropdownOpen]);
 
-  const pendingTickets = (ticketStats?.received ?? 0) + (ticketStats?.processing ?? 0);
-
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  const pendingTickets = (ticketStats?.received ?? 0) + (ticketStats?.processing ?? 0);
 
   function handleSearchSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -142,12 +142,6 @@ export default function AdminLayout() {
     { to: '/admin/faq', label: 'FAQ 관리', icon: 'menu_book' },
     { to: '/admin/shipments', label: '배송 관리', icon: 'local_shipping' },
     { to: '/admin/analytics', label: '분석', icon: 'bar_chart' },
-  ];
-
-  const businessItems: NavItem[] = [
-    { to: '/admin/calendar', label: '판매 캘린더', icon: 'calendar_month' },
-    { to: '/admin/reports', label: '리포트', icon: 'description' },
-    { to: '/admin/expenses', label: '비용 관리', icon: 'account_balance_wallet' },
   ];
 
   // ── Notification count: escalated + pending ──
@@ -190,7 +184,6 @@ export default function AdminLayout() {
         <nav className="flex-1 space-y-1 overflow-y-auto no-scrollbar" aria-label="메인 네비게이션">
           <SidebarSection title="Main" items={mainItems} />
           <SidebarSection title="Management" items={managementItems} />
-          <SidebarSection title="Business" items={businessItems} />
         </nav>
 
         {/* Footer Nav */}

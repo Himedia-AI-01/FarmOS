@@ -1,5 +1,7 @@
 """SQLAlchemy async engine & session 관리."""
 
+import re
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -18,14 +20,18 @@ engine = create_async_engine(
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-# shop_engine — shop_reviews / shop_products 등 shopping_mall 테이블 전용.
-# .env 의 SHOP_DATABASE_URL 이 비어있거나 DATABASE_URL 과 동일하면 같은 engine 을 재사용한다
-# (로컬 단일 DB 개발 환경 호환). 운영(EC2)에서는 docker-compose 가 shop DB 로 분리 주입한다.
-_shop_url = settings.SHOP_DATABASE_URL or settings.DATABASE_URL
-if _shop_url == settings.DATABASE_URL:
-    shop_engine = engine
-    shop_async_session = async_session
-else:
+def _resolve_shop_database_url() -> str:
+    """SHOP_DATABASE_URL 명시값 우선, 없으면 DATABASE_URL 의 dbname 을 'shop' 으로 치환."""
+    if settings.SHOP_DATABASE_URL:
+        return settings.SHOP_DATABASE_URL
+    if not settings.DATABASE_URL:
+        return ""
+    # postgresql+asyncpg://user:pass@host:port/dbname[?params]
+    return re.sub(r"/[^/?]+(\?|$)", r"/shop\1", settings.DATABASE_URL, count=1)
+
+
+_shop_url = _resolve_shop_database_url()
+if _shop_url:
     shop_engine = create_async_engine(
         _shop_url,
         echo=False,
@@ -35,7 +41,12 @@ else:
         pool_timeout=settings.DB_POOL_TIMEOUT,
         pool_recycle=settings.DB_POOL_RECYCLE,
     )
-    shop_async_session = async_sessionmaker(shop_engine, class_=AsyncSession, expire_on_commit=False)
+    shop_async_session = async_sessionmaker(
+        shop_engine, class_=AsyncSession, expire_on_commit=False
+    )
+else:  # pragma: no cover — only hit during local boot without a DATABASE_URL
+    shop_engine = None  # type: ignore[assignment]
+    shop_async_session = None  # type: ignore[assignment]
 
 
 class Base(DeclarativeBase):
@@ -43,17 +54,17 @@ class Base(DeclarativeBase):
 
 
 async def get_db():
-    """FastAPI Depends용 DB 세션 제공."""
+    """FastAPI Depends용 DB 세션 제공 (FarmOS DB)."""
     async with async_session() as session:
         yield session
 
 
 async def get_shop_db():
-    """FastAPI Depends 용 shop DB 세션 제공.
-
-    shop_reviews / shop_products 등 shopping_mall 의 테이블 조회 전용.
-    SHOP_DATABASE_URL 미설정 시 farmos DB 세션과 동일 (로컬 단일 DB 호환).
-    """
+    """FastAPI Depends용 Shop DB 세션 제공 (cross-database 읽기 전용 권장)."""
+    if shop_async_session is None:
+        raise RuntimeError(
+            "SHOP_DATABASE_URL 미설정 — DATABASE_URL 도 비어 있어 자동 치환 불가."
+        )
     async with shop_async_session() as session:
         yield session
 

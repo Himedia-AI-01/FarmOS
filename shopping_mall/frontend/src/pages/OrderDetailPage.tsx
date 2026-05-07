@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { useOrder } from '@/hooks/useOrders';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { productFallbackImage } from '@/lib/fallbackImages';
 import type { ShippingAddress } from '@/types/order';
 
 /** 백엔드가 JSON 문자열로 저장할 수 있는 필드를 안전하게 파싱합니다. */
@@ -88,7 +89,7 @@ export default function OrderDetailPage() {
           {order.items.map((item) => (
             <div key={item.id} className="flex items-center gap-3">
               <img
-                src={item.product?.thumbnail || `https://picsum.photos/seed/p${item.productId}/64/64`}
+                src={item.product?.thumbnail || productFallbackImage(item.productId, 64)}
                 alt={item.product?.name || ''}
                 className="w-14 h-14 rounded-lg object-cover border border-gray-100 shrink-0"
               />

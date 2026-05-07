@@ -1,7 +1,8 @@
 from __future__ import annotations
-from typing import List, Optional
+import json
+from typing import Any, List, Optional
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 def to_camel(s: str) -> str:
@@ -44,4 +45,11 @@ class OrderCreate(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     shipping_address: Optional[str] = None
-    payment_method: Optional[str] = "card"
+    payment_method: Optional[str] = "무통장입금"
+
+    @field_validator("shipping_address", mode="before")
+    @classmethod
+    def serialize_shipping_address(cls, value: Any) -> Optional[str]:
+        if value is None or isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False)

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useOrders } from '@/hooks/useOrders';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { productFallbackImage } from '@/lib/fallbackImages';
 
 const statusMap: Record<string, { label: string; color: string }> = {
   pending: { label: '주문접수', color: 'bg-yellow-100 text-yellow-800' },
@@ -35,7 +36,7 @@ export default function MyOrdersPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {order.items?.slice(0, 3).map((item) => (
-                    <img key={item.id} src={item.product?.thumbnail || `https://picsum.photos/seed/p${item.productId}/60/60`} alt="" className="w-12 h-12 rounded" />
+                    <img key={item.id} src={item.product?.thumbnail || productFallbackImage(item.productId, 60)} alt="" className="w-12 h-12 rounded" />
                   ))}
                   {(order.items?.length ?? 0) > 3 && <span className="text-sm text-gray-500">+{order.items.length - 3}</span>}
                 </div>

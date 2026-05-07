@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """OpenAI 호환 클라이언트 — Ollama·OpenRouter·OpenAI 모두 지원."""
+    """OpenAI 호환 클라이언트 — OpenRouter·OpenAI 모두 지원."""
 
     def __init__(
         self,

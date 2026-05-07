@@ -62,6 +62,7 @@ def _set_token_cookie(response: Response, token: str):
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
+        domain=settings.COOKIE_DOMAIN or None,
     )
 
 
@@ -74,6 +75,7 @@ def _set_refresh_cookie(response: Response, token: str):
         samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path="/",
+        domain=settings.COOKIE_DOMAIN or None,
     )
 
 
@@ -145,8 +147,8 @@ async def login(req: LoginRequest, request: Request, response: Response, db: Asy
 @router.post("/logout")
 async def logout(response: Response):
     """로그아웃 — 쿠키 삭제."""
-    response.delete_cookie(key=COOKIE_KEY, path="/")
-    response.delete_cookie(key=REFRESH_COOKIE_KEY, path="/")
+    response.delete_cookie(key=COOKIE_KEY, path="/", domain=settings.COOKIE_DOMAIN or None)
+    response.delete_cookie(key=REFRESH_COOKIE_KEY, path="/", domain=settings.COOKIE_DOMAIN or None)
     return {"message": "로그아웃되었습니다."}
 
 
@@ -158,7 +160,7 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
         raise HTTPException(401, "리프레시 토큰이 없습니다.")
     payload = decode_refresh_token(refresh)
     if payload is None:
-        response.delete_cookie(key=REFRESH_COOKIE_KEY, path="/")
+        response.delete_cookie(key=REFRESH_COOKIE_KEY, path="/", domain=settings.COOKIE_DOMAIN or None)
         raise HTTPException(401, "리프레시 토큰이 만료되었거나 유효하지 않습니다.")
     user_id = payload.get("sub", "")
     user = await user_store.find_by_id(db, user_id)

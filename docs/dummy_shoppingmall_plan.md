@@ -21,7 +21,7 @@
 - **Styling**: Tailwind CSS
 - **State**: Zustand (장바구니, 사용자 상태)
 - **Data Fetching**: TanStack Query + axios
-- **Image**: Placeholder (picsum.photos)
+- **Image**: 외부 더미 이미지 URL(loremflickr)
 
 ### Backend (`shopping_mall/backend/`) — port 4000
 - **Framework**: Python + FastAPI
@@ -149,4 +149,3 @@ npm install && npm run dev
 # 또는 전체 서비스 한번에 실행
 bootstrap.cmd
 ```
-

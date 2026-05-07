@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.crud.product import get_products, get_product, search_products
@@ -10,12 +10,12 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 
 @router.get("", response_model=ProductListResponse)
 def list_products(
-    page: int = 1,
-    limit: int = 20,
-    category_id: Optional[int] = None,
-    sort: str = "latest",
-    min_price: Optional[int] = None,
-    max_price: Optional[int] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    category_id: Optional[int] = Query(None, ge=1),
+    sort: str = Query("latest", pattern="^(latest|price_asc|price_desc|popular|rating)$"),
+    min_price: Optional[int] = Query(None, ge=0),
+    max_price: Optional[int] = Query(None, ge=0),
     db: Session = Depends(get_db),
 ):
     result = get_products(db, page=page, limit=limit, category_id=category_id, sort=sort, min_price=min_price, max_price=max_price)
@@ -23,7 +23,12 @@ def list_products(
 
 
 @router.get("/search", response_model=ProductListResponse)
-def search(q: str = "", page: int = 1, limit: int = 20, db: Session = Depends(get_db)):
+def search(
+    q: str = Query("", max_length=80),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
     result = search_products(db, q=q, page=page, limit=limit)
     return result
 

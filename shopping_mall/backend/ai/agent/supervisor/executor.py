@@ -128,6 +128,16 @@ _JAILBREAK_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:너는\s*이제|지금부터\s*너는).{0,30}(?:규칙|정책|제한).{0,20}(?:없|무시)"),
 )
 
+_SECURITY_ATTACK_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?:'|%27|\"|%22)\s*(?:or|and|또는|그리고)\s*(?:'?\w+'?\s*=\s*'?\w+'?|\d+\s*=\s*\d+)"),
+    re.compile(r"\bunion\s+(?:all\s+)?select\b"),
+    re.compile(r"\b(?:select|insert|update|delete|drop|alter|truncate)\b.{0,80}\b(?:from|into|table|set|where)\b"),
+    re.compile(r"(?:--|/\*|\*/)\s*(?:$|\w*)"),
+    re.compile(r"\b(?:sleep|benchmark|pg_sleep|xp_cmdshell)\s*\("),
+    re.compile(r"(?:<\s*script\b|javascript\s*:|onerror\s*=|onload\s*=)"),
+    re.compile(r"(?:\.\./|%2e%2e%2f|%252e%252e%252f)"),
+)
+
 _INAPPROPRIATE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:씨발|ㅅㅂ|병신|개새끼|꺼져|죽어)(?:\s|$|[.!?])"),
     re.compile(r"(?:성적|음란|야한|포르노).{0,20}(?:해줘|보여|만들어|작성)"),
@@ -362,6 +372,12 @@ class SupervisorExecutor:
         tools_used: list[str] = []
         trace: list[TraceStep] = []
         metrics: list[ToolMetricData] = []
+        cited_faq_ids: list[int] = []
+
+        def add_cited_from(result: AgentResult) -> None:
+            for faq_id in result.cited_faq_ids:
+                if faq_id not in cited_faq_ids:
+                    cited_faq_ids.append(faq_id)
 
         for iteration in range(self.max_iterations):
             # ── [DIAG] LLM 호출 직전 ─────────────────────────────────────
@@ -391,6 +407,7 @@ class SupervisorExecutor:
                 return AgentResult(
                     answer=_finalize_customer_answer(answer, trace), intent=intent, escalated=False,
                     tools_used=tools_used, trace=trace, metrics=metrics,
+                    cited_faq_ids=cited_faq_ids,
                 )
 
             # CS는 병렬, Order는 순차
@@ -467,6 +484,7 @@ class SupervisorExecutor:
                     iteration=iteration + 1,
                 ))
                 if isinstance(cs_result, AgentResult):
+                    add_cited_from(cs_result)
                     _log_trace(trace, user_message)
                     return AgentResult(
                         answer=_finalize_customer_answer(_parse_answer(cs_result.answer), trace),
@@ -475,6 +493,7 @@ class SupervisorExecutor:
                         tools_used=tools_used + cs_result.tools_used,
                         trace=trace,
                         metrics=metrics + cs_result.metrics,
+                        cited_faq_ids=cited_faq_ids,
                     )
 
             # 복수 CS 호출 → LLM 재합성
@@ -483,6 +502,8 @@ class SupervisorExecutor:
             for i, res in valid:
                 tc, cs_result, latency_ms = res
                 result_str = cs_result.answer if isinstance(cs_result, AgentResult) else str(cs_result)
+                if isinstance(cs_result, AgentResult):
+                    add_cited_from(cs_result)
                 tools_used.append("call_cs_agent")
                 trace.append(TraceStep(
                     tool="call_cs_agent",
@@ -527,6 +548,7 @@ class SupervisorExecutor:
             intent="escalation",
             escalated=True,
             tools_used=tools_used, trace=trace, metrics=metrics,
+            cited_faq_ids=cited_faq_ids,
         )
 
     # ── CS 에이전트 호출 ──────────────────────────────────────────────────────
@@ -565,7 +587,7 @@ class SupervisorExecutor:
         force_action: str | None = None,
     ) -> str:
         from langgraph.types import Command
-        from ai.agent.order_graph.state import OrderState
+        from ai.agent.order_graph.state import initial_order_state
         from ai.agent.order_graph.nodes import _is_flow_abort_intent
 
         config = {"configurable": {"thread_id": str(session_id), "db": db}}
@@ -597,26 +619,12 @@ class SupervisorExecutor:
                         "[order_graph] 의도 불일치 — 기존=%s, 신규=%s (session=%d)",
                         pending_action, new_action, session_id,
                     )
-                initial_state: OrderState = {
-                    "action": new_action,
-                    "user_id": user_id,
-                    "session_id": session_id,
-                    "user_message": query,
-                    "order_id": None,
-                    "order_display": None,
-                    "selected_items": [],
-                    "reason": None,
-                    "refund_method": None,
-                    "change_type": None,
-                    "change_detail": None,
-                    "stock_note": "",
-                    "confirmed": None,
-                    "abort": False,
-                    "confirmation_attempts": 0,
-                    "ticket_id": None,
-                    "response": "",
-                    "is_pending": True,
-                }
+                initial_state = initial_order_state(
+                    action=new_action,
+                    user_id=user_id,
+                    session_id=session_id,
+                    user_message=query,
+                )
                 logger.info("[order_graph] 신규 플로우 시작 — session=%d action=%s", session_id, new_action)
                 await self.order_graph.ainvoke(initial_state, config)
 
@@ -652,6 +660,8 @@ def _preflight_refusal_reason(user_message: str) -> str | None:
         return None
     if any(pattern.search(msg) for pattern in _JAILBREAK_PATTERNS):
         return "jailbreak"
+    if any(pattern.search(msg) for pattern in _SECURITY_ATTACK_PATTERNS):
+        return "security_attack"
     if any(pattern.search(msg) for pattern in _OTHER_USER_INFO_PATTERNS):
         return "other_user_info"
     if any(pattern.search(msg) for pattern in _INTERNAL_INFO_PATTERNS):

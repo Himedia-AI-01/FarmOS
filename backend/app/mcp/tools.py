@@ -164,7 +164,8 @@ def _register_embed_and_search(mcp: FastMCP) -> None:
         async with shop_async_session() as shop_db:
             # empty-new-collection window 완화 — 라우터와 동일 패턴
             if _singletons.rag.get_count() == 0:
-                await _singletons.rag.sync_from_db(shop_db)
+                async with shop_async_session() as shop_db:
+                    await _singletons.rag.sync_from_db(shop_db)
 
             filter_dict: dict[str, Any] | None = None
             if filters:

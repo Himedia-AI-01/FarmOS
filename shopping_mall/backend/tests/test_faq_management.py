@@ -377,6 +377,17 @@ class TestFaqAnalytics:
         assert resp.status_code == 200
         assert len(resp.json()) <= 5
 
+    def test_analytics_top_cited_excludes_uncited_docs(self, client):
+        """인용이 없는 FAQ를 top-cited에 0회로 노출하지 않는다."""
+        client.post("/api/admin/faq-docs", json={
+            "title": "인용 없는 FAQ", "content": "답변",
+        })
+
+        resp = client.get("/api/admin/faq-analytics/top-cited")
+
+        assert resp.status_code == 200
+        assert resp.json() == []
+
     # ── trending-questions ──────────────────────────────────────────────────
 
     def test_analytics_trending_questions_returns_200(self, client):
@@ -433,7 +444,7 @@ class TestChatbotCorsErrorRegression:
 
     Process:
     - Browser symptom was reported as CORS blocked + POST /api/chatbot/ask 500.
-    - ALLOW_ORIGINS already included http://localhost:5174, so the CORS value itself
+    - ALLOW_ORIGINS already included the frontend dev origin, so the CORS value itself
       was not the primary failure.
     - The risky path was diagnostic ASGI middleware and BaseException wrapping around
       the chatbot route. Those can bypass normal FastAPI/Starlette exception handling
@@ -471,18 +482,20 @@ class TestChatbotCorsErrorRegression:
 
         previous_service = chatbot_router_module._chatbot_service_instance
         chatbot_router_module.set_chatbot_service(FailingChatbotService())
+        frontend_origin = "http://127.0.0.1:5174"
+
         try:
             with TestClient(app, raise_server_exceptions=False) as c:
                 resp = c.post(
                     "/api/chatbot/ask",
-                    headers={"Origin": "http://localhost:5174"},
+                    headers={"Origin": frontend_origin},
                     json={"question": "배송비 얼마야?", "sessionId": None, "history": []},
                 )
         finally:
             chatbot_router_module._chatbot_service_instance = previous_service
 
         assert resp.status_code == 500
-        assert resp.headers["access-control-allow-origin"] == "http://localhost:5174"
+        assert resp.headers["access-control-allow-origin"] == frontend_origin
 
     def test_chatbot_route_does_not_swallow_base_exception(self):
         import app.routers.chatbot as chatbot_module

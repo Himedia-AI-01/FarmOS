@@ -144,6 +144,20 @@ STORES = [
     (5, "농부의정성", "정성 가득 유기농 농산물 전문점입니다.", 4.5, 6),
 ]
 
+STORE_IMAGE_SPECS = {
+    1: ("orchard,fruit,farm", 901),
+    2: ("vegetable,farm", 902),
+    3: ("cattle,farm", 903),
+    4: ("fish-market,seafood", 904),
+    5: ("organic-farm,produce", 905),
+}
+
+
+def _store_image_url(store_id: int) -> str:
+    keywords, lock = STORE_IMAGE_SPECS[store_id]
+    return f"https://loremflickr.com/200/200/{keywords}?lock={lock}"
+
+
 # 42개 상품명. 수정 편의를 위해 상단 상수로 고정한다.
 PRODUCT_NAMES = [
     "경북 부사 사과 5kg",
@@ -255,6 +269,11 @@ def _build_images(product_id: int) -> tuple[str, str]:
     thumbnail = _image_url(spec, 400)
     gallery = [_image_url(spec, 600, idx) for idx in range(3)]
     return thumbnail, json.dumps(gallery, ensure_ascii=False)
+
+
+def _review_image_url(product_id: int, review_id: int) -> str:
+    spec = PRODUCT_IMAGE_SPECS[product_id]
+    return _image_url(spec, 300, review_id + 10)
 
 
 # 상품별 카테고리/스토어 매핑(1-based product id)
@@ -438,7 +457,7 @@ def seed_core_data(db) -> SeedState:
             id=sid,
             name=name,
             description=desc,
-            image_url=f"https://picsum.photos/seed/store{sid}/200/200",
+            image_url=_store_image_url(sid),
             rating=rating,
             product_count=pc,
         )
@@ -502,7 +521,7 @@ def seed_core_data(db) -> SeedState:
                 user_id=(i % 5) + 1,
                 rating=round(3.5 + (i % 4) * 0.4, 1),
                 content=f"{PRODUCT_NAMES[i % 42]} 후기 #{i + 1}",
-                images=json.dumps([f"https://picsum.photos/seed/review{i + 1}/300/300"])
+                images=json.dumps([_review_image_url((i % 42) + 1, i + 1)])
                 if i % 3 == 0
                 else None,
                 created_at=now - timedelta(days=30 - i, hours=i),

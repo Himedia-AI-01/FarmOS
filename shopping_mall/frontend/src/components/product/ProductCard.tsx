@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Product } from '@/types/product';
 import { formatPrice, getDiscountedPrice } from '@/lib/utils';
+import { productFallbackImage } from '@/lib/fallbackImages';
 import StarRating from '@/components/review/StarRating';
 
 export default function ProductCard({ product: p }: { product: Product }) {
@@ -14,7 +15,7 @@ export default function ProductCard({ product: p }: { product: Product }) {
     >
       <div className="aspect-square bg-gray-100">
         <img
-          src={p.thumbnail || `https://picsum.photos/seed/p${p.id}/400/400`}
+          src={p.thumbnail || productFallbackImage(p.id, 400)}
           alt={p.name}
           className="w-full h-full object-cover"
         />

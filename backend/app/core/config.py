@@ -22,10 +22,8 @@ class Settings(BaseSettings):
     # ── 데이터베이스 ────────────────────────────────────────────────────────
     # 데이터베이스 (PostgreSQL)
     DATABASE_URL: str = ""
-    # shop_reviews / shop_products 등 shopping_mall 의 테이블이 들어있는 별도 DB.
-    # 운영(EC2 docker-compose)에서는 farmos 와 shop 이 서로 다른 PostgreSQL DB 로 분리되어 있으므로
-    # farmos-backend 가 shop_* 테이블을 raw SQL 로 조회하려면 별도 connection 이 필요하다.
-    # 비어 있으면 DATABASE_URL 로 폴백한다 (로컬 단일 DB 개발 환경 호환).
+    # 쇼핑몰 DB. 동일 Postgres 인스턴스에서 dbname 만 다른 게 일반적이다.
+    # 비워두면 DATABASE_URL 의 dbname 을 'shop' 으로 치환한 값을 사용한다.
     SHOP_DATABASE_URL: str = ""
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
@@ -43,6 +41,9 @@ class Settings(BaseSettings):
     # secure=True 면 HTTPS 응답에서만 브라우저가 쿠키 전송한다.
     # 프로덕션 배포 시 반드시 .env 에서 COOKIE_SECURE=true 로 오버라이드.
     COOKIE_SECURE: bool = False
+    # 서브도메인 간 쿠키 공유용 (예: ".farmos.biz" → app.farmos.biz / shop.farmos.biz 모두에 cookie 송신).
+    # 비어 있으면 host-only 쿠키.
+    COOKIE_DOMAIN: str = ""
 
     # 비밀번호 재설정 이메일 발신 토글
     # False (기본): /find-password 응답에 reset_token 포함하지 않고 200만 반환 → 이메일 채널 미구축 환경에서도 토큰 노출 차단

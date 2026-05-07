@@ -350,8 +350,6 @@ def _reject_cross_user_order_lookup(tc: dict) -> tuple[str, int] | None:
 
 class AgentExecutor:
     """CS 에이전트 — LangChain tool calling 루프.
-
-    Primary LLM 실패 시 Fallback(Claude)으로 자동 전환합니다.
     """
 
     def __init__(self, primary, fallback, rag_service, tools=None, max_iterations: int | None = None):

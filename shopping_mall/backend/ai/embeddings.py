@@ -61,5 +61,5 @@ def get_embedding_function():
     else:
         raise ValueError(
             f"지원하지 않는 EMBED_PROVIDER: '{provider}'. "
-            "openrouter | ollama | sentence_transformers | openai 중 하나를 선택하세요."
+            "openrouter | sentence_transformers | openai 중 하나를 선택하세요."
         )

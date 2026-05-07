@@ -860,12 +860,12 @@ def get_top_cited_faqs(
         .subquery()
     )
 
-    # 2단계: FaqDoc에 인용 수 LEFT JOIN, 카테고리 joinedload
+    # 2단계: 인용된 FaqDoc만 JOIN, 카테고리 joinedload
     rows = (
         db.query(FaqDoc, func.coalesce(count_sq.c.cnt, 0).label("cnt"))
-        .outerjoin(count_sq, count_sq.c.faq_doc_id == FaqDoc.id)
+        .join(count_sq, count_sq.c.faq_doc_id == FaqDoc.id)
         .options(joinedload(FaqDoc.faq_category))
-        .order_by(func.coalesce(count_sq.c.cnt, 0).desc())
+        .order_by(count_sq.c.cnt.desc())
         .limit(limit)
         .all()
     )

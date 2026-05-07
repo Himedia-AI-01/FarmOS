@@ -79,6 +79,7 @@ router = APIRouter(prefix="/reviews", tags=["review-analysis"])
 @router.post("/embed", response_model=EmbedResponse)
 async def embed_reviews(
     req: EmbedRequest,
+    db: AsyncSession = Depends(get_db),
     shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):
@@ -355,6 +356,7 @@ async def get_latest_analysis(db: AsyncSession = Depends(get_db), _user: User = 
 @router.post("/search", response_model=SearchResponse)
 async def search_reviews(
     req: SearchRequest,
+    db: AsyncSession = Depends(get_db),
     shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):

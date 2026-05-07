@@ -20,5 +20,19 @@ logging.basicConfig(
     force=True,
 )
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=4000, reload=True, log_level="info")
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=4000,
+        reload=_env_bool("UVICORN_RELOAD", False),
+        log_level="info",
+    )

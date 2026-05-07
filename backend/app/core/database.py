@@ -159,3 +159,6 @@ async def init_db():
 async def close_db():
     """앱 종료 시 커넥션 풀 정리."""
     await engine.dispose()
+    # shop_engine 이 farmos engine 과 같은 인스턴스면 dispose 가 두 번 호출되지 않게 가드.
+    if shop_engine is not engine:
+        await shop_engine.dispose()

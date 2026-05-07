@@ -87,6 +87,8 @@ async def embed_reviews(
 
     shop_reviews 테이블에서 리뷰를 조회하여 ChromaDB에 동기화합니다.
     seller_id가 지정되면 해당 판매자의 상품 리뷰만 동기화합니다.
+
+    cross-DB 주의: shop_reviews 는 shop DB 에 있으므로 shop_db 세션을 사용한다.
     """
     added = await _rag.sync_from_db(shop_db)
     total = _rag.get_count()
@@ -120,10 +122,12 @@ async def analyze_reviews_stream(
 
     전체 리뷰 중 sample_size건을 층화 샘플링하여 분석합니다.
     rating 분포를 유지하므로 통계적 대표성이 보장됩니다.
+
+    cross-DB 주의: shop_reviews 동기화는 shop_db, ReviewAnalysis 저장은 farmos db 에 한다.
     """
 
     async def event_generator():
-        # 임베딩 없으면 DB에서 자동 동기화
+        # 임베딩 없으면 DB에서 자동 동기화 (shop DB 에서 조회)
         if _rag.get_count() == 0:
             yield {"data": json.dumps({"progress": 0, "message": "DB 리뷰 임베딩 중..."}, ensure_ascii=False)}
             await _rag.sync_from_db(shop_db)
@@ -227,13 +231,16 @@ async def analyze_reviews(
     2. LLM으로 감성분석 + 키워드 + 요약
     3. 트렌드/이상 탐지
     4. DB에 결과 저장
+
+    cross-DB 주의: shop_reviews 조회/멀티테넌트 lookup 은 shop_db,
+    ReviewAnalysis 저장은 farmos db (db) 에 한다.
     """
-    # 임베딩된 리뷰가 없으면 DB에서 자동 동기화
+    # 임베딩된 리뷰가 없으면 shop DB 에서 자동 동기화
     if _rag.get_count() == 0:
         await _rag.sync_from_db(shop_db)
 
-    # 멀티테넌트 필터링 (Design §4.3)
-    product_ids = await _get_seller_product_ids(db, seller_id=None)
+    # 멀티테넌트 필터링 (Design §4.3) — shop_stores 도 shop DB 소속이므로 shop_db 사용
+    product_ids = await _get_seller_product_ids(shop_db, seller_id=None)
     if product_ids is not None:
         reviews = _rag.get_reviews_by_products(product_ids)
     else:
@@ -356,6 +363,9 @@ async def search_reviews(
     """자연어 질의로 유사 리뷰를 검색합니다 (RAG).
 
     멀티테넌트: seller_id가 있으면 해당 판매자의 상품 리뷰만 검색합니다.
+
+    cross-DB 주의: shop_reviews / shop_stores 모두 shop DB 소속이므로 shop_db 만 사용한다.
+    이 엔드포인트는 farmos DB 에 쓰기 작업이 없다.
     """
     # 컬렉션 이름 변경(예: reviews_bge_m3 → reviews_voyage_v35) 후 최초 요청 시
     # 새 컬렉션이 비어 있으므로 여기서 전체 재임베딩을 수행하는 것이
@@ -371,7 +381,7 @@ async def search_reviews(
         filters = req.filters.model_dump(exclude_none=True)
 
     # 멀티테넌트 필터링 (Design §4.3)
-    product_ids = await _get_seller_product_ids(db, seller_id=None)
+    product_ids = await _get_seller_product_ids(shop_db, seller_id=None)
     if product_ids is not None:
         filters = filters or {}
         filters["product_id"] = {"$in": product_ids}
@@ -466,7 +476,7 @@ async def list_reviews(
     page_size: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
     rating_min: float | None = Query(None, ge=1, le=5, description="최소 평점 (포함)"),
     rating_max: float | None = Query(None, ge=1, le=5, description="최대 평점 (포함)"),
-    db: AsyncSession = Depends(get_db),
+    shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):
     """shop_reviews 테이블에서 리뷰 목록을 페이지네이션으로 조회합니다.
@@ -476,6 +486,8 @@ async def list_reviews(
         - /list   : 단순 페이지네이션 → 최신순 정렬 (전체 brows)
 
     shop_products 와 LEFT JOIN 해 product_name 을 함께 반환한다.
+
+    cross-DB 주의: shop_reviews / shop_products 가 shop DB 에 있으므로 shop_db 세션을 사용한다.
     """
     from sqlalchemy import text as sa_text
 
@@ -489,14 +501,14 @@ async def list_reviews(
         params["rmax"] = rating_max
     where_sql = " AND ".join(where_clauses)
 
-    count_result = await db.execute(
+    count_result = await shop_db.execute(
         sa_text(f"SELECT COUNT(*) FROM shop_reviews r WHERE {where_sql}"),
         params,
     )
     total = int(count_result.scalar() or 0)
 
     offset = (page - 1) * page_size
-    list_result = await db.execute(
+    list_result = await shop_db.execute(
         sa_text(f"""
             SELECT r.id, r.product_id, r.rating, r.content, r.created_at,
                    p.name AS product_name

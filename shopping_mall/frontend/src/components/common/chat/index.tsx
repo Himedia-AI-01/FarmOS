@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { useUserStore } from '@/stores/userStore';
 import { useActiveSession, useCreateSession } from './useChatSession.ts';
 import ChatSessionList from './ChatSessionList.tsx';
@@ -10,7 +11,7 @@ export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ChatView>('list');
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
-  const { user } = useUserStore();
+  const { user, isLoading: authLoading } = useUserStore();
   const userId = user?.shop_user_id ?? null;
   const wasOpenRef = useRef(false);
   // 위젯이 열릴 때 초기화 의도를 보관 — activeSessionLoading이 true인 동안에도 유지
@@ -44,6 +45,9 @@ export default function ChatWidget() {
           setActiveSessionId(newSession.id);
           setView('chat');
         },
+        onError: () => {
+          toast.error('채팅을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.');
+        },
       });
     }
   }, [open, userId, activeSessionLoading, activeSession, activeSessionId, createSession]);
@@ -53,6 +57,11 @@ export default function ChatWidget() {
     setOpen(false);
     // Keep view and activeSessionId for next open
   };
+
+  // 인증 확인 중에는 GuestChatWidget을 보여주지 않음 (깜빡임 방지)
+  if (authLoading) {
+    return null;
+  }
 
   // 비회원은 GuestChatWidget 사용
   if (!userId) {

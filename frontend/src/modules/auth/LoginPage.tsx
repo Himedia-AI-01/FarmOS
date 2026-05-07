@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Spinner } from '@/components/ui';
+
+const ALLOWED_SHOP_ORIGIN = import.meta.env.VITE_SHOP_URL ?? 'https://shop.farmos.biz';
 
 function LeafMark({ className = '' }: { className?: string }) {
   return (
@@ -16,6 +18,7 @@ function LeafMark({ className = '' }: { className?: string }) {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useAuth();
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
@@ -36,6 +39,19 @@ export default function LoginPage() {
     try {
       await login(userId, password);
       toast.success('환영합니다!');
+      const redirectParam = searchParams.get('redirect');
+      if (redirectParam) {
+        try {
+          const redirectUrl = new URL(redirectParam);
+          const allowedUrl = new URL(ALLOWED_SHOP_ORIGIN);
+          if (redirectUrl.origin === allowedUrl.origin) {
+            window.location.href = redirectParam;
+            return;
+          }
+        } catch {
+          // 잘못된 URL이면 기본 이동
+        }
+      }
       navigate('/');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '로그인에 실패했습니다.');

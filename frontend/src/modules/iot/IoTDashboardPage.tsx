@@ -3,6 +3,7 @@ import { MdWaterDrop, MdThermostat, MdOpacity, MdWbSunny, MdWarning, MdWifiOff, 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from 'recharts';
 import { useSensorData } from '@/hooks/useSensorData';
 import { useAIAgent } from '@/hooks/useAIAgent';
+import { getCropStageDisplayRanges } from '@/constants/cropProfiles';
 import AIAgentPanel from './AIAgentPanel';
 import IoTSkeleton from './IoTSkeleton';
 import ManualControlPanel from './ManualControlPanel';
@@ -75,29 +76,46 @@ function SensorCard({
         {value !== null ? value.toFixed(1) : '--.-'}
         <span className="ml-1 text-[15px] font-semibold text-[color:var(--color-ink-mute)] sm:text-[17px]">{unit}</span>
       </p>
-      {threshold && !disabled && value !== null && (
-        <div className="mt-3 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]">
-            <div
-              className={`h-full rounded-full transition-all ${value < threshold ? 'bg-[color:var(--color-warning)]' : 'bg-[color:var(--color-success)]'}`}
-              style={{ width: `${Math.min(100, (value / 100) * 100)}%` }}
-            />
-          </div>
-          <span className="num whitespace-nowrap text-[11.5px] font-semibold text-[color:var(--color-ink-mute)]">기준 {threshold}{unit}</span>
+      {/* progress bar — threshold(soil) 또는 optimalRange 가 있으면 표시. */}
+      {(threshold || optimalRange) && !disabled && value !== null && (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]">
+          <div
+            className={`h-full rounded-full transition-all ${
+              optimalRange
+                ? value < optimalRange[0] || value > optimalRange[1]
+                  ? 'bg-[color:var(--color-warning)]'
+                  : 'bg-[color:var(--color-success)]'
+                : threshold && value < threshold
+                  ? 'bg-[color:var(--color-warning)]'
+                  : 'bg-[color:var(--color-success)]'
+            }`}
+            style={{
+              // unit 이 lux 면 0~100k 스케일을 0~100% 로 환산. 그 외는 0~100 그대로.
+              width: `${Math.min(
+                100,
+                unit.trim() === 'lux' ? (value / 100000) * 100 : value,
+              )}%`,
+            }}
+          />
         </div>
       )}
-      {threshold && disabled && (
-        <div className="mt-3 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]" />
-          <span className="num whitespace-nowrap text-[11.5px] font-semibold text-[color:var(--color-ink-faint)]">기준 {threshold}{unit}</span>
-        </div>
+      {(threshold || optimalRange) && disabled && (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]" />
       )}
-      {optimalRange && (
-        <div className={`mt-3 flex items-center gap-1.5 text-[11.5px] ${disabled ? 'text-[color:var(--color-ink-faint)]' : 'text-[color:var(--color-primary-dark)]'}`}>
+
+      {/* 적정 범위 라인 — optimalRange 우선, 없으면 단일 임계치(기준) 표시. */}
+      {(optimalRange || threshold) && (
+        <div className={`mt-2 flex items-center gap-1.5 text-[11.5px] ${disabled ? 'text-[color:var(--color-ink-faint)]' : 'text-[color:var(--color-primary-dark)]'}`}>
           <MdAutoAwesome aria-hidden className={`text-[13px] ${disabled ? '' : 'text-[color:var(--color-primary)]'}`} />
-          <span className="font-semibold">
-            적정 <span className="num">{optimalRange[0]}~{optimalRange[1]}</span>{unit}
-          </span>
+          {optimalRange ? (
+            <span className="font-semibold">
+              적정 <span className="num">{formatRangeNumber(optimalRange[0])}~{formatRangeNumber(optimalRange[1])}</span>{unit}
+            </span>
+          ) : (
+            <span className="font-semibold">
+              기준 <span className="num">{threshold}</span>{unit}
+            </span>
+          )}
           {optimalLabel && (
             <span className="ml-auto truncate text-[color:var(--color-ink-faint)]" title={optimalLabel}>
               {optimalLabel}
@@ -107,6 +125,11 @@ function SensorCard({
       )}
     </div>
   );
+}
+
+/** 천단위 콤마 포맷. lux 등 큰 수 가독성용. */
+function formatRangeNumber(n: number): string {
+  return n >= 1000 ? n.toLocaleString('ko-KR') : String(n);
 }
 
 type ChartData = { time: string; soilMoisture: number; temperature: number; humidity: number }[];
@@ -435,6 +458,13 @@ export default function IoTDashboardPage() {
   const optimalLabel = cropProfile ? `${cropProfile.name} / ${cropProfile.growth_stage}` : undefined;
   const tempRange = cropProfile?.optimal_temp;
   const humidityRange = cropProfile?.optimal_humidity;
+  // 토양 습도 / 조도 는 백엔드 CropProfile 에 없으므로, 작물명+단계 로 프론트엔드 표시용
+  // 프리셋(constants/cropProfiles.ts) 에서 끌어온다. 매칭 안되면 null → 표시 생략.
+  const displayRanges = cropProfile
+    ? getCropStageDisplayRanges(cropProfile.name, cropProfile.growth_stage)
+    : null;
+  const soilRange = displayRanges?.optimal_soil_moisture;
+  const luxRange = displayRanges?.optimal_light_lux;
   const hasData = !!latest;
   const inactive = !connected || !hasData;
 
@@ -531,8 +561,15 @@ export default function IoTDashboardPage() {
           icon={MdWaterDrop} label="토양 습도"
           value={hasData ? latest!.soilMoisture : null} unit="%"
           tintClass="tint-info" iconClass="text-[color:var(--color-info)]"
-          threshold={55}
-          warning={hasData && latest!.soilMoisture < 55}
+          // 작물 프로필이 있으면 해당 범위, 없으면 폴백 임계 55%.
+          threshold={soilRange ? undefined : 55}
+          optimalRange={soilRange}
+          optimalLabel={soilRange ? optimalLabel : undefined}
+          warning={
+            hasData && soilRange
+              ? latest!.soilMoisture < soilRange[0] || latest!.soilMoisture > soilRange[1]
+              : hasData && latest!.soilMoisture < 55
+          }
           disabled={inactive}
         />
         <SensorCard
@@ -566,6 +603,13 @@ export default function IoTDashboardPage() {
           icon={MdWbSunny} label="조도"
           value={hasData ? latest!.lightIntensity : null} unit=" lux"
           tintClass="tint-warning" iconClass="text-[color:var(--color-accent-dark)]"
+          warning={
+            hasData && luxRange
+              ? latest!.lightIntensity < luxRange[0] || latest!.lightIntensity > luxRange[1]
+              : undefined
+          }
+          optimalRange={luxRange}
+          optimalLabel={luxRange ? optimalLabel : undefined}
           disabled={inactive}
         />
       </div>

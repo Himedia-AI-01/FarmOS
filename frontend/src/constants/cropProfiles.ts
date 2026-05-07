@@ -30,6 +30,117 @@ export type GrowthStage = (typeof GROWTH_STAGES)[number];
 
 type StageEnv = Omit<CropProfile, 'name' | 'growth_stage'>;
 
+/**
+ * 센서카드(IoT 대시보드) 표시 전용 보조 범위 — 백엔드 CropProfile 에는 포함되지 않는다.
+ * - optimal_soil_moisture: 토양 습도 (% 포화도, 0~100)
+ * - optimal_light_lux: 조도 (lux, 일중 최대 기준 대략값)
+ * 농가 센서/환경에 따라 ±10~30% 변동 — 권장 범위로만 활용한다.
+ */
+export interface CropStageDisplayRanges {
+  optimal_soil_moisture: [number, number];
+  optimal_light_lux: [number, number];
+}
+
+const DISPLAY_RANGES: Record<SupportedCrop, Record<GrowthStage, CropStageDisplayRanges>> = {
+  감자: {
+    육묘기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [60, 75], optimal_light_lux: [25000, 55000] },
+    개화기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [30000, 60000] },
+    착과기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [30000, 60000] },
+    수확기:    { optimal_soil_moisture: [50, 65], optimal_light_lux: [20000, 50000] },
+  },
+  고추: {
+    육묘기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [60, 75], optimal_light_lux: [30000, 60000] },
+    개화기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [35000, 70000] },
+    착과기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [35000, 70000] },
+    수확기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [30000, 60000] },
+  },
+  들깨: {
+    육묘기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [15000, 30000] },
+    영양생장기: { optimal_soil_moisture: [55, 70], optimal_light_lux: [20000, 45000] },
+    개화기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [20000, 40000] },
+    착과기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [20000, 40000] },
+    수확기:    { optimal_soil_moisture: [45, 60], optimal_light_lux: [15000, 35000] },
+  },
+  무: {
+    육묘기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [60, 75], optimal_light_lux: [25000, 50000] },
+    개화기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [25000, 50000] },
+    착과기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [25000, 50000] },
+    수확기:    { optimal_soil_moisture: [50, 65], optimal_light_lux: [20000, 45000] },
+  },
+  배추: {
+    육묘기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [65, 80], optimal_light_lux: [25000, 50000] },
+    개화기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [25000, 45000] },
+    착과기:    { optimal_soil_moisture: [70, 85], optimal_light_lux: [25000, 50000] },
+    수확기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [20000, 45000] },
+  },
+  벼: {
+    // 벼는 답작 — 토양 포화 이상의 담수 상태가 정상. 분얼기엔 중간 낙수.
+    육묘기:    { optimal_soil_moisture: [85, 100], optimal_light_lux: [20000, 40000] },
+    영양생장기: { optimal_soil_moisture: [70, 90],  optimal_light_lux: [30000, 65000] },
+    개화기:    { optimal_soil_moisture: [85, 100], optimal_light_lux: [35000, 70000] },
+    착과기:    { optimal_soil_moisture: [75, 90],  optimal_light_lux: [35000, 70000] },
+    수확기:    { optimal_soil_moisture: [40, 60],  optimal_light_lux: [25000, 55000] },
+  },
+  양배추: {
+    육묘기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [65, 80], optimal_light_lux: [25000, 50000] },
+    개화기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [25000, 45000] },
+    착과기:    { optimal_soil_moisture: [70, 85], optimal_light_lux: [25000, 50000] },
+    수확기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [20000, 45000] },
+  },
+  오이: {
+    육묘기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [65, 80], optimal_light_lux: [30000, 60000] },
+    개화기:    { optimal_soil_moisture: [70, 85], optimal_light_lux: [30000, 65000] },
+    착과기:    { optimal_soil_moisture: [70, 85], optimal_light_lux: [35000, 70000] },
+    수확기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [30000, 60000] },
+  },
+  옥수수: {
+    육묘기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [60, 75], optimal_light_lux: [30000, 65000] },
+    개화기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [35000, 70000] },
+    착과기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [35000, 70000] },
+    수확기:    { optimal_soil_moisture: [45, 60], optimal_light_lux: [25000, 55000] },
+  },
+  콩: {
+    육묘기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [55, 70], optimal_light_lux: [25000, 55000] },
+    개화기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [30000, 60000] },
+    착과기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [30000, 60000] },
+    수확기:    { optimal_soil_moisture: [40, 55], optimal_light_lux: [25000, 50000] },
+  },
+  토마토: {
+    육묘기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [15000, 35000] },
+    영양생장기: { optimal_soil_moisture: [65, 80], optimal_light_lux: [30000, 65000] },
+    개화기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [35000, 70000] },
+    착과기:    { optimal_soil_moisture: [65, 80], optimal_light_lux: [35000, 70000] },
+    수확기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [30000, 60000] },
+  },
+  파: {
+    육묘기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [15000, 30000] },
+    영양생장기: { optimal_soil_moisture: [55, 70], optimal_light_lux: [20000, 45000] },
+    개화기:    { optimal_soil_moisture: [55, 70], optimal_light_lux: [20000, 45000] },
+    착과기:    { optimal_soil_moisture: [60, 75], optimal_light_lux: [20000, 45000] },
+    수확기:    { optimal_soil_moisture: [45, 60], optimal_light_lux: [20000, 40000] },
+  },
+};
+
+/**
+ * 작물명 + 생육 단계 문자열로 표시용 보조 범위를 조회. 매칭이 없으면 null.
+ * (사용자 직접 입력으로 지원 목록 밖 작물명이 들어와도 안전.)
+ */
+export function getCropStageDisplayRanges(
+  cropName: string,
+  stage: string,
+): CropStageDisplayRanges | null {
+  if (!isSupportedCrop(cropName) || !isGrowthStage(stage)) return null;
+  return DISPLAY_RANGES[cropName][stage];
+}
+
 export const CROP_STAGE_PROFILE: Record<SupportedCrop, Record<GrowthStage, StageEnv>> = {
   감자: {
     육묘기:    { optimal_temp: [15, 20], optimal_humidity: [60, 75], optimal_light_hours: 11, nutrient_ratio: { N: 1.0, P: 1.5, K: 1.5 } },

@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     # ── 데이터베이스 ────────────────────────────────────────────────────────
     # 데이터베이스 (PostgreSQL)
     DATABASE_URL: str = ""
+    # shop_reviews / shop_products 등 shopping_mall 의 테이블이 들어있는 별도 DB.
+    # 운영(EC2 docker-compose)에서는 farmos 와 shop 이 서로 다른 PostgreSQL DB 로 분리되어 있으므로
+    # farmos-backend 가 shop_* 테이블을 raw SQL 로 조회하려면 별도 connection 이 필요하다.
+    # 비어 있으면 DATABASE_URL 로 폴백한다 (로컬 단일 DB 개발 환경 호환).
+    SHOP_DATABASE_URL: str = ""
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30

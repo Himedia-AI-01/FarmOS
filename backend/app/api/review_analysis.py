@@ -24,7 +24,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from app.core.database import get_db
+from app.core.database import get_db, get_shop_db
 from app.core.deps import get_current_user
 from app.models.user import User
 
@@ -79,28 +79,30 @@ router = APIRouter(prefix="/reviews", tags=["review-analysis"])
 @router.post("/embed", response_model=EmbedResponse)
 async def embed_reviews(
     req: EmbedRequest,
-    db: AsyncSession = Depends(get_db),
+    shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):
     """리뷰 데이터를 ChromaDB에 임베딩 저장합니다.
 
     shop_reviews 테이블에서 리뷰를 조회하여 ChromaDB에 동기화합니다.
     seller_id가 지정되면 해당 판매자의 상품 리뷰만 동기화합니다.
+
+    cross-DB 주의: shop_reviews 는 shop DB 에 있으므로 shop_db 세션을 사용한다.
     """
-    added = await _rag.sync_from_db(db)
+    added = await _rag.sync_from_db(shop_db)
     total = _rag.get_count()
     return EmbedResponse(embedded_count=added, total_count=total, source="db")
 
 
 @router.get("/embed/stream")
 async def embed_reviews_stream(
-    db: AsyncSession = Depends(get_db),
+    shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):
     """SSE로 DB 리뷰 임베딩 진행률을 스트리밍합니다."""
 
     async def event_generator():
-        async for update in _rag.sync_from_db_chunked(db, chunk_size=100):
+        async for update in _rag.sync_from_db_chunked(shop_db, chunk_size=100):
             yield {"data": json.dumps(update, ensure_ascii=False)}
             await asyncio.sleep(0)
 
@@ -112,19 +114,22 @@ async def analyze_reviews_stream(
     batch_size: int = Query(50, ge=5, le=100),
     sample_size: int = Query(200, ge=50, le=10000, description="분석할 리뷰 샘플 수 (층화 샘플링)"),
     db: AsyncSession = Depends(get_db),
+    shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):
     """SSE로 분석 진행률을 스트리밍합니다.
 
     전체 리뷰 중 sample_size건을 층화 샘플링하여 분석합니다.
     rating 분포를 유지하므로 통계적 대표성이 보장됩니다.
+
+    cross-DB 주의: shop_reviews 동기화는 shop_db, ReviewAnalysis 저장은 farmos db 에 한다.
     """
 
     async def event_generator():
-        # 임베딩 없으면 DB에서 자동 동기화
+        # 임베딩 없으면 DB에서 자동 동기화 (shop DB 에서 조회)
         if _rag.get_count() == 0:
             yield {"data": json.dumps({"progress": 0, "message": "DB 리뷰 임베딩 중..."}, ensure_ascii=False)}
-            await _rag.sync_from_db(db)
+            await _rag.sync_from_db(shop_db)
 
         reviews = _rag.get_all_reviews()
         if not reviews:
@@ -213,20 +218,28 @@ async def analyze_reviews_stream(
 # ---------------------------------------------------------------------------
 
 @router.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_reviews(req: AnalyzeRequest, db: AsyncSession = Depends(get_db), _user: User = Depends(get_current_user)):
+async def analyze_reviews(
+    req: AnalyzeRequest,
+    db: AsyncSession = Depends(get_db),
+    shop_db: AsyncSession = Depends(get_shop_db),
+    _user: User = Depends(get_current_user),
+):
     """리뷰 분석을 실행합니다 (수동).
 
     1. ChromaDB에서 리뷰 조회 (멀티테넌트 필터링)
     2. LLM으로 감성분석 + 키워드 + 요약
     3. 트렌드/이상 탐지
     4. DB에 결과 저장
-    """
-    # 임베딩된 리뷰가 없으면 DB에서 자동 동기화
-    if _rag.get_count() == 0:
-        await _rag.sync_from_db(db)
 
-    # 멀티테넌트 필터링 (Design §4.3)
-    product_ids = await _get_seller_product_ids(db, seller_id=None)
+    cross-DB 주의: shop_reviews 조회/멀티테넌트 lookup 은 shop_db,
+    ReviewAnalysis 저장은 farmos db (db) 에 한다.
+    """
+    # 임베딩된 리뷰가 없으면 shop DB 에서 자동 동기화
+    if _rag.get_count() == 0:
+        await _rag.sync_from_db(shop_db)
+
+    # 멀티테넌트 필터링 (Design §4.3) — shop_stores 도 shop DB 소속이므로 shop_db 사용
+    product_ids = await _get_seller_product_ids(shop_db, seller_id=None)
     if product_ids is not None:
         reviews = _rag.get_reviews_by_products(product_ids)
     else:
@@ -342,12 +355,15 @@ async def get_latest_analysis(db: AsyncSession = Depends(get_db), _user: User = 
 @router.post("/search", response_model=SearchResponse)
 async def search_reviews(
     req: SearchRequest,
-    db: AsyncSession = Depends(get_db),
+    shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):
     """자연어 질의로 유사 리뷰를 검색합니다 (RAG).
 
     멀티테넌트: seller_id가 있으면 해당 판매자의 상품 리뷰만 검색합니다.
+
+    cross-DB 주의: shop_reviews / shop_stores 모두 shop DB 소속이므로 shop_db 만 사용한다.
+    이 엔드포인트는 farmos DB 에 쓰기 작업이 없다.
     """
     # 컬렉션 이름 변경(예: reviews_bge_m3 → reviews_voyage_v35) 후 최초 요청 시
     # 새 컬렉션이 비어 있으므로 여기서 전체 재임베딩을 수행하는 것이
@@ -356,14 +372,14 @@ async def search_reviews(
     # 운영 시에는 트래픽 컷오버 전에 docs/runbooks/review-embedding-migration.md
     # 절차대로 수동 sync_from_db 를 선행하여 사용자 대기를 피한다.
     if _rag.get_count() == 0:
-        await _rag.sync_from_db(db)
+        await _rag.sync_from_db(shop_db)
 
     filters = None
     if req.filters:
         filters = req.filters.model_dump(exclude_none=True)
 
     # 멀티테넌트 필터링 (Design §4.3)
-    product_ids = await _get_seller_product_ids(db, seller_id=None)
+    product_ids = await _get_seller_product_ids(shop_db, seller_id=None)
     if product_ids is not None:
         filters = filters or {}
         filters["product_id"] = {"$in": product_ids}
@@ -458,7 +474,7 @@ async def list_reviews(
     page_size: int = Query(20, ge=1, le=100, description="페이지당 항목 수"),
     rating_min: float | None = Query(None, ge=1, le=5, description="최소 평점 (포함)"),
     rating_max: float | None = Query(None, ge=1, le=5, description="최대 평점 (포함)"),
-    db: AsyncSession = Depends(get_db),
+    shop_db: AsyncSession = Depends(get_shop_db),
     _user: User = Depends(get_current_user),
 ):
     """shop_reviews 테이블에서 리뷰 목록을 페이지네이션으로 조회합니다.
@@ -468,6 +484,8 @@ async def list_reviews(
         - /list   : 단순 페이지네이션 → 최신순 정렬 (전체 brows)
 
     shop_products 와 LEFT JOIN 해 product_name 을 함께 반환한다.
+
+    cross-DB 주의: shop_reviews / shop_products 가 shop DB 에 있으므로 shop_db 세션을 사용한다.
     """
     from sqlalchemy import text as sa_text
 
@@ -481,14 +499,14 @@ async def list_reviews(
         params["rmax"] = rating_max
     where_sql = " AND ".join(where_clauses)
 
-    count_result = await db.execute(
+    count_result = await shop_db.execute(
         sa_text(f"SELECT COUNT(*) FROM shop_reviews r WHERE {where_sql}"),
         params,
     )
     total = int(count_result.scalar() or 0)
 
     offset = (page - 1) * page_size
-    list_result = await db.execute(
+    list_result = await shop_db.execute(
         sa_text(f"""
             SELECT r.id, r.product_id, r.rating, r.content, r.created_at,
                    p.name AS product_name

@@ -18,6 +18,26 @@ engine = create_async_engine(
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+# shop_engine — shop_reviews / shop_products 등 shopping_mall 테이블 전용.
+# .env 의 SHOP_DATABASE_URL 이 비어있거나 DATABASE_URL 과 동일하면 같은 engine 을 재사용한다
+# (로컬 단일 DB 개발 환경 호환). 운영(EC2)에서는 docker-compose 가 shop DB 로 분리 주입한다.
+_shop_url = settings.SHOP_DATABASE_URL or settings.DATABASE_URL
+if _shop_url == settings.DATABASE_URL:
+    shop_engine = engine
+    shop_async_session = async_session
+else:
+    shop_engine = create_async_engine(
+        _shop_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
+        pool_recycle=settings.DB_POOL_RECYCLE,
+    )
+    shop_async_session = async_sessionmaker(shop_engine, class_=AsyncSession, expire_on_commit=False)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -25,6 +45,16 @@ class Base(DeclarativeBase):
 async def get_db():
     """FastAPI Depends용 DB 세션 제공."""
     async with async_session() as session:
+        yield session
+
+
+async def get_shop_db():
+    """FastAPI Depends 용 shop DB 세션 제공.
+
+    shop_reviews / shop_products 등 shopping_mall 의 테이블 조회 전용.
+    SHOP_DATABASE_URL 미설정 시 farmos DB 세션과 동일 (로컬 단일 DB 호환).
+    """
+    async with shop_async_session() as session:
         yield session
 
 
@@ -118,3 +148,6 @@ async def init_db():
 async def close_db():
     """앱 종료 시 커넥션 풀 정리."""
     await engine.dispose()
+    # shop_engine 이 farmos engine 과 같은 인스턴스면 dispose 가 두 번 호출되지 않게 가드.
+    if shop_engine is not engine:
+        await shop_engine.dispose()

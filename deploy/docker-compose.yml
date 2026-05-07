@@ -29,6 +29,9 @@ services:
     env_file: ../backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-farmos}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/farmos
+      # shop_reviews / shop_products 는 shop DB 에 들어있어 cross-DB 조회가 필요하다
+      # (예: GET /api/v1/reviews/list, ChromaDB sync_from_db). 비어있으면 DATABASE_URL 폴백.
+      SHOP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-farmos}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/shop
       REDIS_URL: redis://redis:6379/0
     volumes:
       - farmos-chroma:/app/chroma_data

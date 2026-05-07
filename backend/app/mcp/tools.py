@@ -25,7 +25,7 @@ import json
 from sqlalchemy import desc, select
 
 from app.core import review_singletons as _singletons
-from app.core.database import async_session
+from app.core.database import async_session, shop_async_session
 from app.core.review_helpers import get_seller_product_ids, stratified_sample
 from app.mcp.auth import get_current_user_from_ctx
 from app.mcp.schemas import AnalysisDetail, PdfReport
@@ -120,12 +120,15 @@ def _register_embed_and_search(mcp: FastMCP) -> None:
         shop_reviews 테이블의 리뷰를 ChromaDB collection 에 동기화한다.
         FastAPI POST /api/v1/reviews/embed 와 동일 동작.
 
+        cross-DB 주의: 인증(User) 은 farmos DB, sync_from_db 는 shop DB 를 쓴다.
+
         Returns:
             EmbedResponse: embedded_count(이번 추가 수), total_count(전체 임베딩 수), source="db".
         """
         async with async_session() as db:
             await get_current_user_from_ctx(db)
-            added = await _singletons.rag.sync_from_db(db)
+        async with shop_async_session() as shop_db:
+            added = await _singletons.rag.sync_from_db(shop_db)
         total = _singletons.rag.get_count()
         logger.info(
             "mcp.embed_reviews ok added=%d total=%d", added, total,
@@ -157,16 +160,18 @@ def _register_embed_and_search(mcp: FastMCP) -> None:
         async with async_session() as db:
             user = await get_current_user_from_ctx(db)
 
+        # cross-DB: shop_reviews / shop_stores 는 shop DB 소속이므로 shop_async_session 사용.
+        async with shop_async_session() as shop_db:
             # empty-new-collection window 완화 — 라우터와 동일 패턴
             if _singletons.rag.get_count() == 0:
-                await _singletons.rag.sync_from_db(db)
+                await _singletons.rag.sync_from_db(shop_db)
 
             filter_dict: dict[str, Any] | None = None
             if filters:
                 filter_dict = filters.model_dump(exclude_none=True)
 
             seller_id = getattr(user, "seller_id", None)  # User 모델에 미구현 — None 반환
-            product_ids = await get_seller_product_ids(db, seller_id=seller_id)
+            product_ids = await get_seller_product_ids(shop_db, seller_id=seller_id)
             if product_ids is not None:
                 filter_dict = (filter_dict or {}) | {"product_id": {"$in": product_ids}}
 
@@ -229,6 +234,7 @@ def _record_to_detail(record: ReviewAnalysis) -> AnalysisDetail:
 
 async def _run_analysis_and_save(
     db,
+    shop_db,
     user,
     sample_size: int,
     batch_size: int,
@@ -238,14 +244,18 @@ async def _run_analysis_and_save(
     """T3/T4 공통 분석 실행 + DB 저장 로직.
 
     progress_cb 가 제공되면 batch_with_progress 변형을 사용해 진행률을 전달한다.
+
+    cross-DB 주의:
+        - shop_db: shop_reviews 동기화, shop_stores 멀티테넌트 lookup 용
+        - db (farmos): ReviewAnalysis 결과 저장 용
     """
     if _singletons.rag.get_count() == 0:
         if progress_cb:
             await progress_cb(0, "DB 리뷰 임베딩 중...")
-        await _singletons.rag.sync_from_db(db)
+        await _singletons.rag.sync_from_db(shop_db)
 
     seller_id = getattr(user, "seller_id", None)
-    product_ids = await get_seller_product_ids(db, seller_id=seller_id)
+    product_ids = await get_seller_product_ids(shop_db, seller_id=seller_id)
     if product_ids is not None:
         reviews = _singletons.rag.get_reviews_by_products(product_ids)
     else:
@@ -345,10 +355,10 @@ def _register_analysis_tools(mcp: FastMCP) -> None:
         if not 5 <= batch_size <= 100:
             raise ToolError("batch_size must be between 5 and 100")
 
-        async with async_session() as db:
+        async with async_session() as db, shop_async_session() as shop_db:
             user = await get_current_user_from_ctx(db)
             record, result = await _run_analysis_and_save(
-                db, user, sample_size=sample_size, batch_size=batch_size,
+                db, shop_db, user, sample_size=sample_size, batch_size=batch_size,
                 scope=scope, progress_cb=None,
             )
 
@@ -392,10 +402,10 @@ def _register_analysis_tools(mcp: FastMCP) -> None:
                     # debug 레벨 — 운영 노이즈 0, LOG_LEVEL=DEBUG 시 traceback 가시화.
                     logger.debug("ctx.info failed: %s", e, exc_info=True)
 
-        async with async_session() as db:
+        async with async_session() as db, shop_async_session() as shop_db:
             user = await get_current_user_from_ctx(db)
             record, result = await _run_analysis_and_save(
-                db, user, sample_size=sample_size, batch_size=batch_size,
+                db, shop_db, user, sample_size=sample_size, batch_size=batch_size,
                 scope=scope, progress_cb=progress_cb,
             )
 

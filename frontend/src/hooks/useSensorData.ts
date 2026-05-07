@@ -73,13 +73,22 @@ function _ensureSharedEs(): EventSource {
   es.addEventListener('alert', (e) => {
     try {
       const alert = JSON.parse(e.data) as SensorAlert;
-      _broadcast((prev) => ({ ...prev, alerts: [alert, ...prev.alerts] }));
+      _broadcast((prev) => {
+        // dedup by id — 백엔드 재방송/SSE 재연결 시 동일 알림 누적 방지.
+        if (prev.alerts.some((x) => x.id === alert.id)) return prev;
+        return { ...prev, alerts: [alert, ...prev.alerts] };
+      });
     } catch (err) { console.warn('[SSE] alert parse error:', err); }
   });
   es.addEventListener('irrigation', (e) => {
     try {
       const event = JSON.parse(e.data) as IrrigationEvent;
-      _broadcast((prev) => ({ ...prev, irrigations: [event, ...prev.irrigations] }));
+      _broadcast((prev) => {
+        // dedup by id — 백엔드(IoT relay)가 같은 이벤트를 여러 번 push 하거나 SSE 재연결로
+        // 동일 이벤트가 재방송될 때 행이 누적되는 현상 방지.
+        if (prev.irrigations.some((x) => x.id === event.id)) return prev;
+        return { ...prev, irrigations: [event, ...prev.irrigations] };
+      });
     } catch (err) { console.warn('[SSE] irrigation parse error:', err); }
   });
   es.addEventListener('control', (e) => {
@@ -141,8 +150,20 @@ export function useSensorData() {
 
       const latest = await latestRes.json();
       const history = await historyRes.json();
-      const alerts = await alertsRes.json();
-      const irrigations = await irrigationsRes.json();
+      const alertsRaw = (await alertsRes.json()) as SensorAlert[];
+      const irrigationsRaw = (await irrigationsRes.json()) as IrrigationEvent[];
+
+      // REST 응답에 동일 id 가 중복 포함된 경우 1개만 유지 (백엔드 사이드 이펙트 방어).
+      const dedupById = <T extends { id: string }>(arr: T[]): T[] => {
+        const seen = new Set<string>();
+        return arr.filter((e) => {
+          if (seen.has(e.id)) return false;
+          seen.add(e.id);
+          return true;
+        });
+      };
+      const alerts = dedupById(alertsRaw);
+      const irrigations = dedupById(irrigationsRaw);
 
       failCount.current = 0;
 

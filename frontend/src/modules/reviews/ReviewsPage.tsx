@@ -74,7 +74,7 @@ export default function ReviewsPage() {
     : [];
   const summary = analysis?.summary;
   const strategies = summary?.suggestions
-    ? summary.suggestions.map((s, i) => ({ id: `sug-${i}`, title: s, description: '', priority: '중간' as const }))
+    ? summary.suggestions.map((s, i) => ({ id: `sug-${i}`, title: s, description: '', priority: '중간' as '높음' | '중간' | '낮음' }))
     : [];
 
   const pieData = [

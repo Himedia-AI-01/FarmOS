@@ -210,25 +210,49 @@ class ReviewAnalyzer:
             "message": f"LLM {total_batches}개 배치 병렬 분석 시작...",
         }
 
-        # 모든 배치를 동시에 LLM 호출
-        tasks = [self._analyze_single_batch(batch) for batch in batches]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
+        # 모든 배치를 동시에 LLM 호출하되, 완료된 순서대로 진행률을 yield 한다.
+        # asyncio.gather 는 모든 task 가 끝날 때까지 yield 가 불가능해 progress 가
+        # 5%→90% 로 점프하는 UX 문제가 있었다 (사용자에게 stuck 처럼 보임).
+        # asyncio.as_completed 로 task 단위 진행률을 송출.
         all_sentiments: list[dict] = []
         all_keywords: dict[str, dict] = {}
         batch_summaries: list[dict] = []
 
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"배치 {i+1} 실패: {result}")
-                continue
+        # 5% (시작) ~ 88% (집계 직전) 사이를 배치 완료에 비례해 채운다.
+        # 88% 까지만 채우는 이유: 92% (집계), 100% (완료) 단계가 뒤에 따라온다.
+        PROGRESS_START = 5
+        PROGRESS_END_BATCHES = 88
+
+        tasks = [asyncio.create_task(self._analyze_single_batch(batch)) for batch in batches]
+        completed = 0
+        for fut in asyncio.as_completed(tasks):
+            try:
+                result = await fut
+            except Exception as exc:  # noqa: BLE001
+                logger.error("배치 실패: %s", exc)
+                result = None
+            completed += 1
             if result:
                 all_sentiments.extend(result.get("sentiments", []))
                 self._merge_keywords(all_keywords, result.get("keywords", []))
                 if result.get("summary"):
                     batch_summaries.append(result["summary"])
 
-        yield {"progress": 90, "batch": total_batches, "total_batches": total_batches, "message": "결과 집계 중..."}
+            # 진행률 보간 — 완료된 배치 수에 비례
+            if total_batches:
+                progress = PROGRESS_START + int(
+                    (PROGRESS_END_BATCHES - PROGRESS_START) * completed / total_batches
+                )
+            else:
+                progress = PROGRESS_END_BATCHES
+            yield {
+                "progress": progress,
+                "batch": completed,
+                "total_batches": total_batches,
+                "message": f"배치 {completed}/{total_batches} 분석 완료",
+            }
+
+        yield {"progress": 92, "batch": total_batches, "total_batches": total_batches, "message": "결과 집계 중..."}
 
         sentiment_summary = self._calculate_sentiment_summary(all_sentiments)
         sorted_keywords = sorted(

@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, memo, useCallback } from 'react';
-import { MdWaterDrop, MdThermostat, MdOpacity, MdWbSunny, MdWarning, MdWifiOff, MdClose } from 'react-icons/md';
+import { MdWaterDrop, MdThermostat, MdOpacity, MdWbSunny, MdWarning, MdWifiOff, MdClose, MdAutoAwesome } from 'react-icons/md';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from 'recharts';
 import { useSensorData } from '@/hooks/useSensorData';
+import { useAIAgent } from '@/hooks/useAIAgent';
+import { getCropStageDisplayRanges } from '@/constants/cropProfiles';
 import AIAgentPanel from './AIAgentPanel';
 import IoTSkeleton from './IoTSkeleton';
 import ManualControlPanel from './ManualControlPanel';
@@ -25,10 +27,17 @@ function filterByDateRange<T>(
   });
 }
 
-function SensorCard({ icon: Icon, label, value, unit, tintClass, iconClass, threshold, warning, disabled }: {
+function SensorCard({
+  icon: Icon, label, value, unit, tintClass, iconClass,
+  threshold, warning, disabled, optimalRange, optimalLabel,
+}: {
   icon: React.ElementType; label: string; value: number | null; unit: string;
   tintClass: string; iconClass: string;
   threshold?: number; warning?: boolean; disabled?: boolean;
+  /** AI Agent 작물 프로필 권장 범위 [low, high]. 표시 + warning 계산에 사용. */
+  optimalRange?: [number, number];
+  /** optimalRange 라벨 (예: "토마토 / 영양생장기"). */
+  optimalLabel?: string;
 }) {
   return (
     <div
@@ -67,25 +76,60 @@ function SensorCard({ icon: Icon, label, value, unit, tintClass, iconClass, thre
         {value !== null ? value.toFixed(1) : '--.-'}
         <span className="ml-1 text-[15px] font-semibold text-[color:var(--color-ink-mute)] sm:text-[17px]">{unit}</span>
       </p>
-      {threshold && !disabled && value !== null && (
-        <div className="mt-3 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]">
-            <div
-              className={`h-full rounded-full transition-all ${value < threshold ? 'bg-[color:var(--color-warning)]' : 'bg-[color:var(--color-success)]'}`}
-              style={{ width: `${Math.min(100, (value / 100) * 100)}%` }}
-            />
-          </div>
-          <span className="num whitespace-nowrap text-[11.5px] font-semibold text-[color:var(--color-ink-mute)]">기준 {threshold}{unit}</span>
+      {/* progress bar — threshold(soil) 또는 optimalRange 가 있으면 표시. */}
+      {(threshold || optimalRange) && !disabled && value !== null && (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]">
+          <div
+            className={`h-full rounded-full transition-all ${
+              optimalRange
+                ? value < optimalRange[0] || value > optimalRange[1]
+                  ? 'bg-[color:var(--color-warning)]'
+                  : 'bg-[color:var(--color-success)]'
+                : threshold && value < threshold
+                  ? 'bg-[color:var(--color-warning)]'
+                  : 'bg-[color:var(--color-success)]'
+            }`}
+            style={{
+              // unit 이 lux 면 0~100k 스케일을 0~100% 로 환산. 그 외는 0~100 그대로.
+              width: `${Math.min(
+                100,
+                unit.trim() === 'lux' ? (value / 100000) * 100 : value,
+              )}%`,
+            }}
+          />
         </div>
       )}
-      {threshold && disabled && (
-        <div className="mt-3 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]" />
-          <span className="num whitespace-nowrap text-[11.5px] font-semibold text-[color:var(--color-ink-faint)]">기준 {threshold}{unit}</span>
+      {(threshold || optimalRange) && disabled && (
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-deep)]" />
+      )}
+
+      {/* 적정 범위 라인 — optimalRange 우선, 없으면 단일 임계치(기준) 표시. */}
+      {(optimalRange || threshold) && (
+        <div className={`mt-2 flex items-center gap-1.5 text-[11.5px] ${disabled ? 'text-[color:var(--color-ink-faint)]' : 'text-[color:var(--color-primary-dark)]'}`}>
+          <MdAutoAwesome aria-hidden className={`text-[13px] ${disabled ? '' : 'text-[color:var(--color-primary)]'}`} />
+          {optimalRange ? (
+            <span className="font-semibold">
+              적정 <span className="num">{formatRangeNumber(optimalRange[0])}~{formatRangeNumber(optimalRange[1])}</span>{unit}
+            </span>
+          ) : (
+            <span className="font-semibold">
+              기준 <span className="num">{threshold}</span>{unit}
+            </span>
+          )}
+          {optimalLabel && (
+            <span className="ml-auto truncate text-[color:var(--color-ink-faint)]" title={optimalLabel}>
+              {optimalLabel}
+            </span>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+/** 천단위 콤마 포맷. lux 등 큰 수 가독성용. */
+function formatRangeNumber(n: number): string {
+  return n >= 1000 ? n.toLocaleString('ko-KR') : String(n);
 }
 
 type ChartData = { time: string; soilMoisture: number; temperature: number; humidity: number }[];
@@ -152,8 +196,13 @@ interface IrrigationEvent {
   autoTriggered: boolean;
 }
 
+/** 표시용 wrapper — 주기(throttle) 묶음 시 합계 표기에 사용. */
+interface IrrigationEventItem extends IrrigationEvent {
+  groupedCount?: number;
+}
+
 interface IrrigationModalProps {
-  irrigations: IrrigationEvent[];
+  irrigations: IrrigationEventItem[];
   onClose: () => void;
 }
 
@@ -272,7 +321,14 @@ function IrrigationModal({ irrigations, onClose }: IrrigationModalProps) {
               <div key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--color-surface)]">
                 <span className={`w-3 h-3 rounded-full flex-shrink-0 ${e.valveAction === '열림' ? 'bg-blue-500' : 'bg-gray-400'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[color:var(--color-ink)] truncate">{e.reason}</p>
+                  <p className="text-sm font-medium text-[color:var(--color-ink)] truncate">
+                    {e.reason}
+                    {e.groupedCount && e.groupedCount > 1 && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-[color:var(--color-surface-deep)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--color-ink-mute)]">
+                        외 {e.groupedCount - 1}건
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-[color:var(--color-ink-faint)]">
                     {new Date(e.triggeredAt).toLocaleString('ko-KR', {
                       month: 'short',
@@ -304,7 +360,21 @@ interface SensorAlertItem {
   severity: string;
   message: string;
   resolved?: boolean;
+  /** 같은 (type, severity) 알림이 같은 시간 버킷 내에 몇 건 있었는지. throttle on 일 때만 set. */
+  groupedCount?: number;
 }
+
+// 표시 주기 옵션 — 같은 종류 이벤트를 N분 단위로 묶어 1건으로 표시한다.
+// 예: '15분' 이면 같은 (type, severity) 알림이 15분 윈도우 내에 여러 번 발생해도 1행만 노출.
+type ThrottleMin = 0 | 5 | 15 | 30 | 60 | 180;
+const ALERT_THROTTLE_OPTIONS: { value: ThrottleMin; label: string }[] = [
+  { value: 0, label: '끔' },
+  { value: 5, label: '5분' },
+  { value: 15, label: '15분' },
+  { value: 30, label: '30분' },
+  { value: 60, label: '1시간' },
+  { value: 180, label: '3시간' },
+];
 
 function AlertsModal({
   alerts,
@@ -381,7 +451,14 @@ function AlertsModal({
                     {a.severity}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[color:var(--color-ink)]">{a.message}</p>
+                    <p className="text-sm text-[color:var(--color-ink)]">
+                      {a.message}
+                      {a.groupedCount && a.groupedCount > 1 && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-[color:var(--color-surface-deep)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--color-ink-mute)]">
+                          외 {a.groupedCount - 1}건
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-[color:var(--color-ink-faint)]">
                       {new Date(a.timestamp).toLocaleString('ko-KR', {
                         month: 'short',
@@ -406,6 +483,21 @@ function AlertsModal({
 
 export default function IoTDashboardPage() {
   const { latest, history, alerts, irrigations, connected, loading } = useSensorData();
+  // AI Agent 상태에서 활성 작물 프로필을 끌어와 센서카드 임계 표시에 반영.
+  // status 가 null (Relay 미연결) 이어도 센서카드는 보이게 — optionally
+  // optimalRange 가 undefined 이면 기존 표시만 유지된다.
+  const { status: agentStatus } = useAIAgent();
+  const cropProfile = agentStatus?.crop_profile ?? null;
+  const optimalLabel = cropProfile ? `${cropProfile.name} / ${cropProfile.growth_stage}` : undefined;
+  const tempRange = cropProfile?.optimal_temp;
+  const humidityRange = cropProfile?.optimal_humidity;
+  // 토양 습도 / 조도 는 백엔드 CropProfile 에 없으므로, 작물명+단계 로 프론트엔드 표시용
+  // 프리셋(constants/cropProfiles.ts) 에서 끌어온다. 매칭 안되면 null → 표시 생략.
+  const displayRanges = cropProfile
+    ? getCropStageDisplayRanges(cropProfile.name, cropProfile.growth_stage)
+    : null;
+  const soilRange = displayRanges?.optimal_soil_moisture;
+  const luxRange = displayRanges?.optimal_light_lux;
   const hasData = !!latest;
   const inactive = !connected || !hasData;
 
@@ -428,28 +520,82 @@ export default function IoTDashboardPage() {
     until: null,
     preset: 'all',
   });
+  // 센서 알림 표시 주기(분). 0 이면 끔(원본 그대로 표시).
+  const [alertsThrottleMin, setAlertsThrottleMin] = useState<ThrottleMin>(0);
+  // 관수 이력 표시 주기(분). 같은 의미.
+  const [irrigationThrottleMin, setIrrigationThrottleMin] = useState<ThrottleMin>(0);
 
-  const filteredIrrigations = useMemo(
-    () =>
-      filterByDateRange(
-        irrigations,
-        (e) => e.triggeredAt,
-        irrigationRange.since,
-        irrigationRange.until,
-      ),
-    [irrigations, irrigationRange.since, irrigationRange.until],
-  );
+  // 관수 이력 표시 정책:
+  //   - 실제 관수가 발생한 시점만 (밸브 "열림" + duration > 0)
+  //   - AI Agent 가 OFF 상태인데 autoTriggered 이벤트가 들어오는 경우 = 시뮬레이터 노이즈로
+  //     간주해 숨김 (백엔드 IoT relay 가 토글과 무관하게 자동 이벤트를 emit 하는 정책 대응)
+  //   - 주기(throttle) 가 켜져 있으면 동일 (valveAction, autoTriggered) 알림을 N분 단위 1건으로 묶음
+  //   - id 단위 dedup 은 useSensorData 에서 이미 수행
+  const filteredIrrigations = useMemo<IrrigationEventItem[]>(() => {
+    const baseline = irrigations.filter((e) => {
+      if (e.valveAction !== '열림' || e.duration <= 0) return false;
+      // AI Agent 꺼져 있으면 자동 트리거 이벤트는 신뢰하지 않음.
+      if (e.autoTriggered && agentStatus && !agentStatus.enabled) return false;
+      return true;
+    });
+    const ranged = filterByDateRange(
+      baseline,
+      (e) => e.triggeredAt,
+      irrigationRange.since,
+      irrigationRange.until,
+    );
+    if (irrigationThrottleMin === 0) return ranged;
 
-  const filteredAlerts = useMemo(
-    () =>
-      filterByDateRange(
-        alerts,
-        (a) => a.timestamp,
-        alertsRange.since,
-        alertsRange.until,
-      ),
-    [alerts, alertsRange.since, alertsRange.until],
-  );
+    const intervalMs = irrigationThrottleMin * 60 * 1000;
+    const map = new Map<string, { repr: typeof ranged[number]; count: number }>();
+    for (const e of ranged) {
+      const ts = new Date(e.triggeredAt).getTime();
+      const bucket = Math.floor(ts / intervalMs);
+      const key = `${e.valveAction}|${e.autoTriggered ? 'auto' : 'manual'}|${bucket}`;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { repr: e, count: 1 });
+      } else {
+        existing.count += 1;
+        if (ts > new Date(existing.repr.triggeredAt).getTime()) existing.repr = e;
+      }
+    }
+    return Array.from(map.values())
+      .map(({ repr, count }) => ({ ...repr, groupedCount: count }))
+      .sort((a, b) => new Date(b.triggeredAt).getTime() - new Date(a.triggeredAt).getTime());
+  }, [irrigations, irrigationRange.since, irrigationRange.until, irrigationThrottleMin, agentStatus]);
+
+  const filteredAlerts = useMemo<SensorAlertItem[]>(() => {
+    const ranged = filterByDateRange(
+      alerts,
+      (a) => a.timestamp,
+      alertsRange.since,
+      alertsRange.until,
+    );
+
+    // throttle 끔 → 그대로 (groupedCount 미사용)
+    if (alertsThrottleMin === 0) return ranged;
+
+    // throttle on → (type, severity, bucket) 단위로 그룹핑 후 가장 최근 1건 + count.
+    // bucket 은 floor(timestamp / intervalMs) — 동일 윈도우 내 알림이 같은 키를 공유.
+    const intervalMs = alertsThrottleMin * 60 * 1000;
+    const map = new Map<string, { repr: typeof ranged[number]; count: number }>();
+    for (const a of ranged) {
+      const ts = new Date(a.timestamp).getTime();
+      const bucket = Math.floor(ts / intervalMs);
+      const key = `${a.type}|${a.severity}|${bucket}`;
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { repr: a, count: 1 });
+      } else {
+        existing.count += 1;
+        if (ts > new Date(existing.repr.timestamp).getTime()) existing.repr = a;
+      }
+    }
+    return Array.from(map.values())
+      .map(({ repr, count }) => ({ ...repr, groupedCount: count }))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [alerts, alertsRange.since, alertsRange.until, alertsThrottleMin]);
 
   const chartData = useMemo(() =>
     history.map(r => ({
@@ -502,27 +648,55 @@ export default function IoTDashboardPage() {
           icon={MdWaterDrop} label="토양 습도"
           value={hasData ? latest!.soilMoisture : null} unit="%"
           tintClass="tint-info" iconClass="text-[color:var(--color-info)]"
-          threshold={55}
-          warning={hasData && latest!.soilMoisture < 55}
+          // 작물 프로필이 있으면 해당 범위, 없으면 폴백 임계 55%.
+          threshold={soilRange ? undefined : 55}
+          optimalRange={soilRange}
+          optimalLabel={soilRange ? optimalLabel : undefined}
+          warning={
+            hasData && soilRange
+              ? latest!.soilMoisture < soilRange[0] || latest!.soilMoisture > soilRange[1]
+              : hasData && latest!.soilMoisture < 55
+          }
           disabled={inactive}
         />
         <SensorCard
           icon={MdThermostat} label="온도"
           value={hasData ? latest!.temperature : null} unit="°C"
           tintClass="tint-danger" iconClass="text-[color:var(--color-danger)]"
+          // AI Agent 권장 온도 범위 밖으로 벗어나면 warning. 프로필이 없으면 표시만 비움.
+          warning={
+            hasData && tempRange
+              ? latest!.temperature < tempRange[0] || latest!.temperature > tempRange[1]
+              : undefined
+          }
+          optimalRange={tempRange}
+          optimalLabel={optimalLabel}
           disabled={inactive}
         />
         <SensorCard
           icon={MdOpacity} label="대기 습도"
           value={hasData ? latest!.humidity : null} unit="%"
           tintClass="tint-success" iconClass="text-[color:var(--color-primary)]"
-          warning={hasData && latest!.humidity > 90}
+          warning={
+            hasData && humidityRange
+              ? latest!.humidity < humidityRange[0] || latest!.humidity > humidityRange[1]
+              : hasData && latest!.humidity > 90
+          }
+          optimalRange={humidityRange}
+          optimalLabel={optimalLabel}
           disabled={inactive}
         />
         <SensorCard
           icon={MdWbSunny} label="조도"
           value={hasData ? latest!.lightIntensity : null} unit=" lux"
           tintClass="tint-warning" iconClass="text-[color:var(--color-accent-dark)]"
+          warning={
+            hasData && luxRange
+              ? latest!.lightIntensity < luxRange[0] || latest!.lightIntensity > luxRange[1]
+              : undefined
+          }
+          optimalRange={luxRange}
+          optimalLabel={luxRange ? optimalLabel : undefined}
           disabled={inactive}
         />
       </div>
@@ -534,10 +708,25 @@ export default function IoTDashboardPage() {
         <div className={`card ${inactive ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
             <h3 className="section-title !mb-0">관수 이력</h3>
-            <DateRangeFilter
-              value={irrigationRange}
-              onChange={setIrrigationRange}
-            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="flex items-center gap-1.5 text-[12.5px] text-[color:var(--color-ink-mute)]">
+                <span>주기</span>
+                <select
+                  value={irrigationThrottleMin}
+                  onChange={(e) => setIrrigationThrottleMin(Number(e.target.value) as ThrottleMin)}
+                  className="rounded-md border border-[color:var(--color-line)] bg-white px-2 py-1 text-[12.5px] text-[color:var(--color-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/30 focus:border-[color:var(--color-primary)]"
+                  aria-label="관수 이력 표시 주기"
+                >
+                  {ALERT_THROTTLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+              <DateRangeFilter
+                value={irrigationRange}
+                onChange={setIrrigationRange}
+              />
+            </div>
           </div>
           {filteredIrrigations.length === 0 ? (
             <p className="text-[color:var(--color-ink-faint)] text-sm text-center py-4">
@@ -552,10 +741,18 @@ export default function IoTDashboardPage() {
                   <div key={e.id} className="flex items-center gap-3 p-3 rounded-xl bg-[color:var(--color-surface)]">
                     <span className={`w-3 h-3 rounded-full ${e.valveAction === '열림' ? 'bg-blue-500' : 'bg-gray-400'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[color:var(--color-ink)] truncate">{e.reason}</p>
+                      <p className="text-sm font-medium text-[color:var(--color-ink)] truncate">
+                        {e.reason}
+                        {e.groupedCount && e.groupedCount > 1 && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-[color:var(--color-surface-deep)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--color-ink-mute)]">
+                            외 {e.groupedCount - 1}건
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-[color:var(--color-ink-faint)]">
                         {new Date(e.triggeredAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         {e.duration > 0 && ` · ${e.duration}분`}
+                        {e.autoTriggered && <span className="ml-1 text-[color:var(--color-primary-dark)]">· 자동</span>}
                       </p>
                     </div>
                     <span className={`badge text-xs ${e.valveAction === '열림' ? 'badge-info' : 'badge-success'}`}>
@@ -582,7 +779,22 @@ export default function IoTDashboardPage() {
         <div className={`card ${inactive ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
             <h3 className="section-title !mb-0">센서 알림</h3>
-            <DateRangeFilter value={alertsRange} onChange={setAlertsRange} />
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="flex items-center gap-1.5 text-[12.5px] text-[color:var(--color-ink-mute)]">
+                <span>주기</span>
+                <select
+                  value={alertsThrottleMin}
+                  onChange={(e) => setAlertsThrottleMin(Number(e.target.value) as ThrottleMin)}
+                  className="rounded-md border border-[color:var(--color-line)] bg-white px-2 py-1 text-[12.5px] text-[color:var(--color-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/30 focus:border-[color:var(--color-primary)]"
+                  aria-label="알림 표시 주기"
+                >
+                  {ALERT_THROTTLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+              <DateRangeFilter value={alertsRange} onChange={setAlertsRange} />
+            </div>
           </div>
           {filteredAlerts.length === 0 ? (
             <p className="text-[color:var(--color-ink-faint)] text-sm text-center py-4">
@@ -605,7 +817,14 @@ export default function IoTDashboardPage() {
                       {a.severity}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[color:var(--color-ink)]">{a.message}</p>
+                      <p className="text-sm text-[color:var(--color-ink)]">
+                        {a.message}
+                        {a.groupedCount && a.groupedCount > 1 && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-[color:var(--color-surface-deep)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--color-ink-mute)]">
+                            외 {a.groupedCount - 1}건
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-[color:var(--color-ink-faint)]">
                         {new Date(a.timestamp).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>

@@ -300,12 +300,13 @@ export function useReviewAnalysis() {
     }
   }, []);
 
-  // 초기 로드
+  // 초기 로드 — UX 정책: 페이지를 빈 상태로 초기화한다.
+  //   "임베딩 저장" → /embed/stream
+  //   "AI 분석 실행" → /analyze/stream → 완료 후 fetchAnalysis() 가 결과를 가져와 채운다.
+  // 따라서 fetchAnalysis / fetchTrends 는 마운트 시 호출하지 않는다 (이전 분석 기록이 있어도 빈 상태로 시작).
+  // 설정과 리뷰 목록은 영구 데이터이므로 마운트 시 한 번 로드한다.
   useEffect(() => {
-    fetchAnalysis();
-    fetchTrends();
     fetchSettings();
-    // 리뷰 목록은 첫 페이지 기본값으로 1회 로드. 페이지 이동·필터는 setter 후 명시 호출.
     fetchReviewList(1, 10, null, null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 1회만; 의존성 추가 시 무한 재호출
   }, []);
